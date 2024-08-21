@@ -12,11 +12,10 @@ This template should help get you started developing with Tauri and Leptos.
 
 Make sure you have installed the prerequisites for your OS: https://v2.tauri.app, then run:
 
-cd bitvaulty
-cargo tauri android init
-
 For Desktop development, run:
-cargo tauri dev
+`cargo tauri dev`
 
 For Android development, run:
-cargo tauri android dev
+`cargo tauri android dev`
+
+Can be opened in browser at: http://localhost:1420
