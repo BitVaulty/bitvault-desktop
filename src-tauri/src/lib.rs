@@ -6,11 +6,16 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let ctx = tauri::generate_context!();
+    let mut ctx = tauri::generate_context!();
+    let mut builder = tauri::Builder::default();
 
-    tauri::Builder::default()
+    #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
+    {
+        builder = builder.plugin(tauri_plugin_theme::init(ctx.config_mut()));
+    }
+
+    builder
         .plugin(tauri_plugin_shell::init())
-        // .plugin(tauri_plugin_theme::init(ctx.config_mut()))
         .invoke_handler(tauri::generate_handler![greet])
         .run(ctx)
         .expect("error while running tauri application");

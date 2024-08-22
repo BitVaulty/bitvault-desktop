@@ -1,4 +1,5 @@
 mod app;
+mod icons;
 
 use app::*;
 use leptos::*;
