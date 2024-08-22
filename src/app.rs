@@ -72,6 +72,7 @@ pub fn App() -> impl IntoView {
                 <Route path="/disclaimer" view=Disclaimer />
                 <Route path="/wallet" view=Wallet />
                 <Route path="/pin-choice" view=PinChoice />
+                <Route path="/seed" view=Seed />
             </Routes>
 
             // <nav>
@@ -160,7 +161,9 @@ fn Disclaimer() -> impl IntoView {
                             <div class="h-px relative bg-neutral-200"></div>
                             <div class="self-stretch py-3.5 justify-start items-center gap-2.5 inline-flex">
                                 <div class="grow shrink basis-0 self-stretch flex-col justify-start items-start gap-1 inline-flex">
-                                    <div class="self-stretch text-neutral-500 text-lg font-normal font-['Inter'] leading-relaxed">"With bitcoin, you are your own bank. No one else has access to "<br/>"your private keys."</div>
+                                    <div class="self-stretch text-neutral-500 text-lg font-normal font-['Inter'] leading-relaxed cursor-pointer"
+                                         on:click=move |_| set_checkbox1.update(|v| *v = true)
+                                    >"With bitcoin, you are your own bank. No one else has access to "<br/>"your private keys."</div>
                                 </div>
                                 <div class="justify-start items-center flex">
                                     <input
@@ -175,7 +178,9 @@ fn Disclaimer() -> impl IntoView {
                             <div class="h-px relative bg-neutral-200"></div>
                             <div class="self-stretch py-3.5 justify-start items-center gap-2.5 inline-flex">
                                 <div class="grow shrink basis-0 self-stretch flex-col justify-start items-start gap-1 inline-flex">
-                                    <div class="self-stretch text-neutral-500 text-lg font-normal font-['Inter'] leading-relaxed">"If you lose access to this app, any backups that exist, your bitcoin cannot be recovered."</div>
+                                    <div class="self-stretch text-neutral-500 text-lg font-normal font-['Inter'] leading-relaxed cursor-pointer"
+                                         on:click=move |_| set_checkbox2.update(|v| *v = true)
+                                    >"If you lose access to this app, any backups that exist, your bitcoin cannot be recovered."</div>
                                 </div>
                                 <div class="justify-start items-center flex">
                                     <input
@@ -255,6 +260,7 @@ fn PinChoice() -> impl IntoView {
                     set_pin.update(|p| p.push(key.chars().next().unwrap()));
                     if pin.with(|p| p.len()) == 6 {
                         set_is_confirming.set(true);
+                        set_error_message.set(None);
                     }
                 } else if is_confirming.get() && confirm_pin.with(|p| p.len()) < 6 {
                     set_confirm_pin.update(|p| p.push(key.chars().next().unwrap()));
@@ -333,96 +339,122 @@ fn PinChoice() -> impl IntoView {
         }
     });
 
+    let focus_input = move |_| {
+        if let Some(input) = input_ref.get() {
+            let _ = input.focus();
+        }
+    };
+
     view! {
-        <div class="w-full h-screen flex justify-center items-center bg-gray-900">
-            <input
-                type="text"
-                _ref=input_ref
-                on:keydown=handle_key_press
-                style="position: absolute; opacity: 0; pointer-events: none;"
-            />
-            <div class="w-96 bg-gray-800 rounded-3xl flex-col justify-center items-start inline-flex">
-                <div class="self-stretch grow shrink basis-0 px-5 pt-14 pb-6 flex-col justify-center items-center gap-24 inline-flex">
-                    <div class="self-stretch flex-col justify-start items-center gap-12 flex">
-                        <div class="self-stretch flex-col justify-start items-center gap-2.5 flex">
-                            <div class="text-center text-white text-xl font-semibold font-['Inter'] leading-7">
-                                {move || if is_confirming.get() {
-                                    "Confirm your 6-digit PIN"
-                                } else {
-                                    "Choose a 6-digit PIN"
-                                }}
+        <div class="flex justify-center items-center min-h-screen bg-white dark:bg-gray-900"
+        on:click=focus_input>
+            <div class="w-full max-w-md p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
+                <div class="flex items-center mb-6">
+                    <A href="/disclaimer">
+                        <div class="p-2 rounded justify-start items-center flex cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700">
+                            <div class="w-5 h-5 mr-2">
+                                <icons::CaretLeft />
                             </div>
-                            <div class="w-80 text-center text-gray-400 text-lg font-normal font-['Inter'] leading-relaxed">
-                                {move || if is_confirming.get() {
-                                    "Please enter your PIN again to confirm."
-                                } else {
-                                    "PIN entry will be required for wallet access and transactions. Write it down as it cannot be recovered."
-                                }}
-                            </div>
+                            <div class="text-black dark:text-white text-lg font-semibold font-['Inter']">Back</div>
                         </div>
-                        <div class="justify-start items-start gap-2.5 inline-flex">
-                            {pin_display}
-                        </div>
-                        {move || error_message.get().map(|msg| view! {
-                            <div class="w-full text-center text-red-500 text-sm font-normal font-['Inter'] leading-tight mt-4">
-                                {msg}
-                            </div>
-                        })}
-                    </div>
+                    </A>
                 </div>
-                <div class="self-stretch pb-12 flex-col justify-start items-start gap-6 inline-flex">
-                    {["123", "456", "789"].into_iter().map(|row| {
-                        view! {
-                            <div class="self-stretch justify-center items-start inline-flex">
-                                {row.chars().map(|digit| {
-                                    let digit_clone = digit;
-                                    view! {
-                                        <button
-                                            class="grow shrink basis-0 h-16 flex-col justify-center items-center inline-flex"
-                                            on:click=move |_| {
-                                                add_digit(digit_clone);
-                                                let _ = input_ref.get().unwrap().focus();
-                                            }
-                                        >
-                                            <div class="self-stretch text-center text-white text-2xl font-normal font-['Inter'] leading-loose">
-                                                {digit}
-                                            </div>
-                                        </button>
-                                    }
-                                }).collect::<Vec<_>>()}
-                            </div>
-                        }
-                    }).collect::<Vec<_>>()}
-                    <div class="self-stretch justify-center items-start inline-flex">
-                        <div class="grow shrink basis-0 h-16 opacity-0"></div>
-                        <button
-                            class="grow shrink basis-0 h-16 flex-col justify-center items-center inline-flex"
-                            on:click=move |_| {
-                                add_digit('0');
-                                let _ = input_ref.get().unwrap().focus();
-                            }
-                        >
-                            <div class="self-stretch text-center text-white text-2xl font-normal font-['Inter'] leading-loose">
-                                "0"
-                            </div>
-                        </button>
-                        <button
-                            class="grow shrink basis-0 h-16 flex-col justify-center items-center inline-flex"
-                            on:click=move |_| {
-                                remove_digit(());
-                                let _ = input_ref.get().unwrap().focus();
-                            }
-                        >
-                            <div class="self-stretch text-center text-white text-2xl font-normal font-['Inter'] leading-loose flex justify-center items-center">
-                                <div class="w-6 h-6">
-                                    <icons::ArrowLeft />
+                <div class="w-full bg-gray-800 rounded-3xl flex-col justify-center items-start inline-flex">
+                    <input
+                        type="text"
+                        _ref=input_ref
+                        on:keydown=handle_key_press
+                        style="position: absolute; opacity: 0; pointer-events: none;"
+                    />
+                    <div class="self-stretch grow shrink basis-0 px-5 pt-14 pb-6 flex-col justify-center items-center gap-24 inline-flex">
+                        <div class="self-stretch flex-col justify-start items-center gap-12 flex">
+                            <div class="self-stretch flex-col justify-start items-center gap-2.5 flex">
+                                <div class="text-center text-white text-xl font-semibold font-['Inter'] leading-7">
+                                    {move || if is_confirming.get() {
+                                        "Confirm your 6-digit PIN"
+                                    } else {
+                                        "Choose a 6-digit PIN"
+                                    }}
+                                </div>
+                                <div class="w-80 text-center text-gray-400 text-lg font-normal font-['Inter'] leading-relaxed">
+                                    {move || if is_confirming.get() {
+                                        "Please enter your PIN again to confirm."
+                                    } else {
+                                        "PIN entry will be required for wallet access and transactions. Write it down as it cannot be recovered."
+                                    }}
                                 </div>
                             </div>
-                        </button>
+                            <div class="justify-start items-start gap-2.5 inline-flex">
+                                {pin_display}
+                            </div>
+                            {move || error_message.get().map(|msg| view! {
+                                <div class="w-full text-center text-red-500 text-sm font-normal font-['Inter'] leading-tight mt-4">
+                                    {msg}
+                                </div>
+                            })}
+                        </div>
+                    </div>
+                    <div class="self-stretch pb-12 flex-col justify-start items-start gap-6 inline-flex">
+                        {["123", "456", "789"].into_iter().map(|row| {
+                            view! {
+                                <div class="self-stretch justify-center items-start inline-flex">
+                                    {row.chars().map(|digit| {
+                                        let digit_clone = digit;
+                                        view! {
+                                            <button
+                                                class="grow shrink basis-0 h-16 flex-col justify-center items-center inline-flex"
+                                                on:click=move |_| {
+                                                    add_digit(digit_clone);
+                                                    let _ = input_ref.get().unwrap().focus();
+                                                }
+                                            >
+                                                <div class="self-stretch text-center text-white text-2xl font-normal font-['Inter'] leading-loose">
+                                                    {digit}
+                                                </div>
+                                            </button>
+                                        }
+                                    }).collect::<Vec<_>>()}
+                                </div>
+                            }
+                        }).collect::<Vec<_>>()}
+                        <div class="self-stretch justify-center items-start inline-flex">
+                            <div class="grow shrink basis-0 h-16 opacity-0"></div>
+                            <button
+                                class="grow shrink basis-0 h-16 flex-col justify-center items-center inline-flex"
+                                on:click=move |_| {
+                                    add_digit('0');
+                                    let _ = input_ref.get().unwrap().focus();
+                                }
+                            >
+                                <div class="self-stretch text-center text-white text-2xl font-normal font-['Inter'] leading-loose">
+                                    "0"
+                                </div>
+                            </button>
+                            <button
+                                class="grow shrink basis-0 h-16 flex-col justify-center items-center inline-flex"
+                                on:click=move |_| {
+                                    remove_digit(());
+                                    let _ = input_ref.get().unwrap().focus();
+                                }
+                            >
+                                <div class="self-stretch text-center text-white text-2xl font-normal font-['Inter'] leading-loose flex justify-center items-center">
+                                    <div class="w-6 h-6">
+                                        <icons::ArrowLeft />
+                                    </div>
+                                </div>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
+    }
+}
+
+#[component]
+fn Seed() -> impl IntoView {
+    view! {
+        "TODO"
     }
 }
 
