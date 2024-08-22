@@ -1,7 +1,19 @@
+use anyhow::Result;
+use bip39::{Language, Mnemonic};
+use zeroize::Zeroize;
+
 // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
+fn new_seed_handler() -> Result<String> {
+    let mut entropy = [0u8; 32];
+    getrandom::getrandom(&mut entropy)?;
+    let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy)?;
+    entropy.zeroize();
+    Ok(mnemonic.to_string())
+}
+
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+fn new_seed(_args: &str) -> String {
+    new_seed_handler().unwrap_or_else(|e| e.to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -16,7 +28,7 @@ pub fn run() {
 
     builder
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![new_seed])
         .run(ctx)
         .expect("error while running tauri application");
 }

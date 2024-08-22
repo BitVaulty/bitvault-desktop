@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use leptos::{leptos_dom::ev::SubmitEvent, *};
 use leptos_meta::*;
 use leptos_router::*;
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
 use wasm_bindgen::prelude::*;
@@ -16,6 +19,42 @@ extern "C" {
 #[derive(Serialize, Deserialize)]
 struct GreetArgs<'a> {
     name: &'a str,
+}
+
+#[derive(Clone, Debug, Default)]
+pub enum WalletState {
+    #[default]
+    New,
+    Creating,
+    Restoring,
+    // Unlocked,
+    // Locked,
+}
+
+// Define a struct to hold the global state
+#[derive(Clone, Debug, Default)]
+pub struct AppState {
+    pub user_pin: Option<String>,
+    pub wallet_state: WalletState,
+}
+
+// Create a type alias for a thread-safe, shared reference to the state
+pub type SharedAppState = Arc<RwLock<AppState>>;
+
+// Function to create and provide the global state
+fn provide_app_state() -> SharedAppState {
+    let app_state = AppState::default();
+    let shared_state = Arc::new(RwLock::new(app_state));
+
+    // Provide the state to Leptos context
+    provide_context(shared_state.clone());
+
+    shared_state
+}
+
+// Helper function to get the app state from context
+pub fn use_app_state() -> SharedAppState {
+    use_context::<SharedAppState>().expect("AppState not found in context")
 }
 
 #[component]
@@ -63,6 +102,9 @@ pub fn Greet() -> impl IntoView {
 pub fn App() -> impl IntoView {
     provide_meta_context();
 
+    // Initialize and provide the global state
+    let _state = provide_app_state();
+
     view! {
         <Stylesheet id="leptos" href="/style/output.css"/>
         <Link rel="shortcut icon" type_="image/ico" href="/favicon.ico"/>
@@ -73,24 +115,24 @@ pub fn App() -> impl IntoView {
                 <Route path="/wallet" view=Wallet />
                 <Route path="/pin-choice" view=PinChoice />
                 <Route path="/seed" view=Seed />
+                <Route path="/seed-verify" view=SeedVerify />
             </Routes>
-
-            // <nav>
-            //     <A href="/">"BitVaulty"</A>
-            //     <A href="/wallet">"Wallet"</A>
-            //     <A href="/settings">"Settings"</A>
-            //     // <button on:click=move |_| {
-            //     //     set_logged_in.update(|n| *n = !*n)
-            //     // }>{move || if logged_in.get() { "Log Out" } else { "Log In" }}</button>
-            // </nav>
         </Router>
     }
 }
 
 #[component]
 fn Home() -> impl IntoView {
+    let set_wallet_state_creating = move || {
+        use_app_state().write().wallet_state = WalletState::Creating;
+    };
+
+    let set_wallet_state_restoring = move || {
+        use_app_state().write().wallet_state = WalletState::Restoring;
+    };
+
     view! {
-        <div class="container mx-auto px-4">
+        <div class="flex justify-center items-center min-h-screen bg-white dark:bg-gray-900">
             <div class="rounded-3xl flex-col justify-center items-center mx-auto max-w-md">
                 <div class="self-stretch grow shrink basis-0 px-5 pt-14 pb-12 flex-col justify-start items-center inline-flex">
                     <div class="self-stretch grow shrink basis-0 flex-col justify-start items-center gap-12 flex">
@@ -105,14 +147,14 @@ fn Home() -> impl IntoView {
                         </div>
                     </div>
                     <div class="self-stretch mt-12 flex-col justify-center items-center gap-2.5 flex">
-                        <A href="/disclaimer">
+                        <A href="/disclaimer" on:click=move |_| set_wallet_state_creating()>
                             <div class="w-full max-w-sm h-14 px-5 py-5 bg-amber-500 rounded flex-col justify-center items-center gap-2.5 flex">
                                 <div class="text-white text-xl font-semibold font-['Inter'] leading-snug">"Create a new wallet"</div>
                             </div>
                         </A>
-                        <A href="/disclaimer">
-                                <div class="h-14 justify-center items-center gap-2.5 inline-flex">
-                                    <div class="w-full max-w-sm text-center text-amber-500 text-xl font-normal font-['Inter'] leading-7">"Restore existing wallet"</div>
+                        <A href="/disclaimer" on:click=move |_| set_wallet_state_restoring()>
+                            <div class="h-14 justify-center items-center gap-2.5 inline-flex">
+                                <div class="w-full max-w-sm text-center text-amber-500 text-xl font-normal font-['Inter'] leading-7">"Restore existing wallet"</div>
                             </div>
                         </A>
                     </div>
@@ -238,6 +280,9 @@ fn PinChoice() -> impl IntoView {
     let check_pins = move || {
         if pin.with(|p| p.clone()) == confirm_pin.with(|p| p.clone()) {
             // Pins match, navigate to the next screen
+            let state = use_app_state();
+            let mut state = state.write();
+            state.user_pin = Some(pin.with(|p| p.iter().collect::<String>()));
             let window = web_sys::window().unwrap();
             let _ = window.location().set_href("/seed");
         } else {
@@ -289,6 +334,7 @@ fn PinChoice() -> impl IntoView {
             set_pin.update(|p| p.push(digit));
             if pin.with(|p| p.len()) == 6 {
                 set_is_confirming.set(true);
+                set_error_message.set(None);
             }
         } else if is_confirming.get() && confirm_pin.with(|p| p.len()) < 6 {
             set_confirm_pin.update(|p| p.push(digit));
@@ -451,8 +497,100 @@ fn PinChoice() -> impl IntoView {
     }
 }
 
+use anyhow::Result;
+use bip39::{Language, Mnemonic};
+use zeroize::Zeroize;
+
+fn new_seed_handler() -> Result<String> {
+    let mut entropy = [0u8; 16];
+    getrandom::getrandom(&mut entropy)?;
+    let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy)?;
+    entropy.zeroize();
+    Ok(mnemonic.to_string())
+}
+fn new_seed_fn(_args: &str) -> Option<String> {
+    new_seed_handler().ok()
+}
+
 #[component]
 fn Seed() -> impl IntoView {
+    let (new_seed, set_new_seed) = create_signal(vec![]);
+
+    spawn_local(async move {
+        let args = to_value("null").unwrap();
+        // let result = invoke("new_seed", args).await.as_string();
+        let result = new_seed_fn("null");
+        if let Some(result_string) = result {
+            let seed_words: Vec<String> =
+                result_string.split_whitespace().map(String::from).collect();
+            set_new_seed.set(seed_words);
+        } else {
+            // Handle the error case, e.g., log it or set an error state
+            log::error!("Failed to get new seed");
+        }
+    });
+
+    let seed_words = [
+        "gloom", "police", "month", "stamp", "viable", "claim", "hospital", "heart", "alcohol",
+        "off", "ocean", "ghost",
+    ];
+
+    set_new_seed.set(seed_words.iter().map(|s| s.to_string()).collect());
+
+    view! {
+        <div class="flex justify-center items-center min-h-screen bg-white dark:bg-gray-900">
+            <div class="w-full max-w-md p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
+                <div class="flex items-center mb-6">
+                    <A href="/pin-choice">
+                        <div class="p-2 rounded justify-start items-center flex cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700">
+                            <div class="w-5 h-5 mr-2">
+                                <icons::CaretLeft />
+                            </div>
+                            <div class="text-black dark:text-white text-lg font-semibold font-['Inter']">Back</div>
+                        </div>
+                    </A>
+                </div>
+                <div class="flex flex-col items-center gap-6">
+                    <div class="text-center">
+                        <h2 class="text-black dark:text-white text-xl font-semibold font-['Inter'] mb-2">
+                            "This is your recovery phrase"
+                        </h2>
+                        <p class="text-neutral-500 dark:text-neutral-400 text-lg font-normal font-['Inter']">
+                            "Make sure to write it down as shown here. You have to verify this later."
+                        </p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 w-full">
+                        {move || new_seed.get().into_iter().enumerate().map(|(index, word)| {
+                            view! {
+                                <div class="bg-gray-200 dark:bg-gray-700 rounded-full flex items-center">
+                                    <div class="h-11 px-3 flex items-center">
+                                        <span class="text-black dark:text-white text-lg font-semibold font-['Inter']">
+                                            {index + 1}
+                                        </span>
+                                    </div>
+                                    <div class="w-0.5 h-11 bg-white dark:bg-gray-600"></div>
+                                    <div class="flex-grow px-3">
+                                        <span class="text-black dark:text-white text-lg font-semibold font-['Inter']">
+                                            {word}
+                                        </span>
+                                    </div>
+                                </div>
+                            }
+                        }).collect::<Vec<_>>()}
+                    </div>
+                    <button class="w-full h-full px-5 py-3.5 bg-amber-500 hover:bg-amber-600 rounded text-white text-lg font-semibold font-['Inter']">
+                        <A href="/seed-verify" class="w-full h-full flex items-center justify-center hover:text-white">
+                            "Verify"
+                        </A>
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+#[component]
+fn SeedVerify() -> impl IntoView {
     view! {
         "TODO"
     }
