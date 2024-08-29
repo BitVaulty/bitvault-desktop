@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "identifier": "com.bitvaulty.app",
   "build": {
-    "beforeDevCommand": "trunk serve",
-    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "trunk serve --port=1776",
+    "devUrl": "http://localhost:1776",
     "beforeBuildCommand": "trunk build",
     "frontendDist": "../dist"
   },
@@ -12,9 +12,9 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "bitvaulty",
-        "width": 800,
-        "height": 600
+        "title": "BitVaulty",
+        "width": 1920,
+        "height": 1080
       }
     ],
     "security": {

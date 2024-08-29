@@ -4,7 +4,7 @@ use zeroize::Zeroize;
 
 // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
 fn new_seed_handler() -> Result<String> {
-    let mut entropy = [0u8; 32];
+    let mut entropy = [0u8; 16];
     getrandom::getrandom(&mut entropy)?;
     let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy)?;
     entropy.zeroize();
@@ -12,7 +12,8 @@ fn new_seed_handler() -> Result<String> {
 }
 
 #[tauri::command]
-fn new_seed(_args: &str) -> String {
+fn new_seed() -> String {
+    println!("new_seed called");
     new_seed_handler().unwrap_or_else(|e| e.to_string())
 }
 

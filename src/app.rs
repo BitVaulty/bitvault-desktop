@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
-use leptos::{leptos_dom::ev::SubmitEvent, *};
+use leptos::*;
 use leptos_meta::*;
 use leptos_router::*;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use serde_wasm_bindgen::to_value;
+// use serde_wasm_bindgen::to_value;
+// leptos_dom::ev::SubmitEvent,
 use wasm_bindgen::prelude::*;
 
 use crate::icons;
@@ -13,7 +14,10 @@ use crate::icons;
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"])]
-    async fn invoke(cmd: &str, args: JsValue) -> JsValue;
+    async fn invoke(cmd: &str) -> JsValue;
+
+    #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"], js_name = invoke)]
+    async fn invoke_args(cmd: &str, args: JsValue) -> JsValue;
 }
 
 #[derive(Serialize, Deserialize)]
@@ -57,46 +61,46 @@ pub fn use_app_state() -> SharedAppState {
     use_context::<SharedAppState>().expect("AppState not found in context")
 }
 
-#[component]
-pub fn Greet() -> impl IntoView {
-    let (name, set_name) = create_signal(String::new());
-    let (greet_msg, set_greet_msg) = create_signal(String::new());
+// #[component]
+// pub fn Greet() -> impl IntoView {
+//     let (name, set_name) = create_signal(String::new());
+//     let (greet_msg, set_greet_msg) = create_signal(String::new());
 
-    let update_name = move |ev| {
-        let v = event_target_value(&ev);
-        set_name.set(v);
-    };
+//     let update_name = move |ev| {
+//         let v = event_target_value(&ev);
+//         set_name.set(v);
+//     };
 
-    let greet = move |ev: SubmitEvent| {
-        ev.prevent_default();
-        spawn_local(async move {
-            let name = name.get_untracked();
-            if name.is_empty() {
-                return;
-            }
+//     let greet = move |ev: SubmitEvent| {
+//         ev.prevent_default();
+//         spawn_local(async move {
+//             let name = name.get_untracked();
+//             if name.is_empty() {
+//                 return;
+//             }
 
-            let args = to_value(&GreetArgs { name: &name }).unwrap();
-            // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
-            let new_msg = invoke("greet", args).await.as_string().unwrap();
-            set_greet_msg.set(new_msg);
-        });
-    };
+//             let args = to_value(&GreetArgs { name: &name }).unwrap();
+//             // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
+//             let new_msg = invoke("greet", args).await.as_string().unwrap();
+//             set_greet_msg.set(new_msg);
+//         });
+//     };
 
-    view! {
-        <main class="container">
-            <form class="row" on:submit=greet>
-                <input
-                    id="greet-input"
-                    placeholder="Enter a name..."
-                    on:input=update_name
-                />
-                <button type="submit">"Greet"</button>
-            </form>
+//     view! {
+//         <main class="container">
+//             <form class="row" on:submit=greet>
+//                 <input
+//                     id="greet-input"
+//                     placeholder="Enter a name..."
+//                     on:input=update_name
+//                 />
+//                 <button type="submit">"Greet"</button>
+//             </form>
 
-            <p><b>{ move || greet_msg.get() }</b></p>
-        </main>
-    }
-}
+//             <p><b>{ move || greet_msg.get() }</b></p>
+//         </main>
+//     }
+// }
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -422,11 +426,11 @@ fn PinChoice() -> impl IntoView {
                                         "Choose a 6-digit PIN"
                                     }}
                                 </div>
-                                <div class="w-80 text-center text-gray-400 text-lg font-normal font-['Inter'] leading-relaxed">
+                                <div class="w-80 text-center text-gray-400 text-lg font-normal font-['Inter'] leading-relaxed flex items-center justify-center h-20">
                                     {move || if is_confirming.get() {
-                                        "Please enter your PIN again to confirm."
+                                        view! { <p class="flex items-center justify-center h-full">"Please enter your PIN again to confirm."</p> }
                                     } else {
-                                        "PIN entry will be required for wallet access and transactions. Write it down as it cannot be recovered."
+                                        view! { <p class="h-20">"PIN entry will be required for wallet access and transactions.\nWrite it down as it cannot be recovered."</p> }
                                     }}
                                 </div>
                             </div>
@@ -497,45 +501,21 @@ fn PinChoice() -> impl IntoView {
     }
 }
 
-use anyhow::Result;
-use bip39::{Language, Mnemonic};
-use zeroize::Zeroize;
-
-fn new_seed_handler() -> Result<String> {
-    let mut entropy = [0u8; 16];
-    getrandom::getrandom(&mut entropy)?;
-    let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy)?;
-    entropy.zeroize();
-    Ok(mnemonic.to_string())
-}
-fn new_seed_fn(_args: &str) -> Option<String> {
-    new_seed_handler().ok()
-}
-
 #[component]
 fn Seed() -> impl IntoView {
     let (new_seed, set_new_seed) = create_signal(vec![]);
 
     spawn_local(async move {
-        let args = to_value("null").unwrap();
-        // let result = invoke("new_seed", args).await.as_string();
-        let result = new_seed_fn("null");
+        let result = invoke("new_seed").await.as_string();
         if let Some(result_string) = result {
             let seed_words: Vec<String> =
                 result_string.split_whitespace().map(String::from).collect();
             set_new_seed.set(seed_words);
         } else {
             // Handle the error case, e.g., log it or set an error state
-            log::error!("Failed to get new seed");
+            println!("Failed to get new seed");
         }
     });
-
-    let seed_words = [
-        "gloom", "police", "month", "stamp", "viable", "claim", "hospital", "heart", "alcohol",
-        "off", "ocean", "ghost",
-    ];
-
-    set_new_seed.set(seed_words.iter().map(|s| s.to_string()).collect());
 
     view! {
         <div class="flex justify-center items-center min-h-screen bg-white dark:bg-gray-900">

@@ -18,4 +18,4 @@ For Desktop development, run:
 For Android development, run:
 `cargo tauri android dev`
 
-Can be opened in browser at: http://localhost:1420
+Can be opened in browser at: http://localhost:1777
