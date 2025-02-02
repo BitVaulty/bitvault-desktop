@@ -22,15 +22,15 @@ RUN apt-get update && apt-get install -y \
 RUN cargo install trunk
 RUN cargo install tauri-cli
 
-# Install wasm target *BEFORE* running trunk
+# Install wasm target
 RUN rustup target add wasm32-unknown-unknown
 
 WORKDIR /app
 
 COPY . .
 
-# Build the frontend using Trunk (make sure the target is specified here as well)
-RUN trunk build --target wasm32-unknown-unknown
+# Build the frontend using Trunk (NO --target needed here)
+RUN trunk build
 
 # Configure cargo for Linux build
 RUN mkdir -p .cargo && \
@@ -40,17 +40,16 @@ RUN mkdir -p .cargo && \
 RUN cargo tauri build --target x86_64-unknown-linux-gnu
 
 
-# Stage 2: Runtime stage (Smaller image)
+# Stage 2: Runtime stage
 FROM debian:bullseye-slim
 
 # Copy only the necessary artifacts from the build stage
-COPY --from=builder /app/target/x86_64-unknown-linux-gnu/release/bitvaulty /app/bitvaulty  # Replace with your app name
+COPY --from=builder /app/target/x86_64-unknown-linux-gnu/release/bitvaulty /app/bitvaulty # Replace "bitvaulty" with your app name
 
-# Install runtime dependencies if any (you might not need these in the runtime image)
+# Install runtime dependencies if any
 # Example (adjust as needed):
 # RUN apt-get update && apt-get install -y libwebkit2gtk-4.0-2
 
 WORKDIR /app
 
-# Set the command to run your Tauri app
-CMD ["./bitvaulty"]
+CMD ["./bitvaulty"] # Replace "bitvaulty" with your app name
