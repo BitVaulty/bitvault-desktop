@@ -1,0 +1,17 @@
+version: '3.8'
+services:
+  builder:
+    build: .
+    volumes:
+      - .:/app
+      - cargo-cache:/usr/local/cargo/registry
+      - target-cache:/app/target
+    environment:
+      - CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu
+      - CARGO_TERM_COLOR=always
+      # Add debug flags if needed
+      - RUST_BACKTRACE=1
+
+volumes:
+  cargo-cache:
+  target-cache:
