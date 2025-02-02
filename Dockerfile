@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y \
     clang
 
 RUN cargo install trunk
-RUN cargo install tauri-cli
+RUN rustup target add wasm32-unknown-unknown
 
 # Install wasm target
 RUN rustup target add wasm32-unknown-unknown
