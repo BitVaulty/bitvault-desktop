@@ -24,6 +24,7 @@ RUN cargo install tauri-cli
 
 # Install wasm target
 RUN rustup target add wasm32-unknown-unknown
+RUN rustup target add x86_64-unknown-linux-gnu
 
 # Set working directory
 WORKDIR /app
