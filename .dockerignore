@@ -1,0 +1,7 @@
+.git
+node_modules
+target
+dist  # If you have a dist folder
+.vscode
+.DS_Store
+*.log
