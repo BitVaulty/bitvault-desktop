@@ -31,3 +31,6 @@ zeroize = "1.7.0"
 
 [workspace]
 members = ["src-tauri"]
+
+[profile.release]
+lto = false
