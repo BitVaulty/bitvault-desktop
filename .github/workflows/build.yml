@@ -43,3 +43,7 @@ jobs:
         with:
           name: bitvaulty
           path: target/x86_64-unknown-linux-gnu/release/bitvaulty
+
+      - name: Test build artifact
+        run: |
+          ./target/x86_64-unknown-linux-gnu/release/bitvaulty --version
