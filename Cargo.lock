@@ -433,6 +433,7 @@ dependencies = [
  "console_log",
  "getrandom 0.2.15",
  "gloo-net",
+ "javascriptcore-rs-sys",
  "js-sys",
  "leptos",
  "leptos_meta",

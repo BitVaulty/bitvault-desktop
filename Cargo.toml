@@ -27,6 +27,7 @@ console_error_panic_hook = "0.1.7"
 bip39 = { version = "2.0.0", features = ["rand"] }
 getrandom = { version = "0.2", features = ["js"] }
 zeroize = "1.7.0"
+javascriptcore-rs-sys = "1.1.1"
 
 
 [workspace]
