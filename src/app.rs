@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 use std::sync::Arc;
 
 use leptos::*;
@@ -9,7 +10,7 @@ use serde::{Deserialize, Serialize};
 // leptos_dom::ev::SubmitEvent,
 use wasm_bindgen::prelude::*;
 
-use crate::icons;
+use crate::{crypto, icons, wallet};
 
 #[wasm_bindgen]
 extern "C" {
@@ -504,16 +505,63 @@ fn PinChoice() -> impl IntoView {
 #[component]
 fn Seed() -> impl IntoView {
     let (new_seed, set_new_seed) = create_signal(vec![]);
+    let app_state = use_app_state();
 
+    let seed = wallet::new_12_word_seed();
+
+    let seed_words = match seed {
+        Ok(seed_words) => {
+            set_new_seed.set(seed_words.split_whitespace().map(String::from).collect());
+            seed_words
+        }
+        Err(e) => {
+            window()
+                .alert_with_message(&format!("Failed to get new seed: {}", e))
+                .unwrap();
+            "ERR".to_string()
+        }
+    };
+
+    #[allow(clippy::await_holding_lock)]
     spawn_local(async move {
-        let result = invoke("new_seed").await.as_string();
-        if let Some(result_string) = result {
-            let seed_words: Vec<String> =
-                result_string.split_whitespace().map(String::from).collect();
-            set_new_seed.set(seed_words);
-        } else {
-            // Handle the error case, e.g., log it or set an error state
-            println!("Failed to get new seed");
+        // Get PIN from app state
+        let state = app_state.read();
+        let pin = match &state.user_pin {
+            Some(pin) => pin.clone(),
+            None => {
+                window().alert_with_message("No PIN found").unwrap();
+                return;
+            }
+        };
+
+        // Encrypt seed with PIN
+        let encrypted_data = match crypto::encrypt_seed(&seed_words, &pin) {
+            Ok(data) => data,
+            Err(e) => {
+                window()
+                    .alert_with_message(&format!("Failed to encrypt seed: {}", e))
+                    .unwrap();
+                return;
+            }
+        };
+
+        // Save encrypted data
+        let result = invoke_args(
+            "save_encrypted_seed",
+            serde_wasm_bindgen::to_value(&encrypted_data).unwrap(),
+        )
+        .await
+        .as_string();
+
+        let result = match result {
+            Some(result) => result,
+            None => "ERR: Failed to save seed".to_string(),
+        };
+
+        if result.starts_with("ERR") {
+            window()
+                .alert_with_message(&format!("Failed to save seed: {}", result))
+                .unwrap();
         }
     });
 

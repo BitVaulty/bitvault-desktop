@@ -1,5 +1,7 @@
 mod app;
+mod crypto;
 mod icons;
+mod wallet;
 
 use app::*;
 use leptos::*;
