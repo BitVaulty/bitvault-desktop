@@ -8,7 +8,10 @@ use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 // use serde_wasm_bindgen::to_value;
 // leptos_dom::ev::SubmitEvent,
+use leptos_router::{use_navigate, NavigateOptions};
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::spawn_local;
+use web_sys::KeyboardEvent;
 
 use crate::{crypto, icons, wallet};
 
@@ -117,10 +120,10 @@ pub fn App() -> impl IntoView {
             <Routes>
                 <Route path="/" view=Home/>
                 <Route path="/disclaimer" view=Disclaimer />
-                <Route path="/wallet" view=Wallet />
                 <Route path="/pin-choice" view=PinChoice />
                 <Route path="/seed" view=Seed />
                 <Route path="/seed-verify" view=SeedVerify />
+                <Route path="/wallet" view=Wallet />
             </Routes>
         </Router>
     }
@@ -273,30 +276,63 @@ fn Disclaimer() -> impl IntoView {
 
 #[component]
 fn PinChoice() -> impl IntoView {
-    use leptos::*;
-    use web_sys::KeyboardEvent;
-
+    let navigate = use_navigate();
     let (pin, set_pin) = create_signal(Vec::new());
     let (confirm_pin, set_confirm_pin) = create_signal(Vec::new());
     let (is_confirming, set_is_confirming) = create_signal(false);
     let (error_message, set_error_message) = create_signal(Option::None);
     let input_ref = create_node_ref::<html::Input>();
 
+    // Create a signal for successful PIN match
+    let (pin_matched, set_pin_matched) = create_signal(false);
+
+    // Add new loading signal
+    let (is_loading, set_is_loading) = create_signal(false);
+
+    // Handle navigation in an effect
+    create_effect(move |_| {
+        if pin_matched.get() {
+            navigate("/seed", NavigateOptions::default());
+        }
+    });
+
     let check_pins = move || {
-        if pin.with(|p| p.clone()) == confirm_pin.with(|p| p.clone()) {
-            // Pins match, navigate to the next screen
-            let state = use_app_state();
-            let mut state = state.write();
-            state.user_pin = Some(pin.with(|p| p.iter().collect::<String>()));
-            let window = web_sys::window().unwrap();
-            let _ = window.location().set_href("/seed");
+        let pin_val = pin.with(|p| p.clone());
+        let confirm_val = confirm_pin.with(|p| p.clone());
+
+        if pin_val == confirm_val {
+            set_is_loading.set(true); // Show loading spinner
+            let pin_string: String = pin_val.iter().collect();
+
+            // Clone what we need for the async block
+            let app_state = use_app_state();
+
+            // Add a small delay before navigation
+            spawn_local(async move {
+                // Set the PIN first
+                {
+                    let mut state = app_state.write();
+                    state.user_pin = Some(pin_string);
+                } // Release the lock immediately
+
+                // Wait for 500ms to show the spinner
+                let promise = js_sys::Promise::new(&mut |resolve, _| {
+                    let window = web_sys::window().unwrap();
+                    window
+                        .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, 500)
+                        .unwrap();
+                });
+                let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+
+                // Only then trigger navigation
+                set_pin_matched.set(true);
+            });
         } else {
-            // Pins don't match, reset confirmation and show error message
-            set_confirm_pin.update(|p| p.clear());
+            set_confirm_pin.set(vec![]);
             set_is_confirming.set(false);
             set_error_message.set(Some("Incorrect PIN. Please try again.".to_string()));
             if let Some(input) = input_ref.get() {
-                set_pin.update(|p| p.clear());
+                set_pin.set(vec![]);
                 let _ = input.focus();
             }
         }
@@ -498,15 +534,33 @@ fn PinChoice() -> impl IntoView {
                     </div>
                 </div>
             </div>
+
+            // Add loading overlay
+            {move || is_loading.get().then(|| view! {
+                <div class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div class="relative w-24 h-24">
+                        // Outer ring
+                        <div class="absolute inset-0 animate-spin rounded-full border-8 border-amber-500 border-opacity-25"></div>
+                        // Inner ring (spinner)
+                        <div class="absolute inset-0 animate-spin rounded-full border-8 border-transparent border-t-amber-500"></div>
+                    </div>
+                </div>
+            })}
         </div>
     }
 }
 
 #[component]
 fn Seed() -> impl IntoView {
-    let (new_seed, set_new_seed) = create_signal(vec![]);
     let app_state = use_app_state();
+    let navigate = use_navigate();
 
+    if app_state.read().user_pin.is_none() {
+        navigate("/pin-choice", NavigateOptions::default());
+        return view! { <div></div> };
+    }
+
+    let (new_seed, set_new_seed) = create_signal(vec![]);
     let seed = wallet::new_12_word_seed();
 
     let seed_words = match seed {
