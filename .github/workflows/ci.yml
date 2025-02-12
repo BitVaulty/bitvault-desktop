@@ -1,5 +1,7 @@
 name: CI
 
+permissions: read-all
+
 on:
   push:
     branches: [ main ]
@@ -18,7 +20,8 @@ jobs:
       - name: Setup Rust
         uses: actions/setup-rust@v3
         with:
-          rust-version: stable
+          profile: minimal
+          toolchain: stable
 
       - name: Install Dependencies
         run: |
