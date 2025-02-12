@@ -36,8 +36,8 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             pkg-config \
-            nodejs \
-            npm \
+            # nodejs \
+            # npm \
             git \
             lld \
             clang
