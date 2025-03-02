@@ -1,0 +1,25 @@
+name: Telegram PR Notifications
+
+on:
+  pull_request:
+    types: [opened, closed, reopened, ready_for_review]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Telegram notification
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_TO }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          format: markdown
+          message: |
+            🔔 *PR ${{ github.event.action == 'closed' && github.event.pull_request.merged == true && 'MERGED' || github.event.action == 'closed' && 'CLOSED' || github.event.action == 'opened' && 'OPENED' || github.event.action == 'reopened' && 'REOPENED' || github.event.action == 'ready_for_review' && 'READY FOR REVIEW' }}*
+            
+            *Repository:* `${{ github.repository }}`
+            *Title:* [${{ github.event.pull_request.title }}](${{ github.event.pull_request.html_url }})
+            *Author:* [${{ github.event.pull_request.user.login }}](${{ github.event.pull_request.user.html_url }})
+            *Branch:* `${{ github.event.pull_request.head.ref }}` → `${{ github.event.pull_request.base.ref }}`
+            
+            [View PR on GitHub](${{ github.event.pull_request.html_url }})
