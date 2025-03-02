@@ -7,12 +7,14 @@ edition = "2021"
 anyhow = "1.0.86"
 cfg-if = "1.0"
 gloo-net = { version = "0.6", features = ["http"] }
+hex = "0.4"
 js-sys = "0.3"
 leptos = { version = "0.6", features = ["csr"] }
 leptos_meta = "0.6.14"
 leptos_router = { version = "0.6.14", features = ["csr"] }
 parking_lot = "0.12.3"
 serde = { version = "1", features = ["derive"] }
+serde_json = "1.0"
 serde-wasm-bindgen = "0.6"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
@@ -23,11 +25,16 @@ simple_logger = { version = "5.0", optional = true }
 console_log = { version = "1", optional = true }
 console_error_panic_hook = "0.1.7"
 
-
+# Bitcoin
 bip39 = { version = "2.0.0", features = ["rand"] }
-getrandom = { version = "0.2", features = ["js"] }
-zeroize = "1.7.0"
 
+# Security
+zeroize = "1.7.0"
+getrandom = { version = "0.3.1", features = ["wasm_js"] }
+aes-gcm = "0.10.3"
+rand = "0.9.0"
+phc = "0.2.0"
+argon2 = "0.5.2"
 
 [workspace]
 members = ["src-tauri"]
