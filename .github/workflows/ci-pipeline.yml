@@ -1,0 +1,131 @@
+name: Build BitVaultWallet
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on Arch Linux
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      options: --privileged
+
+    steps:
+      - name: Update system
+        run: |
+          pacman -Syu --noconfirm
+
+      - name: Install base dependencies
+        run: |
+          # Update package database first
+          pacman -Sy --noconfirm
+          # Try to install webkit2gtk-4.1, but fallback to webkit2gtk if needed
+          pacman -S --noconfirm git base-devel rust cmake nodejs npm openssl pkg-config webkit2gtk-4.1 || pacman -S --noconfirm webkit2gtk
+          # Install remaining dependencies
+          pacman -S --noconfirm binaryen ca-certificates gcc
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure Git for SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "Host github.com" > ~/.ssh/config
+          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
+      - name: Setup SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_ed25519
+          
+          # Test GitHub SSH connection
+          ssh -T git@github.com -o StrictHostKeyChecking=no || echo "SSH connection test complete"
+
+      - name: Install Rust tools
+        run: |
+          rustup default stable
+          rustup target add wasm32-unknown-unknown
+          cargo install --locked wasm-pack
+          cargo install --locked trunk
+          cargo install --locked tauri-cli
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build project
+        run: |
+          cargo build --release || (echo "Standard build failed" && exit 1)
+          
+      - name: Check for trunk.toml
+        id: check_trunk
+        run: |
+          if [ -f "trunk.toml" ] || [ -f "Trunk.toml" ]; then
+            echo "trunk_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "trunk_exists=false" >> $GITHUB_OUTPUT
+            echo "No trunk configuration found, skipping trunk build"
+          fi
+
+      - name: Build WASM with Trunk
+        if: steps.check_trunk.outputs.trunk_exists == 'true'
+        run: |
+          trunk build --release || (echo "Trunk build failed" && exit 1)
+          
+      - name: Check for Tauri configuration
+        id: check_tauri
+        run: |
+          if [ -d "src-tauri" ] || [ -f "tauri.conf.json" ]; then
+            echo "tauri_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "tauri_exists=false" >> $GITHUB_OUTPUT
+            echo "No Tauri configuration found, skipping Tauri build"
+          fi
+
+      - name: Build Tauri app
+        if: steps.check_tauri.outputs.tauri_exists == 'true'
+        run: |
+          cargo tauri build || (echo "Tauri build failed" && exit 1)
+
+      - name: Upload Rust artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: rust-artifacts
+          path: target/release/*
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Upload WASM artifacts
+        if: steps.check_trunk.outputs.trunk_exists == 'true'
+        uses: actions/upload-artifact@v3
+        with:
+          name: wasm-artifacts
+          path: dist/**/*
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Upload Tauri artifacts
+        if: steps.check_tauri.outputs.tauri_exists == 'true'
+        uses: actions/upload-artifact@v3
+        with:
+          name: tauri-artifacts
+          path: src-tauri/target/release/bundle/**/*
+          retention-days: 7
+          if-no-files-found: warn
