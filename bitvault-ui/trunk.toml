@@ -1,0 +1,17 @@
+[build]
+target = "./index.html"
+
+[serve]
+address = "0.0.0.0"
+port = 1777
+open = false
+ws_protocol = "ws"
+
+# Add this to help with workspace integration
+[watch]
+# Also watch for changes in common and core crates
+watch = [
+  "./src",
+  "../bitvault-common/src",
+  "../bitvault-core/src"
+]
