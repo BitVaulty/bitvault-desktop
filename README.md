@@ -67,26 +67,3 @@ cargo test --workspace
 ```
 
 Then access at: http://localhost:1777
-
-## Project Structure
-
-```
-BitVault/
-├── Cargo.toml (workspace definition)
-├── Makefile (build scripts)
-├── bitvault-ui/
-│   ├── Cargo.toml
-│   └── src/ (Leptos frontend)
-├── bitvault-app/
-│   ├── Cargo.toml
-│   └── src-tauri/ (Tauri shell)
-├── bitvault-ipc/
-│   ├── Cargo.toml
-│   └── src/ (IPC layer)
-├── bitvault-core/
-│   ├── Cargo.toml
-│   └── src/ (Cryptographic operations)
-└── bitvault-common/
-    ├── Cargo.toml
-    └── src/ (Shared types and utilities)
-```
