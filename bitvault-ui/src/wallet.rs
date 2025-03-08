@@ -13,8 +13,8 @@ pub fn new_12_word_seed() -> Result<String> {
 
 // pub fn new_24_word_seed() -> Result<String> {
 //     let mut entropy = [0u8; 32];
-//     getrandom::fill(&mut entropy)?;
-//     let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy)?;
+//     rand::thread_rng().fill_bytes(&mut entropy);
+//     let mnemonic = Mnemonic::from_entropy(&entropy)?;
 //     entropy.zeroize();
 //     Ok(mnemonic.to_string())
 // }

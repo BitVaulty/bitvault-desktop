@@ -10,6 +10,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 anyhow.workspace = true
 log.workspace = true
+hex.workspace = true
 
 # Security
 zeroize.workspace = true
@@ -18,25 +19,14 @@ rand.workspace = true
 argon2.workspace = true
 getrandom.workspace = true
 
-# Web/WASM specific
-leptos = { version = "0.6.15", features = ["csr"] }
-leptos_meta = "0.6.15"
-leptos_router = { version = "0.6.15", features = ["csr"] }
-wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
-parking_lot = "0.12.3"
-serde-wasm-bindgen = "0.6"
-
-# UI-specific dependencies
-cfg-if = "1.0"
-gloo-net = { version = "0.6", features = ["http"] }
-hex = "0.4"
-js-sys = "0.3"
+# egui dependencies
+eframe = "0.26.2"
+egui = "0.26.2"
+egui_extras = "0.26.2"
+egui_plot = "0.26.2"
 
 # Logging
-simple_logger = { version = "5.0", optional = true }
-console_log = { version = "1", optional = true }
-console_error_panic_hook = "0.1.7"
+simple_logger = "5.0"
 
 # Bitcoin
 bip39 = { version = "2.0.0", features = ["rand"] }
@@ -45,8 +35,3 @@ phc = "0.2.0"
 # Internal dependencies
 bitvault-common = { path = "../bitvault-common" }
 bitvault-ipc = { path = "../bitvault-ipc" }
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-web-sys = { version = "0.3", features = ["console"] }
-js-sys = "0.3"
-getrandom = { workspace = true, features = ["wasm_js"] }
