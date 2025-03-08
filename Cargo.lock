@@ -713,6 +713,7 @@ dependencies = [
  "bip39",
  "bitvault-common",
  "bitvault-ipc",
+ "dirs 5.0.1",
  "eframe",
  "egui",
  "egui_extras",

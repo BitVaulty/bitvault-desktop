@@ -32,6 +32,9 @@ simple_logger = "5.0"
 bip39 = { version = "2.0.0", features = ["rand"] }
 phc = "0.2.0"
 
+# File system
+dirs = "5.0.1"
+
 # Internal dependencies
 bitvault-common = { path = "../bitvault-common" }
 bitvault-ipc = { path = "../bitvault-ipc" }
