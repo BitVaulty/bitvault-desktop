@@ -3,14 +3,13 @@
 ## Prerequisites
 This guide assumes you have:
 - A fresh Arch Linux installation
-- VSCode/VSCodium installed
 - Basic familiarity with the terminal
 
 ## Step 1: Install Required Dependencies
 
 Install essential development tools and libraries:
 ```bash
-sudo pacman -S base-devel git cmake nodejs npm openssl pkg-config webkit2gtk-4.1
+sudo pacman -S base-devel git cmake nodejs npm openssl pkg-config
 ```
 
 This installs:
@@ -19,7 +18,6 @@ This installs:
 - CMake for build configuration
 - Node.js and npm (for Figma integration)
 - OpenSSL and pkg-config (for cryptographic functions)
-- WebKit2GTK 4.1 (required for Tauri applications)
 
 ## Step 2: Install Rust
 Arch Linux provides rustup for managing Rust installations:
@@ -51,39 +49,92 @@ Install the WebAssembly tools:
 cargo install wasm-pack
 ```
 
-## Step 4: Install Trunk and Tauri CLI
+## Step 4: Install Trunk for Web Development
 
 Trunk is a WASM web application bundler for Rust:
 ```bash
 cargo install trunk
 ```
 
-Install the Tauri CLI for desktop and mobile app development:
+## Step 5: Choose and Install Your IDE
+
+You have three options for your development environment:
+
+### Option A: VSCode
+Install VSCode from the official repositories:
 ```bash
-cargo install tauri-cli
+sudo pacman -S code
 ```
 
-## Step 5: Configure VSCode/VSCodium for Rust Development
+### Option B: VSCodium (Open Source Build of VSCode)
+Install VSCodium from the AUR:
+```bash
+yay -S vscodium-bin
+# or
+paru -S vscodium-bin
+```
+
+### Option C: Cursor IDE (AI-enhanced Fork of VSCode)
+Install Cursor IDE from the AUR:
+```bash
+yay -S cursor-bin
+# or
+paru -S cursor-bin
+```
+
+Alternatively, download the AppImage from the official website:
+```bash
+# Download the AppImage from the official website
+wget https://download.cursor.sh/linux/appImage/x64 -O Cursor.AppImage
+
+# Make it executable
+chmod +x Cursor.AppImage
+
+# Run the AppImage
+./Cursor.AppImage
+```
+
+Or use Flatpak:
+```bash
+flatpak install flathub sh.cursor.Cursor
+flatpak run sh.cursor.Cursor
+```
+
+## Step 6: Configure Your IDE for Rust Development
 
 Install these helpful extensions from the marketplace:
 - Rust Analyzer: For Rust language support
 - Even Better TOML: For better TOML file editing
 - WebAssembly: For WASM support
-- Tauri: For Tauri app development
-- Tailwind CSS IntelliSense: For CSS support
 
-Install from terminal:
+### For VSCode:
 ```bash
 code --install-extension rust-lang.rust-analyzer
 code --install-extension tamasfe.even-better-toml
 code --install-extension ms-vscode.wasm-wasi-core
-code --install-extension tauri-apps.tauri-vscode
-code --install-extension bradlc.vscode-tailwindcss
 ```
 
-For VSCodium, replace `code` with `codium` in the commands above.
+### For VSCodium:
+```bash
+codium --install-extension rust-lang.rust-analyzer
+codium --install-extension tamasfe.even-better-toml
+codium --install-extension ms-vscode.wasm-wasi-core
+codium --install-extension GitHub.copilot
+codium --install-extension GitHub.copilot-chat
+```
 
-## Step 6: Project Setup
+Note: GitHub Copilot requires a subscription and authentication with your GitHub account.
+
+### For Cursor IDE:
+```bash
+cursor --install-extension rust-lang.rust-analyzer
+cursor --install-extension tamasfe.even-better-toml
+cursor --install-extension ms-vscode.wasm-wasi-core
+```
+
+Note: Cursor IDE comes with built-in AI capabilities that can assist with coding, debugging, and understanding the codebase.
+
+## Step 7: Project Setup
 
 For instructions on setting up SSH access and cloning the project repository, refer to the [SSH Access Setup Guide](./ssh-access-setup.md) in the same directory.
 
@@ -94,7 +145,7 @@ cargo build --workspace
 
 This will download and compile all dependencies specified in your `Cargo.toml` files.
 
-## Step 7: Run the Development Server
+## Step 8: Run the Development Server
 
 Start the development server:
 ```bash
@@ -111,11 +162,18 @@ This will:
 2. Start the development environment
 3. Launch the application in development mode
 
-## Step 8: Development Workflow
+## Step 9: Development Workflow
 
-1. Edit your Rust code in VSCodium
+1. Edit your Rust code in your chosen IDE
 2. When you save, Trunk will automatically rebuild and refresh the browser
 3. Check the terminal for any compile errors
+
+### Cursor IDE-Specific Features
+If using Cursor IDE, you can take advantage of its AI features:
+- Use Cmd+K / Ctrl+K to get AI assistance with code understanding
+- Generate code explanations and documentation
+- Get help with implementing complex algorithms
+- Debug issues with AI assistance
 
 ## Troubleshooting
 
