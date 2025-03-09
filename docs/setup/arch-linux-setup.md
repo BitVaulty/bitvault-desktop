@@ -112,6 +112,7 @@ Install these helpful extensions from the marketplace:
 code --install-extension rust-lang.rust-analyzer
 code --install-extension tamasfe.even-better-toml
 code --install-extension ms-vscode.wasm-wasi-core
+code --install-extension eamodio.gitlens
 ```
 
 ### For VSCodium:
@@ -121,15 +122,17 @@ codium --install-extension tamasfe.even-better-toml
 codium --install-extension ms-vscode.wasm-wasi-core
 codium --install-extension GitHub.copilot
 codium --install-extension GitHub.copilot-chat
+codium --install-extension eamodio.gitlens
 ```
 
 Note: GitHub Copilot requires a subscription and authentication with your GitHub account.
 
-### For Cursor IDE:
+### For Cursor IDE: (not working currently due to cursor bug)
 ```bash
 cursor --install-extension rust-lang.rust-analyzer
 cursor --install-extension tamasfe.even-better-toml
 cursor --install-extension ms-vscode.wasm-wasi-core
+cursor --install-extension eamodio.gitlens
 ```
 
 Note: Cursor IDE comes with built-in AI capabilities that can assist with coding, debugging, and understanding the codebase.
