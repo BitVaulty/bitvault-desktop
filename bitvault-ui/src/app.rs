@@ -222,6 +222,16 @@ impl BitVaultApp {
                         state.pin_confirm = pin_confirm.clone();
                     }
                 }
+
+                // Check for Enter key press
+                let enter_pressed =
+                    response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                if enter_pressed {
+                    // Store the enter key state in memory for use outside this scope
+                    ui.memory_mut(|mem| {
+                        mem.data.insert_temp(Id::new("pin_enter_pressed"), true);
+                    });
+                }
             });
 
             ui.add_space(20.0);
@@ -229,10 +239,16 @@ impl BitVaultApp {
             // Calculate pin_valid based on current values
             let pin_valid = !pin_input.is_empty() && pin_input == pin_confirm;
 
+            // Get the enter key state from memory
+            let enter_pressed = ui
+                .memory(|mem| mem.data.get_temp::<bool>(Id::new("pin_enter_pressed")))
+                .unwrap_or(false);
+
             // Set PIN button
             if ui
                 .add_enabled(pin_valid, egui::Button::new("Set PIN"))
                 .clicked()
+                || (enter_pressed && pin_valid)
             {
                 log::info!("Set PIN button clicked, PIN is valid: {}", pin_valid);
 
@@ -388,16 +404,20 @@ impl BitVaultApp {
                     ui.add_space(20.0);
 
                     // Text input for seed phrase
-                    ui.add(
+                    let response = ui.add(
                         egui::TextEdit::multiline(&mut state.verification_input)
                             .hint_text("Enter your 12 words in order, separated by spaces")
                             .desired_width(400.0)
                             .desired_rows(3),
                     );
 
+                    // Check for Enter key press
+                    let enter_pressed =
+                        response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+
                     ui.add_space(20.0);
 
-                    if ui.button("Restore Wallet").clicked()
+                    if (ui.button("Restore Wallet").clicked() || enter_pressed)
                         && !state.verification_input.trim().is_empty()
                     {
                         // Set the seed phrase from the input
@@ -455,6 +475,10 @@ impl BitVaultApp {
                 }
             }
 
+            // Check for Enter key press
+            let enter_pressed =
+                response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+
             ui.add_space(20.0);
 
             // Check if the entered text matches the original seed phrase
@@ -484,7 +508,7 @@ impl BitVaultApp {
             }
 
             // Handle button clicks outside of any locks
-            if verify_clicked {
+            if verify_clicked || enter_pressed {
                 if is_correct {
                     // Verification successful - update state once
                     if let Ok(mut state) = self.state.write() {
@@ -673,6 +697,10 @@ impl BitVaultApp {
                 }
             }
 
+            // Check for Enter key press
+            let enter_pressed =
+                pin_response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+
             // Display error message if there is one
             if let Ok(state) = self.state.read() {
                 if let Some(error) = &state.lock_error {
@@ -684,7 +712,7 @@ impl BitVaultApp {
             ui.add_space(20.0);
 
             let unlock_button = ui.add_enabled(wallet_loaded, egui::Button::new("Unlock"));
-            if unlock_button.clicked() {
+            if unlock_button.clicked() || (enter_pressed && wallet_loaded) {
                 if let Ok(mut state) = self.state.write() {
                     // Try to load and decrypt the wallet
                     if let Some(encrypted_data) = &state.encrypted_wallet_data {
