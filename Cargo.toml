@@ -2,10 +2,10 @@
 resolver = "2"
 default-members = ["bitvault-ui"]
 members = [
-    "bitvault-ui",      # Current Leptos frontend
-    "bitvault-app",     # Current Tauri shell (src-tauri)
-    "bitvault-core",    # Security-focused core component
-    "bitvault-common"   # Shared types and utilities
+    "bitvault-ui",     # Current Leptos frontend
+    "bitvault-app",    # Current Tauri shell (src-tauri)
+    "bitvault-core",   # Security-focused core component
+    "bitvault-common", # Shared types and utilities
 ]
 
 # Workspace-wide settings (shared by all members)
@@ -30,6 +30,7 @@ aes-gcm = "0.10.3"
 rand = "0.9.0"
 rand_core = "0.9.3"
 argon2 = "0.5.2"
+hex = "0.4.3"
 
 # Optimization settings for all workspace members
 [profile.release]

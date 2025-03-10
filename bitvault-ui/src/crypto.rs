@@ -7,9 +7,8 @@ use argon2::{
     Argon2, ParamsBuilder, Version,
 };
 use phc::Salt;
-use serde::{Deserialize, Serialize};
 use rand::RngCore;
-use rand::thread_rng;
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct EncryptedData {
@@ -18,10 +17,11 @@ pub struct EncryptedData {
     salt: String,       // phc encoded
 }
 
+#[allow(dead_code)]
 pub fn encrypt_seed(seed: &str, pin: &str) -> Result<String, String> {
     // Generate a random salt
     let mut salt_bytes = [0u8; 16];
-    thread_rng().fill_bytes(&mut salt_bytes);
+    rand::rng().fill_bytes(&mut salt_bytes);
     let salt = Salt::from(&salt_bytes);
 
     // Configure Argon2id with strong parameters
@@ -55,7 +55,7 @@ pub fn encrypt_seed(seed: &str, pin: &str) -> Result<String, String> {
 
     // Generate random 12-byte nonce
     let mut nonce_bytes = [0u8; 12];
-    thread_rng().fill_bytes(&mut nonce_bytes);
+    rand::rng().fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
 
     // Encrypt the seed
@@ -74,6 +74,7 @@ pub fn encrypt_seed(seed: &str, pin: &str) -> Result<String, String> {
     serde_json::to_string(&encrypted_data).map_err(|e| format!("Serialization failed: {}", e))
 }
 
+#[allow(dead_code)]
 pub fn decrypt_seed(encrypted_data_str: &str, pin: &str) -> Result<String, String> {
     // Deserialize the encrypted data
     let encrypted_data: EncryptedData = serde_json::from_str(encrypted_data_str)
