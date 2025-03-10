@@ -59,11 +59,8 @@ jobs:
       - name: Build with Cargo
         run: cargo build --release
 
-      - name: Run Tauri Development Build
-        run: cargo tauri dev
-
       - name: Run Clippy for Code Quality
         run: cargo clippy -- -D warnings
 
       - name: Run Tests
-        run: cargo test --verbose --all-features
+        run: cargo test --verbose --all-features -- --test-threads=1 --nocapture
