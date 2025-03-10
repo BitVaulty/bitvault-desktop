@@ -35,10 +35,7 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             pkg-config \
-            # nodejs \
-            # npm \
             git \
-            lld \
             clang
 
       - name: Cache Cargo registry
