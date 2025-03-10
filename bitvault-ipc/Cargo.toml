@@ -1,0 +1,14 @@
+[package]
+name = "bitvault-ipc"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Secure core implementation for BitVault wallet"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+
+# Internal workspace dependencies
+bitvault-common = { path = "../bitvault-common" }

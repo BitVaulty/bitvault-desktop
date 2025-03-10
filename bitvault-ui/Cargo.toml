@@ -1,0 +1,40 @@
+[package]
+name = "bitvault-ui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+# Core dependencies
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+anyhow.workspace = true
+log.workspace = true
+hex.workspace = true
+
+# Security
+zeroize.workspace = true
+aes-gcm.workspace = true
+rand.workspace = true
+argon2.workspace = true
+getrandom.workspace = true
+
+# egui dependencies
+eframe = "0.26.2"
+egui = "0.26.2"
+egui_extras = "0.26.2"
+egui_plot = "0.26.2"
+
+# Logging
+simple_logger = "5.0"
+
+# Bitcoin
+bip39 = { version = "2.0.0", features = ["rand"] }
+phc = "0.2.0"
+
+# File system
+dirs = "5.0.1"
+
+# Internal dependencies
+bitvault-common = { path = "../bitvault-common" }
+bitvault-ipc = { path = "../bitvault-ipc" }

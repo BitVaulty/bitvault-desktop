@@ -1,0 +1,35 @@
+{
+  "productName": "bitvault",
+  "version": "0.1.0",
+  "identifier": "com.bitvault.app",
+  "build": {
+    "beforeDevCommand": "cd bitvault-ui && trunk serve --port=1776",
+    "devUrl": "http://localhost:1776",
+    "beforeBuildCommand": "cd ../bitvault-ui && trunk build",
+    "frontendDist": "../../bitvault-ui/dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "BitVault",
+        "width": 1920,
+        "height": 1080
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
