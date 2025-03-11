@@ -1,48 +1,121 @@
-# Contributing to BitVault
+# Contributing to BitVault Wallet
 
-Thank you for your interest in contributing to BitVault, a security-focused Bitcoin wallet. This document provides a quick overview of the contribution process. For more detailed information, please refer to our comprehensive documentation.
-
-## Security First
-
-BitVault is a security-critical application that handles Bitcoin private keys and transactions. All contributions must prioritize security over convenience or features.
-
-**Security Vulnerabilities**: Do not report security vulnerabilities through public GitHub issues. Instead, please email security@bitvault.sv with details about the vulnerability.
-
-## Quick Links
-
-- [Detailed Contribution Guidelines](docs/development/contribution-guidelines.md)
-- [Commit Conventions](docs/development/commit-conventions.md)
-- [Development Environment Setup](docs/setup/arch-linux-setup.md)
-- [Security Boundaries](docs/design/security-boundaries.md)
-
-## Getting Started
-
-1. **Find an Issue**: Start with issues labeled `good-first-issue` or `help-wanted`
-2. **Fork and Clone**: Fork the repository and clone it locally
-3. **Set Up Environment**: Follow our [setup guide](docs/setup/arch-linux-setup.md)
-4. **Create a Branch**: Use the format `<type>/<issue-number>-<short-description>`
-5. **Make Changes**: Ensure your changes adhere to our security principles
-6. **Write Tests**: All changes must include appropriate tests
-7. **Follow Commit Conventions**: Use our [commit format](docs/development/commit-conventions.md)
-8. **Submit a Pull Request**: Fill out the PR template completely
-
-## Pull Request Process
-
-1. Ensure your code follows our style guidelines and passes all tests
-2. Update documentation as needed
-3. Link to any related issues
-4. Explicitly describe security implications
-5. Request reviews from appropriate maintainers
-6. Address all review comments promptly
+Thank you for your interest in contributing to BitVault Wallet! This document provides guidelines and instructions for contributing to this project.
 
 ## Code of Conduct
 
-We are committed to providing a friendly, safe, and welcoming environment for all contributors. By participating in this project, you agree to abide by our Code of Conduct (see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)).
+Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md). We expect all contributors to adhere to these guidelines to ensure a positive and respectful community.
+
+## Security Considerations
+
+BitVault is a Bitcoin wallet application that handles sensitive cryptographic operations and user funds. Security is our highest priority.
+
+**Before contributing, please review our [Security Policy](SECURITY.md).**
+
+When working on features that involve:
+- Cryptographic operations
+- Key management
+- Transaction handling
+- Network communication
+- Data storage
+
+Please pay special attention to the security implications of your changes and document any security considerations in your pull requests.
+
+For security issues, please follow the responsible disclosure process outlined in our [Security Policy](SECURITY.md) rather than filing a public issue.
+
+## Project Overview
+
+### Project Structure
+
+BitVault is a Rust workspace project with the following crates:
+- `bitvault-app` - Main application crate that ties everything together
+- `bitvault-core` - Core wallet functionality and cryptographic operations
+- `bitvault-common` - Shared utilities and types
+- `bitvault-ipc` - Inter-process communication between components
+- `bitvault-ui` - User interface components
+
+### Prerequisites
+
+- Rust (latest stable)
+- Cargo (Rust package manager)
+- Familiarity with Bitcoin concepts (for core functionality)
+
+### Setting Up Development Environment
+
+1. Fork the repository
+2. Clone your fork locally
+3. Install dependencies with `make setup`
+4. Start the development server with `make dev`
+
+## Development Workflow
+
+### Branching Strategy
+
+- `main` branch is always deployable
+- Create feature branches from `main` using the format `feature/your-feature-name`
+- Create bugfix branches using `fix/issue-description`
+
+### Commit Messages
+
+Follow conventional commits format:
+```
+type(scope): short description
+
+Longer description if needed
+```
+
+Types include:
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `style`: Formatting changes
+- `refactor`: Code refactoring
+- `test`: Adding or updating tests
+- `chore`: Maintenance tasks
+
+### Pull Requests
+
+1. Update your feature branch with the latest changes from `main`
+2. Ensure tests pass with `make test`
+3. Ensure linting passes with `make lint`
+4. Open a PR against the `main` branch
+5. Fill out the PR template completely
+
+### Code Review Process
+
+All submissions require review before being merged. Reviewers will check for:
+- Functionality
+- Security considerations
+- Code quality
+- Test coverage
+- Documentation
+
+## Quality Assurance
+
+### Testing
+
+- Write unit tests for new functionality
+- Ensure existing tests continue to pass
+- Include integration tests for components
+- For Bitcoin-specific functionality, include test vectors from the Bitcoin Core test suite where applicable
+
+Run tests with:
+```
+make test
+```
+
+### Documentation
+
+- Update documentation when changing functionality
+- Document APIs using standard formats
+- Include examples where appropriate
+- Document security considerations explicitly
+
+### Style Guide
+
+- Rust: Follow Rustfmt conventions
+- Follow project-specific coding conventions
 
 ## License
 
-BitVault is licensed under [LICENSE NAME]. By contributing to BitVault, you agree to license your contributions under the same license.
-
----
-
-For more detailed information about contributing to BitVault, please refer to our [comprehensive contribution guidelines](docs/development/contribution-guidelines.md). 
+By contributing to BitVault Wallet, you agree that your contributions will be licensed under the project's [Apache 2.0 License](LICENSE). 
