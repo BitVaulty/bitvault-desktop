@@ -7,8 +7,11 @@ use eframe::egui;
 use simple_logger::SimpleLogger;
 
 fn main() {
-    // Initialize logger
-    SimpleLogger::new().init().unwrap();
+    // Initialize logger with WARN level to reduce logging output
+    SimpleLogger::new()
+        .with_level(log::LevelFilter::Warn)
+        .init()
+        .unwrap();
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
