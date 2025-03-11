@@ -57,6 +57,8 @@ jobs:
             ${{ runner.os }}-cargo-build-
 
       - name: Build with Cargo
+        env:
+          CARGO_PROFILE_RELEASE_LTO: "false"
         run: cargo build --release
 
       - name: Run Clippy for Code Quality

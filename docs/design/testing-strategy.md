@@ -522,8 +522,7 @@ This document outlines BitVault's comprehensive testing strategy, with special e
 ### Security Boundary Test Cases
 
 1. **Process Isolation Verification**:
-   ```
-   Test: Attempt to access secure process memory
+   ```   Test: Attempt to access secure process memory
    Steps:
      1. Launch application with both processes
      2. Identify secure process memory space
@@ -555,8 +554,7 @@ This document outlines BitVault's comprehensive testing strategy, with special e
    ```
 
 2. **Transaction Signing Verification**:
-   ```
-   Test: Validate 2-of-3 transaction signing
+   ```   Test: Validate 2-of-3 transaction signing
    Steps:
      1. Create unsigned transaction
      2. Sign with first key
@@ -800,3 +798,55 @@ For the handling of security issues discovered during testing:
 This testing strategy provides a comprehensive approach to validating BitVault's security model and Bitcoin functionality. By combining targeted security testing with thorough Bitcoin protocol validation, we can ensure the wallet meets its security and functionality requirements.
 
 The strategy scales from the immediate MVP needs to a more comprehensive testing approach for later development phases, always maintaining the focus on security boundary validation and cryptographic correctness. 
+
+# BitVault Common Module Documentation
+
+## High-Level Conceptual Overview
+
+The `bitvault-common` module is integral to the BitVault Bitcoin wallet, providing core types, utilities, and shared code. It ensures secure and efficient Bitcoin operations, leveraging the Bitcoin Development Kit (BDK) for essential Bitcoin functionality.
+
+## API Reference
+
+### Core Types and Utilities
+
+- **SensitiveString**: Zeroes out its contents upon drop to protect sensitive data.
+- **SensitiveBytes**: Zeroes out its contents upon drop to protect sensitive data.
+- **AddressInfo**: Extends Bitcoin address with metadata like labels and derivation paths.
+- **WalletError**: Defines common error types for wallet operations, avoiding sensitive information leaks.
+- **FeePriority**: Enum for fee priority levels (Low, Medium, High).
+- **FeeEstimates**: Struct for fee estimation targets.
+- **WalletTransaction**: Struct for transaction details for UI presentation and history tracking.
+- **WalletSettings**: Struct for wallet settings, including network, Tor usage, and fee levels.
+
+### Key Functions
+
+- **sanitize_for_display**: Sanitize strings to prevent sensitive data leaks.
+- **parse_address**: Parse and validate Bitcoin addresses with network checks.
+- **is_valid_bitcoin_address**: Verify if a string is a valid Bitcoin address for a specified network.
+- **format_bitcoin_amount**: Format Bitcoin amounts in BTC or sats.
+- **calculate_fee_rate**: Compute fee rates based on transaction size and fee.
+
+## Testing Strategy
+
+The `bitvault-common` module employs a robust testing strategy:
+
+- **Unit Tests**: Validate individual components and functions.
+- **Integration Tests**: Ensure component interaction and external dependency integration.
+- **Doctests**: Embed in documentation to verify code examples.
+
+### Guidelines for Writing Tests
+
+- Cover typical and edge cases.
+- Use descriptive test function names.
+- Utilize Rust's test framework for assertions and organization.
+
+## Security Considerations
+
+The `bitvault-common` module enforces security measures to protect sensitive data:
+
+- **Memory Protection**: Automatically zero out contents of `SensitiveString` and `SensitiveBytes` upon drop.
+- **Secure Logging**: Avoid logging sensitive information; sanitize potentially sensitive values.
+- **Type Safety**: Ensure safe Bitcoin operation handling and prevent common errors.
+
+Refer to `docs/design` for detailed design documentation, offering in-depth insights into the architecture, design decisions, and implementation details of the `bitvault-common` module. 
+

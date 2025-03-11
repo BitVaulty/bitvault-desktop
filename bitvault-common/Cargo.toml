@@ -1,16 +1,60 @@
 [package]
 name = "bitvault-common"
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
-description = "Shared types and utilities for BitVault wallet"
+version = "0.1.0"
+edition = "2021"
+authors = ["BitVault Team"]
+description = "Common types and utilities for the BitVault Bitcoin wallet"
 
 [dependencies]
-# Use workspace shared dependencies
-serde.workspace = true
-serde_json.workspace = true
-anyhow.workspace = true
-log.workspace = true
+# Serialization/deserialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = "0.5"
 
-# Security-related dependencies that might be needed for common types
-zeroize.workspace = true
+# Error handling
+thiserror = "1.0"
+anyhow = { workspace = true }
+
+# Bitcoin functionality
+bdk = { workspace = true }
+bitcoin = { workspace = true }
+
+# Decimal math for Bitcoin amounts
+rust_decimal = { version = "1.26", features = ["serde"] }
+rust_decimal_macros = "1.26"
+
+# Logging support
+log = { workspace = true }
+env_logger = "0.9"
+chrono = { version = "0.4", features = ["serde"] }
+
+# Memory security
+zeroize = { workspace = true }
+
+# Cross-platform path handling
+dirs = "4.0"
+
+# Feature detection helper
+cfg-if = "1.0"
+
+# Bitcoin-specific tools
+hex = { workspace = true }
+rand = { workspace = true }
+
+# Conditional dependencies for platform-specific features
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["memoryapi"] }
+
+[features]
+default = []
+strict-memory = [] # Enable stricter memory safety checks
+mobile-compat = [] # Enable mobile compatibility features
+
+[dev-dependencies]
+tempfile = "3.3"
+criterion = "0.3"
+quickcheck = "1.0"
+quickcheck_macros = "1.0"

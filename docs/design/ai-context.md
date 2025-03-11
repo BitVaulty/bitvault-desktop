@@ -58,11 +58,13 @@
   - **`bitvault-common`**: Shared components and interfaces
   - **`bitvault-ui`**: User interface and interaction
   - **`bitvault-app`**: Platform integration
+- **Dependency Management**: Strict versioning and security review of dependencies
 
 > **Related Documents**:
 > - [architecture-overview.md](architecture-overview.md) - Detailed module structure and relationships
 > - [implementation-plan.md](implementation-plan.md) - Prioritized implementation roadmap
 > - [testing-strategy.md](testing-strategy.md) - Comprehensive testing approach
+> - [dependency-management.md](dependency-management.md) - Guidelines for managing dependencies
 
 ### User Experience & Workflows
 - **Key User Journeys**: Wallet creation, transaction operations, recovery
@@ -115,6 +117,7 @@ When providing assistance on BitVault development:
 - **Cross-Platform**: Consider implications for all target platforms
 - **Code Simplicity**: Prefer simple, auditable implementations over clever optimizations
 - **Documentation**: Emphasize thorough documentation, especially for security aspects
+- **Dependency Health**: Use `cargo outdated` to check for appropriate dependency versions
 
 #### Critical Decisions
 When addressing questions that involve:
@@ -122,5 +125,6 @@ When addressing questions that involve:
 - Cross-platform compatibility
 - Bitcoin protocol specifics
 - Key management approaches
+- Dependency version selection
 
 Clearly highlight implications and reference relevant design documents.
