@@ -2,6 +2,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 use anyhow::Result;
 use eframe::{
@@ -38,6 +39,7 @@ pub enum View {
     SeedVerify,
     Wallet,
     LockScreen,
+    SplashScreen,
 }
 
 // Define a struct to hold the global state
@@ -54,6 +56,7 @@ pub struct AppState {
     pub copied_feedback: Option<f32>, // Timer for showing copy feedback (in seconds)
     pub encrypted_wallet_data: Option<String>, // Encrypted wallet data stored on disk
     pub lock_error: Option<String>,   // Error message when unlocking fails
+    pub splash_timer: Option<f32>,    // Timer for splash screen (in seconds)
 }
 
 // Create a type alias for a thread-safe, shared reference to the state
@@ -67,7 +70,11 @@ impl BitVaultApp {
     pub fn new(_cc: &CreationContext<'_>) -> Self {
         // Create the app with default state
         let app = Self {
-            state: Arc::new(RwLock::new(AppState::default())),
+            state: Arc::new(RwLock::new(AppState {
+                current_view: View::SplashScreen,
+                splash_timer: Some(1.0), // 1 second splash screen
+                ..Default::default()
+            })),
         };
 
         // Check if a wallet file exists and load it
@@ -76,14 +83,16 @@ impl BitVaultApp {
                 if let Ok(mut state) = app.state.write() {
                     state.encrypted_wallet_data = Some(encrypted_data);
                     state.wallet_state = WalletState::Locked;
-                    state.current_view = View::LockScreen;
-                    log::info!("Existing wallet found. Starting in locked mode.");
+                    // Don't set current_view here, as we want to show splash screen first
+                    log::info!(
+                        "Existing wallet found. Will start in locked mode after splash screen."
+                    );
                 }
             }
             Err(e) => {
                 // No wallet file found or error loading it - this is normal for first run
                 log::info!(
-                    "No existing wallet found: {}. Starting in new wallet mode.",
+                    "No existing wallet found: {}. Will start in new wallet mode after splash screen.",
                     e
                 );
             }
@@ -755,6 +764,82 @@ impl BitVaultApp {
         });
     }
 
+    fn render_splash_screen(&self, ui: &mut Ui) {
+        // Set the background to black
+        let screen_rect = ui.max_rect();
+        ui.painter().rect_filled(screen_rect, 0.0, Color32::BLACK);
+
+        // Track how many times this method is called
+        static RENDER_COUNT: std::sync::atomic::AtomicUsize =
+            std::sync::atomic::AtomicUsize::new(0);
+        let count = RENDER_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        log::trace!("Render splash screen called {} times", count);
+
+        // Center the logo
+        ui.vertical_centered(|ui| {
+            // Center vertically - push down less to make it more centered
+            ui.add_space(screen_rect.height() / 4.0);
+
+            // Use a static texture handle to avoid reloading on every frame
+            static TEXTURE_ID: OnceLock<Option<egui::TextureHandle>> = OnceLock::new();
+
+            let texture_id = TEXTURE_ID.get_or_init(|| {
+                log::debug!("Loading image - this should only happen once");
+
+                // Try to load the image from the file system - try multiple paths
+                let possible_paths = [
+                    "public/splash_logo.png",
+                    "./public/splash_logo.png",
+                    "../public/splash_logo.png",
+                    "bitvault-ui/public/splash_logo.png",
+                ];
+
+                for path in possible_paths {
+                    log::debug!("Trying to load image from: {}", path);
+                    if let Ok(image_data) = std::fs::read(path) {
+                        // Use the image crate to decode the image
+                        if let Ok(image) = image::load_from_memory(&image_data) {
+                            let size = [image.width() as _, image.height() as _];
+                            let image_buffer = image.to_rgba8();
+                            let pixels = image_buffer.as_flat_samples();
+
+                            let color_image =
+                                egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
+
+                            let texture = ui.ctx().load_texture(
+                                "splash_logo",
+                                color_image,
+                                Default::default(),
+                            );
+
+                            log::debug!("Image loaded successfully from {}", path);
+                            return Some(texture);
+                        }
+                    }
+                }
+
+                log::error!("Failed to read image file from any path");
+                None
+            });
+
+            match texture_id {
+                Some(texture) => {
+                    // Make the image smaller (50% of original size)
+                    let scale = 0.5;
+                    ui.add(egui::Image::new(texture).fit_to_original_size(scale));
+                    log::trace!("Image added to frame {}", count);
+                }
+                None => {
+                    ui.colored_label(Color32::RED, "Failed to load splash image");
+                    log::error!("No texture available for splash screen");
+                }
+            }
+        });
+
+        // Request a repaint to ensure the timer updates even without mouse movement
+        ui.ctx().request_repaint();
+    }
+
     // Helper function to get the wallet file path
     fn get_wallet_file_path() -> Option<PathBuf> {
         if let Some(config_dir) = dirs::config_dir() {
@@ -797,8 +882,38 @@ impl BitVaultApp {
 
 impl eframe::App for BitVaultApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
-        // Update the copy feedback timer if it exists
+        // Always request a repaint when in splash screen mode to ensure timer updates
+        if let Ok(state) = self.state.read() {
+            if state.current_view == View::SplashScreen {
+                // Request continuous repaints during splash screen
+                ctx.request_repaint();
+            }
+        }
+
+        // Update the splash timer if active
         if let Ok(mut state) = self.state.write() {
+            if let Some(timer) = state.splash_timer {
+                let new_timer = timer - ctx.input(|i| i.unstable_dt).min(0.1);
+                if new_timer <= 0.0 {
+                    state.splash_timer = None;
+
+                    // Transition to the appropriate view after splash screen
+                    if state.wallet_state == WalletState::Locked {
+                        state.current_view = View::LockScreen;
+                    } else {
+                        state.current_view = View::Home;
+                    }
+
+                    log::info!(
+                        "Splash screen finished, transitioning to {:?}",
+                        state.current_view
+                    );
+                } else {
+                    state.splash_timer = Some(new_timer);
+                }
+            }
+
+            // Update the copy feedback timer if it exists
             if let Some(timer) = state.copied_feedback {
                 let new_timer = timer - ctx.input(|i| i.unstable_dt).min(0.1);
                 if new_timer <= 0.0 {
@@ -824,6 +939,7 @@ impl eframe::App for BitVaultApp {
                 View::SeedVerify => self.render_seed_verify(ui),
                 View::Wallet => self.render_wallet(ui),
                 View::LockScreen => self.render_lock_screen(ui),
+                View::SplashScreen => self.render_splash_screen(ui),
             }
         });
     }

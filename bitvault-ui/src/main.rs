@@ -9,7 +9,7 @@ use simple_logger::SimpleLogger;
 fn main() {
     // Initialize logger with WARN level to reduce logging output
     SimpleLogger::new()
-        .with_level(log::LevelFilter::Warn)
+        .with_level(log::LevelFilter::Debug)
         .init()
         .unwrap();
 
