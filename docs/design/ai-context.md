@@ -111,6 +111,10 @@ When providing assistance on BitVault development:
 - **Module Context**: Specify which module is being discussed (core/common/ui/app)
 - **Security Boundary Impact**: Note when changes cross security boundaries
 - **Bitcoin-Specific Functionality**: Flag Bitcoin-protocol specific components
+- **Non-Custodial Wallet**: Understand that this is a non-custodial wallet, and local key storage is never appropriate. All key management should ensure user control and security.
+- **Key Handling**: Clearly identify when code handles private keys, seed phrases, or signatures
+- **UTXO Management**: Note when code deals with UTXO selection, which impacts fees and privacy
+- **Transaction Validation**: Specify when changes affect transaction validation or signing workflows
 
 #### Development Priorities
 - **Security First**: Prioritize security over convenience
@@ -118,6 +122,8 @@ When providing assistance on BitVault development:
 - **Code Simplicity**: Prefer simple, auditable implementations over clever optimizations
 - **Documentation**: Emphasize thorough documentation, especially for security aspects
 - **Dependency Health**: Use `cargo outdated` to check for appropriate dependency versions
+- **Performance Considerations**: Note when code involves cryptographic operations that may have performance impacts
+- **Test Coverage**: Ensure comprehensive testing for Bitcoin-specific functionality
 
 #### Critical Decisions
 When addressing questions that involve:
@@ -126,5 +132,25 @@ When addressing questions that involve:
 - Bitcoin protocol specifics
 - Key management approaches
 - Dependency version selection
+- Fee estimation strategies
+- Privacy implications of UTXO selection
+- Transaction signing workflows
+- Network interaction models
 
 Clearly highlight implications and reference relevant design documents.
+
+#### Bitcoin-Specific Guidance
+- **BIP Standards**: Reference relevant BIPs when implementing Bitcoin functionality
+- **Fee Estimation**: Consider the trade-offs between different fee estimation approaches
+- **Address Types**: Be aware of the implications of different Bitcoin address formats (Legacy, SegWit, Taproot)
+- **Transaction Size**: Consider the impact of different transaction structures on fees
+- **UTXO Management**: Recognize the privacy and efficiency implications of UTXO selection strategies
+- **Testnet vs Mainnet**: Always clarify which Bitcoin network is being targeted
+- **Unit Conventions**: Use sat as the base unit for calculations, with appropriate conversions for display
+
+#### Security Boundary Considerations
+- **Core to UI Boundary**: Always validate data crossing from UI to core components
+- **Network to Core Boundary**: Treat all network data as untrusted and validate accordingly
+- **Storage to Memory Boundary**: Implement proper encryption and validation for data loaded from storage
+- **Platform Integration Points**: Be aware of security implications when interfacing with platform-specific features
+- **Testing Environments**: Consider how test code interacts with security boundaries

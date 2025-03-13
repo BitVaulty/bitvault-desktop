@@ -35,7 +35,16 @@ rand_core = "0.9.3"
 argon2 = "0.5.2"
 hex = "0.4.3"
 
-# This is a key addition - define specific target configuration
-[workspace.metadata.leptos]
-# Components that can be built for wasm
-wasm-components = ["bitvault-ui", "bitvault-core", "bitvault-common"]
+crossbeam-channel = { version = "0.5.8", features = ["std"] }
+
+# Localization dependencies
+fluent = "0.15.0"
+unic-langid = "0.9.0"
+
+lazy_static = "1.4"
+
+# Add intl-memoizer for localization
+intl-memoizer = { version = "0.5.1", features = ["concurrent"] }
+
+[workspace.metadata.test-settings]
+test-threads = 1

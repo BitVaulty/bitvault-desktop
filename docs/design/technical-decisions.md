@@ -1001,6 +1001,70 @@ Bitcoin has specific constraints and validation rules that differ from regular a
 - Balance between test complexity and maintainability
 - Slower development for test-driven approaches
 
+### TDR-019: Comprehensive Bitcoin-Specific Testing Strategy
+
+**Decision**: Implement a comprehensive testing strategy specifically designed for Bitcoin wallet functionality with specialized test utilities, test vectors, and isolation mechanisms.
+
+**Context**: 
+- Bitcoin wallet functionality requires specialized testing for cryptographic correctness
+- Test isolation is critical when dealing with security-sensitive operations
+- Cryptographic functions must be reproducible in test scenarios
+- Comprehensive test suites increase confidence in security-critical code
+
+**Alternatives Considered**:
+1. **Minimal Testing**:
+   - Basic unit tests only covering core functionality
+   - Faster development cycles but less safety
+   - Lower confidence in security properties
+   - Fewer edge cases covered
+
+2. **Black-box Testing Only**:
+   - Testing only public interfaces without special test utilities
+   - More realistic but harder to test edge cases
+   - Difficult to test error conditions and rare scenarios
+   - Less visibility into internal operation
+
+3. **Manual Testing**:
+   - Relying primarily on manual verification
+   - More flexible but not reproducible
+   - Cannot be automated in CI/CD pipelines
+   - Higher risk of regression issues
+
+**Rationale**:
+- Dedicated test utilities enable thorough testing of cryptographic functions
+- Test vectors ensure compatibility with Bitcoin standards
+- Test isolation prevents interference between test cases
+- Security-specific test mechanisms validate sensitive operation handling
+- Cross-platform tests verify consistent behavior on all supported platforms
+
+**Implementation Details**:
+- Test helper functions for key generation, encryption, and UTXO creation
+- Known test vectors for Bitcoin addresses, keys, and transactions
+- Test mode flags to enable deterministic behavior for tests
+- Memory zeroization verification in security-sensitive code
+- Isolation mechanisms to prevent global state conflicts
+
+**Security Implications**:
+- Enables verification of security-critical code paths
+- Validates memory security for sensitive data
+- Confirms cryptographic implementation correctness
+- Provides ongoing regression protection for security fixes
+- Clear separation between test code and production code
+
+**Bitcoin Considerations**:
+- Ensures standards compliance with Bitcoin protocols
+- Validates UTXO selection for different fee scenarios
+- Tests transaction creation across different address types
+- Verifies fee calculation accuracy
+- Comprehensive tests for BIP39/BIP32/BIP44 implementation
+
+**Trade-offs**:
+- Additional development effort for test infrastructure
+- Maintenance burden for extensive test suites
+- Test-specific code in production codebase
+- Potential for tests to diverge from production behavior
+- Performance impact from comprehensive test runs
+
 ## 7. Additional Decisions
 
 ### TDR-017: Documentation Standards
@@ -1285,4 +1349,175 @@ BDK handles Bitcoin-specific considerations correctly, including:
 
 **Rationale**: Comprehensive testing helps catch bugs early and ensures code quality.
 
-**Security Implications**: Enhances code reliability and security by validating functionality and catching potential issues. 
+**Security Implications**: Enhances code reliability and security by validating functionality and catching potential issues.
+
+### TDR-013: Secure Key Management Implementation
+
+**Decision**: Implement a comprehensive key management system using AES-256-GCM encryption and PBKDF2-HMAC-SHA256 for key derivation with adaptive iteration counts.
+
+**Context**: 
+- Key management is the most security-critical aspect of a Bitcoin wallet
+- Keys must be securely stored on disk with strong encryption
+- Different device capabilities require adaptive security parameters
+- Support for key rotation is needed to change credentials without affecting Bitcoin keys
+
+**Alternatives Considered**:
+1. **Platform-specific key storage only**:
+   - Using platform keychain/secure storage APIs
+   - Better integration with native security
+   - Less control over implementation details
+   - Limited cross-platform consistency
+
+2. **Simpler encryption scheme**:
+   - Using less complex algorithms like AES-CBC
+   - Easier to implement but weaker security guarantees
+   - No authenticated encryption
+
+3. **Hardware security modules**:
+   - Maximum security but limited availability
+   - Complex integration requirements
+   - Potentially better for future versions
+
+**Rationale**:
+- AES-256-GCM provides authenticated encryption preventing tampering
+- PBKDF2 with adaptive iteration count balances security and performance
+- Explicit memory zeroing for sensitive data limits exposure window
+- Versioned storage format allows future improvements
+- Key rotation enables password changes without affecting Bitcoin addresses
+
+**Security Implications**:
+- Cryptographic protection of seed phrases and keys at rest
+- Defense against offline brute force through iteration count tuning
+- Clear lifecycle for sensitive data in memory
+- Format versioning enables security improvements over time
+- Separate test mode prevents test code from affecting production security
+
+**Bitcoin Considerations**:
+- Protection of BIP39 mnemonics that directly control Bitcoin funds
+- Compatible with BIP32/BIP44/BIP84 derivation paths
+- Support for both single-signature and multisignature wallets
+- Security appropriate for controlling significant Bitcoin value
+
+**Trade-offs**:
+- Performance impact from high PBKDF2 iteration counts on low-end devices
+- Implementation complexity versus delegating to platform APIs
+- Manual memory management versus garbage-collected alternatives
+- Test requirements for security-critical code
+
+### TDR-014: Advanced UTXO Selection Algorithms
+
+**Decision**: Implement specialized UTXO selection algorithms optimized for different use cases including fee minimization, privacy enhancement, and coin consolidation.
+
+**Context**: 
+- UTXO selection directly impacts transaction fees and privacy
+- Different selection strategies are required for different user priorities
+- Bitcoin wallets need multiple approaches to UTXO management
+- Advanced methods like Branch and Bound can provide significant fee savings
+
+**Alternatives Considered**:
+1. **Single General-Purpose Algorithm**:
+   - Simpler implementation but less adaptable to user needs
+   - Cannot optimize for different priorities simultaneously
+   - Lower implementation complexity
+   - Less customization for users
+
+2. **Delegating to BDK's Default Selection**:
+   - Leveraging existing library implementation
+   - Less control over selection behavior
+   - Fewer specialized options for users
+   - Simplified codebase
+
+3. **Pure Random Selection**:
+   - Maximum privacy but potentially higher fees
+   - Simple implementation but sub-optimal for many use cases
+   - Less predictable behavior
+
+**Rationale**:
+- Multiple algorithms allow users to prioritize their specific needs
+- Fee minimization is critical during high-fee periods
+- Privacy enhancement is important for fungibility
+- Coin consolidation helps manage UTXO set growth
+- Advanced algorithms like Branch and Bound optimize fee efficiency
+
+**Security Implications**:
+- UTXO selection does not handle private keys or signatures
+- Selection strategies impact transaction footprint and patterns
+- Privacy-focused selection helps maintain transaction unlinkability
+- Fee estimation affects transaction confirmation reliability
+
+**Bitcoin Considerations**:
+- Respects Bitcoin protocol constraints like dust limits
+- Optimizes fee calculations based on weight units
+- Accounts for confirmation status of UTXOs
+- Supports coin control for advanced Bitcoin users
+- Properly handles change outputs based on Bitcoin best practices
+
+**Trade-offs**:
+- Implementation complexity of multiple selection strategies
+- Computational overhead for advanced selection algorithms
+- User education required for strategy selection
+- Balance between simplicity and optimization
+- Testing complexity across multiple strategies
+
+### TDR-020: Adaptive Fee Estimation System
+
+**Decision**: Implement an advanced fee estimation system that combines multiple data sources and adapts to network congestion, time of day, and user priority preferences.
+
+**Context**: 
+- Bitcoin transaction fee estimation is critical for cost management and confirmation reliability
+- Network congestion can vary dramatically over short time periods
+- Different users have different time sensitivity and cost priorities
+- Poor fee estimation leads to either overpayment or transaction delays
+
+**Alternatives Considered**:
+1. **Static Fee Tables**:
+   - Hardcoded fee rates for different networks and priorities
+   - Simple implementation but unable to adapt to network conditions
+   - No ability to respond to fee market changes
+   - Predictable but often suboptimal fee rates
+
+2. **Single-Source Fee Estimation**:
+   - Using only one fee estimator (like a specific mempool API)
+   - Simpler implementation but vulnerable to data source outages
+   - Potentially biased estimation based on source characteristics
+   - Limited perspective on fee market conditions
+
+3. **Delegating to External Services**:
+   - Relying completely on third-party fee estimation services
+   - Less implementation effort but reduced control
+   - Potential privacy implications from external service usage
+   - May introduce external dependencies
+
+**Rationale**:
+- Multi-source approach increases estimation reliability and accuracy
+- Historical data analysis provides context for current fee market conditions
+- Time-of-day adjustments account for known cyclical fee patterns
+- Congestion-aware adjustments respond to rapid market changes
+- Priority levels give users control over confirmation speed vs. cost trade-off
+
+**Implementation Details**:
+- Data collection from multiple fee rate sources
+- Historical fee data analysis with time-series storage
+- Congestion level detection based on mempool metrics
+- Adaptive fee rate adjustment based on real-time network conditions
+- User-selectable priority levels with meaningful confirmation targets
+
+**Security Implications**:
+- Fee estimation does not directly handle private keys or signatures
+- Accurate fee estimation prevents transaction delays that might affect security operations
+- Fallback mechanisms ensure functionality even when network connectivity is limited
+- Protects against fee sniping and other fee-related attacks
+
+**Bitcoin Considerations**:
+- Properly accounts for Bitcoin's fee market dynamics
+- Supports segwit transaction fee improvements
+- Adjusts estimations based on block space demand
+- Respects minimum relay fee requirements
+- Compatible with Bitcoin protocol fee handling
+
+**Trade-offs**:
+- Increased complexity of fee estimation logic
+- Data storage requirements for historical fee information
+- Network requests to multiple fee data sources
+- Processing overhead for fee calculation
+- Need to periodically update fee market models

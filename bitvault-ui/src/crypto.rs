@@ -17,7 +17,6 @@ pub struct EncryptedData {
     salt: String,       // phc encoded
 }
 
-#[allow(dead_code)]
 pub fn encrypt_seed(seed: &str, pin: &str) -> Result<String, String> {
     // Generate a random salt
     let mut salt_bytes = [0u8; 16];
@@ -74,7 +73,6 @@ pub fn encrypt_seed(seed: &str, pin: &str) -> Result<String, String> {
     serde_json::to_string(&encrypted_data).map_err(|e| format!("Serialization failed: {}", e))
 }
 
-#[allow(dead_code)]
 pub fn decrypt_seed(encrypted_data_str: &str, pin: &str) -> Result<String, String> {
     // Deserialize the encrypted data
     let encrypted_data: EncryptedData = serde_json::from_str(encrypted_data_str)

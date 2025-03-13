@@ -26,16 +26,46 @@ use anyhow::Result;
 use bdk::FeeRate;
 use bdk::TransactionDetails;
 use bitcoin::address;
+use bitcoin::Amount;
 
 // Constants for Bitcoin-specific values
 
-/// Constant for dust threshold (minimum output value)
+/// Dust threshold in satoshis - outputs below this value are considered dust
+/// This is the mainnet threshold, which is currently the same across all networks
 pub const DUST_THRESHOLD: u64 = 546;
 
-/// Constant for satoshis per Bitcoin
+/// Dust threshold in satoshis for Bitcoin mainnet - outputs below this value are considered dust
+pub const MAINNET_DUST_THRESHOLD: u64 = 546;
+
+/// Dust threshold in satoshis for Bitcoin testnet
+pub const TESTNET_DUST_THRESHOLD: u64 = 546;
+
+/// Dust threshold in satoshis for Bitcoin regtest
+pub const REGTEST_DUST_THRESHOLD: u64 = 546;
+
+/// Dust threshold in satoshis for Bitcoin signet
+pub const SIGNET_DUST_THRESHOLD: u64 = 546;
+
+/// Get the dust threshold for a specific network
+pub fn get_dust_threshold(network: Network) -> u64 {
+    match network {
+        Network::Bitcoin => MAINNET_DUST_THRESHOLD,
+        Network::Testnet => TESTNET_DUST_THRESHOLD,
+        Network::Regtest => REGTEST_DUST_THRESHOLD,
+        Network::Signet => SIGNET_DUST_THRESHOLD,
+        _ => MAINNET_DUST_THRESHOLD, // Default to mainnet for unknown networks
+    }
+}
+
+/// Check if an amount is considered dust for a specific network
+pub fn is_dust(amount: Amount, network: Network) -> bool {
+    amount.to_sat() < get_dust_threshold(network)
+}
+
+/// Bitcoin satoshis per BTC
 pub const SATS_PER_BTC: u64 = 100_000_000;
 
-/// Constant for maximum Bitcoin supply in satoshis
+/// Maximum Bitcoin supply in satoshis
 pub const MAX_BITCOIN_SUPPLY: u64 = 21_000_000 * SATS_PER_BTC;
 
 /// A string that contains sensitive data that should be zeroed when dropped
@@ -672,7 +702,7 @@ impl WalletTransaction {
 }
 
 /// Fee priority levels
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum FeePriority {
     /// Low priority (several hours)
     Low,
@@ -680,6 +710,38 @@ pub enum FeePriority {
     Medium,
     /// High priority (next block)
     High,
+    /// Custom priority with specified rate (sat/vB)
+    Custom(f32),
+}
+
+impl PartialEq for FeePriority {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (FeePriority::Low, FeePriority::Low) => true,
+            (FeePriority::Medium, FeePriority::Medium) => true,
+            (FeePriority::High, FeePriority::High) => true,
+            (FeePriority::Custom(a), FeePriority::Custom(b)) => (a - b).abs() < f32::EPSILON,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for FeePriority {}
+
+impl std::hash::Hash for FeePriority {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            FeePriority::Low => 0.hash(state),
+            FeePriority::Medium => 1.hash(state),
+            FeePriority::High => 2.hash(state),
+            FeePriority::Custom(rate) => {
+                // For hashing, we round to 2 decimal places to ensure consistent hashing
+                let rate_rounded = (rate * 100.0).round() as u32;
+                3.hash(state);
+                rate_rounded.hash(state);
+            }
+        }
+    }
 }
 
 impl fmt::Display for FeePriority {
@@ -688,6 +750,7 @@ impl fmt::Display for FeePriority {
             FeePriority::Low => write!(f, "Low"),
             FeePriority::Medium => write!(f, "Medium"),
             FeePriority::High => write!(f, "High"),
+            FeePriority::Custom(rate) => write!(f, "Custom ({})", rate),
         }
     }
 }
@@ -710,6 +773,7 @@ impl FeeEstimates {
             FeePriority::Low => self.low,
             FeePriority::Medium => self.medium,
             FeePriority::High => self.high,
+            FeePriority::Custom(rate) => FeeRate::from_sat_per_vb(rate),
         }
     }
 }
@@ -837,6 +901,24 @@ pub enum WalletError {
 
     #[error("Generic error: {0}")]
     Generic(String),
+    
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+    
+    #[error("Not found: {0}")]
+    NotFound(String),
+    
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+    
+    #[error("Deserialization error: {0}")]
+    DeserializationError(String),
+
+    #[error("Cryptographic error: {0}")]
+    Crypto(String),
+    
+    #[error("IO error: {0}")]
+    IoError(String),
 }
 
 impl From<bdk::Error> for WalletError {

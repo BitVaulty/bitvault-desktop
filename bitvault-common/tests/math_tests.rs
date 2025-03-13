@@ -53,3 +53,62 @@ fn test_bitcoin_amount_usage() {
     let amount = Amount::from_sat(satoshi_amount);
     assert_eq!(format!("{}", amount), "1.5 BTC");
 }
+
+#[test]
+fn test_transaction_fee_calculation() {
+    // Test simple fee calculation cases
+    
+    // For a 250 byte transaction at 1 sat/byte
+    let tx_size = 250;
+    let fee_rate = 1.0;
+    let fee = math::calculate_fee(tx_size, fee_rate);
+    assert_eq!(fee, Amount::from_sat(250));
+    
+    // Higher fee rate
+    let fee_rate = 5.0;
+    let fee = math::calculate_fee(tx_size, fee_rate);
+    assert_eq!(fee, Amount::from_sat(1250));
+    
+    // Test with floating point fee rate
+    let fee_rate = 2.5;
+    let fee = math::calculate_fee(tx_size, fee_rate);
+    assert_eq!(fee, Amount::from_sat(625));
+    
+    // Test small transaction
+    let tx_size = 10;
+    let fee_rate = 1.0;
+    let fee = math::calculate_fee(tx_size, fee_rate);
+    assert_eq!(fee, Amount::from_sat(10));
+}
+
+#[test]
+fn test_transaction_size_estimation() {
+    // Test basic transaction size estimation
+    
+    // Simple 1-input, 1-output transaction
+    let size_1_1 = math::estimate_tx_size(1, 1);
+    // Should be roughly 10 (overhead) + 68 (input) + 33 (output) = 111 bytes
+    assert_eq!(size_1_1, 111);
+    
+    // 2-input, 1-output transaction
+    let size_2_1 = math::estimate_tx_size(2, 1);
+    // Should add one more input size (68 bytes)
+    assert_eq!(size_2_1, 179);
+    
+    // Verify the size increases correctly with additional inputs/outputs
+    // 3 inputs: 3 * 68 = 204, 2 outputs: 2 * 33 = 66, overhead: 10
+    // Total: 204 + 66 + 10 = 280
+    assert_eq!(math::estimate_tx_size(3, 2), 280);
+    
+    // Verify that the detailed size estimation works correctly
+    let input_types = ["p2wpkh", "p2pkh"]; 
+    let output_types = ["p2wpkh"];
+    let detailed_size = math::estimate_tx_size_detailed(&input_types, &output_types);
+    
+    // Should be 10 (overhead) + 68 (p2wpkh input) + 148 (p2pkh input) + 31 (p2wpkh output) = 257
+    assert_eq!(detailed_size, 257);
+    
+    // Test that different script types return different sizes
+    assert!(math::get_input_size("p2pkh") > math::get_input_size("p2wpkh"));
+    assert!(math::get_output_size("p2wsh") > math::get_output_size("p2wpkh"));
+}

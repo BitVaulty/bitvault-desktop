@@ -476,36 +476,183 @@ pub fn secure_erase(buffer: &mut [u8]) {
     std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
 }
 
-/// Check if a specific directory exists and is writable
-///
-/// # Arguments
-/// * `path` - Path to check
-///
-/// # Returns
-/// * Ok(()) if the directory exists and is writable, Err with a message otherwise
+/// Check if a directory is writable by creating a temporary file in it
 pub fn check_dir_writable(path: &Path) -> Result<(), String> {
-    // Check if directory exists
     if !path.exists() {
         return Err(format!("Directory does not exist: {}", path.display()));
     }
-
-    // Check if it's a directory
+    
     if !path.is_dir() {
         return Err(format!("Path is not a directory: {}", path.display()));
     }
-
-    // Try to create a temporary file to verify writeability
-    let temp_file = path.join(".bitvault-write-test");
-    match fs::File::create(&temp_file) {
+    
+    let file_name = format!(
+        "bitvault-write-test-{}.tmp",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    );
+    
+    let test_path = path.join(file_name);
+    
+    match fs::File::create(&test_path) {
         Ok(_) => {
-            // Clean up the test file
-            let _ = fs::remove_file(&temp_file);
+            // Successfully created, now clean up
+            let _ = fs::remove_file(&test_path);
             Ok(())
         }
-        Err(e) => Err(format!(
-            "Directory is not writable: {} ({})",
-            path.display(),
-            e
-        )),
+        Err(e) => Err(format!("Failed to write to directory: {}", e)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    
+    #[test]
+    fn test_get_platform_type() {
+        let platform = get_platform_type();
+        // We can only assert that we get a valid platform type
+        assert!(matches!(
+            platform,
+            PlatformType::Linux
+                | PlatformType::MacOS
+                | PlatformType::Windows
+                | PlatformType::IOS
+                | PlatformType::Android
+                | PlatformType::Other
+        ));
+    }
+    
+    #[test]
+    fn test_get_platform_capabilities() {
+        let capabilities = get_platform_capabilities();
+        assert_eq!(capabilities.platform_type, get_platform_type());
+    }
+}
+
+/// Mock implementation of platform capabilities for testing
+/// 
+/// # WARNING: FOR TESTING PURPOSES ONLY
+/// 
+/// This mock implementation is designed specifically for testing and should NEVER
+/// be used in production environments. It provides simulated platform capabilities
+/// that may not reflect the actual system's capabilities.
+/// 
+/// # Testing Assumptions
+/// 
+/// - The mock provides configurable responses for all platform-related features
+/// - Memory locking operations will not actually lock memory
+/// - Directory paths may not correspond to real system paths
+/// - Security features are simulated and not actually enabled
+///
+/// # Security Note
+/// 
+/// Using this mock in production could lead to:
+/// - Insecure handling of sensitive data
+/// - Incorrect assumptions about platform security features
+/// - Potential data loss due to incorrect path handling
+#[cfg(test)]
+#[derive(Debug, Clone)]
+pub struct MockPlatformProvider {
+    platform_type: PlatformType,
+    has_secure_enclave: bool,
+    supports_memory_locking: bool,
+    has_secure_storage: bool,
+    has_biometric_auth: bool,
+    data_dir: PathBuf,
+    config_dir: PathBuf,
+    logs_dir: PathBuf,
+    temp_dir: PathBuf,
+}
+
+#[cfg(test)]
+impl Default for MockPlatformProvider {
+    fn default() -> Self {
+        Self {
+            platform_type: PlatformType::Linux,
+            has_secure_enclave: false,
+            supports_memory_locking: true,
+            has_secure_storage: true,
+            has_biometric_auth: false,
+            data_dir: PathBuf::from("/mock/data"),
+            config_dir: PathBuf::from("/mock/config"),
+            logs_dir: PathBuf::from("/mock/logs"),
+            temp_dir: PathBuf::from("/mock/temp"),
+        }
+    }
+}
+
+#[cfg(test)]
+impl MockPlatformProvider {
+    /// Create a new mock platform provider with the specified platform type
+    pub fn new(platform_type: PlatformType) -> Self {
+        Self {
+            platform_type,
+            ..Default::default()
+        }
+    }
+    
+    /// Configure whether the mock has a secure enclave
+    pub fn with_secure_enclave(mut self, has_secure_enclave: bool) -> Self {
+        self.has_secure_enclave = has_secure_enclave;
+        self
+    }
+    
+    /// Configure whether the mock supports memory locking
+    pub fn with_memory_locking(mut self, supports_memory_locking: bool) -> Self {
+        self.supports_memory_locking = supports_memory_locking;
+        self
+    }
+    
+    /// Configure whether the mock has secure storage
+    pub fn with_secure_storage(mut self, has_secure_storage: bool) -> Self {
+        self.has_secure_storage = has_secure_storage;
+        self
+    }
+    
+    /// Configure whether the mock has biometric authentication
+    pub fn with_biometric_auth(mut self, has_biometric_auth: bool) -> Self {
+        self.has_biometric_auth = has_biometric_auth;
+        self
+    }
+    
+    /// Configure the data directory path
+    pub fn with_data_dir(mut self, data_dir: PathBuf) -> Self {
+        self.data_dir = data_dir;
+        self
+    }
+    
+    /// Get the platform capabilities from this mock
+    pub fn get_capabilities(&self) -> PlatformCapabilities {
+        PlatformCapabilities {
+            platform_type: self.platform_type,
+            has_secure_enclave: self.has_secure_enclave,
+            supports_memory_locking: self.supports_memory_locking,
+            has_secure_storage: self.has_secure_storage,
+            has_biometric_auth: self.has_biometric_auth,
+        }
+    }
+    
+    /// Get the data directory from this mock
+    pub fn get_data_dir(&self) -> io::Result<PathBuf> {
+        Ok(self.data_dir.clone())
+    }
+    
+    /// Get the config directory from this mock
+    pub fn get_config_dir(&self) -> io::Result<PathBuf> {
+        Ok(self.config_dir.clone())
+    }
+    
+    /// Get the logs directory from this mock
+    pub fn get_logs_dir(&self) -> io::Result<PathBuf> {
+        Ok(self.logs_dir.clone())
+    }
+    
+    /// Get the temp directory from this mock
+    pub fn get_temp_dir(&self) -> io::Result<PathBuf> {
+        Ok(self.temp_dir.clone())
     }
 }

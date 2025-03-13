@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
 
 use crate::wallet;
+use bitvault_common::localization;
 
 #[derive(Serialize, Deserialize)]
 struct GreetArgs<'a> {
@@ -388,7 +389,7 @@ impl BitVaultApp {
                             }
                         }
                     } else {
-                        ui.label("Error: Invalid seed phrase format");
+                        ui.label(localization::get_localization_manager().get_error_message("invalid-seed-phrase"));
                     }
                 } else {
                     ui.label("Generating seed phrase...");

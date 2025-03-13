@@ -64,6 +64,22 @@ When recommending dependency version changes:
    - Recommend specific tests to verify compatibility
    - Suggest focused test cases for affected functionality
 
+### Leveraging Established Libraries
+
+When implementing functionality, AI assistants should:
+
+1. **Refer to Established Libraries**:
+   - Before implementing new functionality, check if established libraries like BDK already provide the required features.
+   - Use these libraries to ensure reliability and security, avoiding unnecessary duplication of effort.
+
+2. **Highlight Existing Alternatives**:
+   - If a well-established library provides the needed functionality, note this before proceeding with custom implementations.
+   - Provide guidance on integrating these libraries effectively into the existing codebase.
+
+3. **Evaluate Library Suitability**:
+   - Assess whether the library meets the project's security, performance, and compatibility requirements.
+   - Consider the library's community support and maintenance status.
+
 ## Bitcoin-Specific Dependencies
 
 ### BDK (Bitcoin Development Kit)

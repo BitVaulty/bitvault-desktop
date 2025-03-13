@@ -10,6 +10,15 @@
 //! - `logging`: Security-aware logging infrastructure
 //! - `platform`: Platform-specific functionality
 //! - `config`: Configuration management
+//! - `events`: Events module for testing
+//! - `localization`: Internationalization and localization support
+//! - `wallet_operations`: Wallet operations using BDK
+//! - `address_book`: Bitcoin address book functionality
+//! - `utxo_selection`: UTXO selection algorithms and utilities
+//! - `utxo_management`: UTXO management functionality
+//! - `network_status`: Bitcoin network status tracking utilities
+//! - `fee_estimation`: Fee estimation utilities
+//! - `key_management`: Key management functionality for secure handling of wallet keys
 //!
 //! # Security Considerations
 //!
@@ -36,6 +45,44 @@ pub mod platform;
 /// Configuration management
 pub mod config;
 
+/// Events module for testing
+pub mod events;
+
+/// Internationalization and localization support
+pub mod localization;
+
+/// Wallet operations using BDK
+pub mod wallet_operations;
+
+/// Address book functionality
+pub mod address_book;
+
+/// UTXO selection algorithms and utilities
+pub mod utxo_selection;
+
+/// UTXO management functionality
+pub mod utxo_management;
+
+/// Bitcoin network status tracking utilities
+pub mod network_status;
+
+/// Fee estimation utilities
+pub mod fee_estimation;
+
+/// Key management functionality for secure handling of wallet keys
+pub mod key_management;
+
+/// Re-export address book types
+pub use address_book::{AddressBook, AddressEntry, AddressCategory};
+
+/// Re-export UTXO selection types
+pub use utxo_selection::{
+    Utxo, UtxoSet, UtxoSelector, SelectionStrategy, SelectionResult,
+};
+
+/// Re-export UTXO selection sub-modules
+pub use utxo_selection::{persistence, tagging, advanced};
+
 // Re-export important Bitcoin and BDK types
 pub use bdk::{blockchain, wallet, Balance, FeeRate, TransactionDetails};
 pub use bitcoin::{Address, Amount, Network, OutPoint, Transaction, Txid};
@@ -48,7 +95,44 @@ pub use types::{
 };
 
 /// Re-export math utilities for convenience
-pub use math::{is_dust_amount, min_economical_change};
+pub use math::{
+    is_dust_amount, min_economical_change, calculate_fee, estimate_tx_size,
+    get_input_size, get_output_size, estimate_tx_size_detailed
+};
+
+/// Re-export localization utilities
+pub use localization::{format_amount, tr, BitVaultLocale, BitcoinUnit, AmountDisplayOptions};
+
+/// Re-export network status types and utilities
+pub use network_status::{
+    NetworkStatus,
+    CongestionLevel,
+    NetworkStatusError,
+    NetworkStatusProvider,
+    MempoolStatus,
+    TransactionConfirmationStatus,
+    BlockInfo,
+};
+
+// Re-export for testing purposes only
+#[cfg(test)]
+pub use network_status::MockNetworkStatusProvider;
+
+// Re-export mock platform provider for testing only
+#[cfg(test)]
+pub use platform::MockPlatformProvider;
+
+/// Re-export fee estimation types and utilities
+pub use fee_estimation::{
+    FeeEstimationError,
+    FeeRecommendations,
+    HistoricalFeeData,
+    estimate_fee,
+    calculate_total_fee,
+    adjust_fee_for_congestion,
+    create_recommendations,
+    create_recommendations_from_provider,
+};
 
 /// Library version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -61,16 +145,51 @@ pub const fn is_debug_build() -> bool {
     cfg!(debug_assertions)
 }
 
+use std::sync::Once;
+
+// Ensure initialization happens only once
+static INIT: Once = Once::new();
+
 /// Library initialization
 ///
 /// Sets up any global state required by the library.
+/// This function can be safely called multiple times - it will only
+/// initialize once to prevent issues in tests and concurrent environments.
 ///
 /// # Returns
 /// * Result with () on success, or an error message string
 pub fn init() -> Result<(), String> {
-    // Initialize logging with default configuration
-    let config = logging::LogConfig::default();
-    logging::init(&config).map_err(|e| format!("Failed to initialize logging: {}", e))
+    // Use a thread-local to store initialization result
+    thread_local! {
+        static INIT_RESULT: std::cell::RefCell<Option<Result<(), String>>> = std::cell::RefCell::new(None);
+    }
+    
+    // Only run initialization once
+    let mut needs_init = false;
+    INIT.call_once(|| {
+        needs_init = true;
+    });
+
+    // Perform initialization if needed and store result
+    if needs_init {
+        let result = {
+            // Initialize logging with default configuration
+            let config = logging::LogConfig::default();
+            logging::init(&config).map_err(|e| format!("Failed to initialize logging: {}", e))
+        };
+        
+        // Store result for future calls
+        INIT_RESULT.with(|cell| {
+            *cell.borrow_mut() = Some(result.clone());
+        });
+        
+        result
+    } else {
+        // Return cached result
+        INIT_RESULT.with(|cell| {
+            cell.borrow().clone().unwrap_or(Ok(()))
+        })
+    }
 }
 
 /// Get supported platform capabilities
@@ -319,3 +438,8 @@ pub mod version {
         VERSION.to_string()
     }
 }
+
+// Re-export KeyManagementEvent and KeyManagementBus from events module
+pub use events::{KeyManagementEvent, KeyManagementBus};
+
+// No test modules declared here - integration tests are in the tests/ directory
