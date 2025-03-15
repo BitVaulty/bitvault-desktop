@@ -1,4 +1,6 @@
-use bitvault_common::utxo_selection::{Utxo, UtxoSelector, SelectionStrategy, SelectionResult};
+use bitvault_common::utxo_selection::types::{Utxo, SelectionStrategy, SelectionResult};
+use bitvault_common::utxo_selection::selector::UtxoSelector;
+use bitvault_common::events::UtxoEventBus;
 use bitcoin::{Amount, OutPoint, Txid};
 use std::str::FromStr;
 use log::{info, error};
@@ -45,7 +47,7 @@ fn test_maximize_privacy_with_shared_address() {
 
     info!("Selecting UTXOs for target: {} satoshis with MaximizePrivacy strategy", target.to_sat());
 
-    let selection_result = selector.select_utxos(&utxos, target, SelectionStrategy::MaximizePrivacy);
+    let selection_result = selector.select_utxos(&utxos, target, SelectionStrategy::MaximizePrivacy, None, None);
     info!("Result of UTXO selection: {:?}", selection_result);
 
     match selection_result {

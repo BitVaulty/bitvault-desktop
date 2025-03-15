@@ -1,4 +1,60 @@
-use crossbeam_channel::{unbounded, Sender, Receiver};
+//! BitVault Event System - Manages event communication across different wallet components
+//!
+//! # Security Boundary Documentation
+//! 
+//! ## Security Boundaries
+//! 
+//! This module implements critical security boundaries in the BitVault wallet:
+//! 
+//! 1. **UI/Core Boundary**: Separates the UI layer from core wallet operations
+//!    - Events crossing this boundary: `CoreRequest`, `CoreResponse`, `UiRequest`, `UiResponse`
+//!    - All data crossing this boundary must be validated and sanitized
+//! 
+//! 2. **Network/Wallet Boundary**: Isolates network operations from wallet state
+//!    - Events crossing this boundary: `NetworkStatus`, `TransactionReceived`
+//!    - Prevents network-based attacks from compromising wallet security
+//! 
+//! 3. **Component Boundaries**: Enforces separation between internal components
+//!    - Each component communicates via well-defined event types
+//!    - Prevents implementation details from leaking across components
+//! 
+//! ## Security Considerations
+//! 
+//! - **Event Sanitization**: All events crossing security boundaries must sanitize their payloads
+//! - **Validation**: Events received at boundaries must be validated before processing
+//! - **Sensitive Data**: Events must NOT contain sensitive data (private keys, mnemonics, etc.)
+//! - **Logging**: Security-critical events are logged with appropriate detail
+//! - **Rate Limiting**: Events are rate-limited to prevent DoS attacks
+//! - **Event Persistence**: Critical security events are persisted for auditing
+//! 
+//! ## Implementation Notes
+//! 
+//! The event system provides specific event types (`CoreRequest`, `CoreResponse`, etc.)
+//! for crossing security boundaries. These should be used whenever communication crosses
+//! a security boundary, accompanied by appropriate validation and logging.
+//!
+//! ```ignore
+//! // Example of proper security boundary handling:
+//! pub fn process_user_request(request: &str, message_bus: &MessageBus) -> Result<()> {
+//!     // Validate input
+//!     let validated_request = validate_user_input(request)?;
+//!     
+//!     // Log the security boundary crossing
+//!     log_security(LogLevel::Info, "User request crossing security boundary", 
+//!                 Some(json!({"request_type": validated_request.type_str()})));
+//!     
+//!     // Send across boundary using proper event type
+//!     message_bus.publish(
+//!         EventType::CoreRequest, 
+//!         &serde_json::to_string(&validated_request)?, 
+//!         MessagePriority::Medium
+//!     );
+//!     
+//!     Ok(())
+//! }
+//! ```
+
+use std::sync::mpsc::{self, Sender, Receiver};
 use std::thread;
 use std::sync::{Arc, Mutex};
 use std::collections::{HashMap, VecDeque};
@@ -11,6 +67,7 @@ use serde::{Serialize, Deserialize};
 use std::fmt;
 use std::time::{Duration, Instant};
 use std::collections::hash_map::Entry;
+use bitcoin::OutPoint;
 
 /// MessagePriority defines the urgency level of wallet events
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,6 +91,19 @@ pub enum EventType {
     SyncStatus,
     Settings,
     System,
+    // UTXO related events
+    UtxoSelected,
+    UtxoStatusChanged,
+    UtxoSelectionCompleted,
+    // Fee estimation events
+    FeeEstimationUpdate,
+    CongestionChanged,
+    // Address book events
+    AddressBookUpdate,
+    // Configuration events
+    ConfigUpdate,
+    // Key management events
+    KeyEvent,
     // Security boundary event types
     CoreRequest,  // Request crossing security boundary to core
     CoreResponse, // Response crossing security boundary from core
@@ -54,10 +124,18 @@ impl fmt::Display for EventType {
             EventType::SyncStatus => write!(f, "SyncStatus"),
             EventType::Settings => write!(f, "Settings"),
             EventType::System => write!(f, "System"),
+            EventType::UtxoSelected => write!(f, "UtxoSelected"),
+            EventType::UtxoStatusChanged => write!(f, "UtxoStatusChanged"),
+            EventType::FeeEstimationUpdate => write!(f, "FeeEstimationUpdate"),
+            EventType::CongestionChanged => write!(f, "CongestionChanged"),
+            EventType::AddressBookUpdate => write!(f, "AddressBookUpdate"),
+            EventType::ConfigUpdate => write!(f, "ConfigUpdate"),
+            EventType::KeyEvent => write!(f, "KeyEvent"),
             EventType::CoreRequest => write!(f, "CoreRequest"),
             EventType::CoreResponse => write!(f, "CoreResponse"),
             EventType::UiRequest => write!(f, "UiRequest"),
             EventType::UiResponse => write!(f, "UiResponse"),
+            EventType::UtxoSelectionCompleted => write!(f, "UtxoSelectionCompleted"),
         }
     }
 }
@@ -363,7 +441,6 @@ impl Default for EventFilter {
 /// A thread-safe event dispatcher that handles IPC messages across components
 pub struct EventDispatcher {
     sender: Sender<IpcMessage>,
-    pub receiver: Receiver<IpcMessage>,
     next_id: Arc<Mutex<u64>>,
     subscribers: Arc<Mutex<HashMap<EventType, Vec<Sender<IpcMessage>>>>>,
     is_running: Arc<Mutex<bool>>,
@@ -371,20 +448,22 @@ pub struct EventDispatcher {
 }
 
 impl EventDispatcher {
-    pub fn new() -> Self {
+    pub fn new() -> (Self, Receiver<IpcMessage>) {
         Self::with_storage(None)
     }
     
-    pub fn with_storage(storage_path: Option<String>) -> Self {
-        let (sender, receiver) = unbounded();
-        Self { 
-            sender, 
-            receiver, 
-            next_id: Arc::new(Mutex::new(1)),
-            subscribers: Arc::new(Mutex::new(HashMap::new())),
-            is_running: Arc::new(Mutex::new(false)),
-            storage: EventStorage::new(storage_path),
-        }
+    pub fn with_storage(storage_path: Option<String>) -> (Self, Receiver<IpcMessage>) {
+        let (sender, receiver) = mpsc::channel();
+        (
+            Self { 
+                sender, 
+                next_id: Arc::new(Mutex::new(1)),
+                subscribers: Arc::new(Mutex::new(HashMap::new())),
+                is_running: Arc::new(Mutex::new(false)),
+                storage: EventStorage::new(storage_path),
+            },
+            receiver
+        )
     }
 
     /// Get a unique message ID
@@ -453,7 +532,7 @@ impl EventDispatcher {
 
     /// Subscribe to specific event types
     pub fn subscribe(&self, event_type: EventType) -> Receiver<IpcMessage> {
-        let (sender, receiver) = unbounded();
+        let (sender, receiver) = mpsc::channel();
         let mut subscribers = self.subscribers.lock().unwrap();
         
         subscribers.entry(event_type)
@@ -470,10 +549,7 @@ impl EventDispatcher {
     }
     
     /// Start the event processing loop in a background thread
-    pub fn start(&mut self) {
-        // Create a separate clone of the receiver for the background thread
-        // This is safer than using self.receiver.clone() directly
-        let receiver_clone = self.receiver.clone();
+    pub fn start(&self, receiver: Receiver<IpcMessage>) {
         let is_running = Arc::clone(&self.is_running);
         
         // Set running state to true
@@ -486,7 +562,7 @@ impl EventDispatcher {
             log_security(LogLevel::Info, "Event dispatcher thread started", None);
             let mut message_count = 0;
             
-            while let Ok(message) = receiver_clone.recv() {
+            while let Ok(message) = receiver.recv() {
                 message_count += 1;
                 log_security(
                     LogLevel::Info,
@@ -530,7 +606,7 @@ impl EventDispatcher {
     
     /// Subscribe and replay previous events of specified type
     pub fn subscribe_with_replay(&self, event_type: EventType) -> Receiver<IpcMessage> {
-        let (sender, receiver) = unbounded();
+        let (sender, receiver) = mpsc::channel();
         
         // Add to subscribers
         {
@@ -556,20 +632,21 @@ impl EventDispatcher {
 /// DeadLetterChannel collects messages that couldn't be processed successfully
 pub struct DeadLetterChannel {
     sender: Sender<(IpcMessage, String)>,
-    receiver: Receiver<(IpcMessage, String)>,
     max_capacity: usize,
     failed_messages: Arc<Mutex<VecDeque<(IpcMessage, String)>>>,
 }
 
 impl DeadLetterChannel {
-    pub fn new(max_capacity: usize) -> Self {
-        let (sender, receiver) = unbounded();
-        Self {
-            sender,
-            receiver,
-            max_capacity,
-            failed_messages: Arc::new(Mutex::new(VecDeque::with_capacity(max_capacity))),
-        }
+    pub fn new(max_capacity: usize) -> (Self, Receiver<(IpcMessage, String)>) {
+        let (sender, receiver) = mpsc::channel();
+        (
+            Self {
+                sender,
+                max_capacity,
+                failed_messages: Arc::new(Mutex::new(VecDeque::with_capacity(max_capacity))),
+            },
+            receiver
+        )
     }
     
     pub fn get_sender(&self) -> Sender<(IpcMessage, String)> {
@@ -589,8 +666,7 @@ impl DeadLetterChannel {
         }
     }
     
-    pub fn start_collecting(&self) {
-        let receiver = self.receiver.clone();
+    pub fn start_collecting(&self, receiver: Receiver<(IpcMessage, String)>) {
         let failed_messages = Arc::clone(&self.failed_messages);
         let max_capacity = self.max_capacity;
         
@@ -630,14 +706,17 @@ pub struct MessageBus {
     dispatcher: EventDispatcher,
     rate_limiter: Arc<Mutex<RateLimiter>>,
     dead_letter_channel: Option<DeadLetterChannel>,
+    receiver: Option<Receiver<IpcMessage>>,
 }
 
 impl MessageBus {
     pub fn new() -> Self {
+        let (dispatcher, receiver) = EventDispatcher::new();
         Self {
-            dispatcher: EventDispatcher::new(),
+            dispatcher,
             rate_limiter: Arc::new(Mutex::new(RateLimiter::new(RateLimitConfig::default()))),
             dead_letter_channel: None,
+            receiver: Some(receiver),
         }
     }
     
@@ -647,30 +726,40 @@ impl MessageBus {
         enable_dead_letter: bool,
     ) -> Self {
         let dead_letter = if enable_dead_letter {
-            let dlc = DeadLetterChannel::new(100);
-            dlc.start_collecting();
+            let (dlc, receiver) = DeadLetterChannel::new(100);
+            dlc.start_collecting(receiver);
             Some(dlc)
         } else {
             None
         };
         
+        let (dispatcher, receiver) = EventDispatcher::with_storage(storage_path);
         Self {
-            dispatcher: EventDispatcher::with_storage(storage_path),
+            dispatcher,
             rate_limiter: Arc::new(Mutex::new(RateLimiter::new(rate_limit_config))),
             dead_letter_channel: dead_letter,
+            receiver: Some(receiver),
         }
     }
     
     pub fn start(&mut self) {
-        // Call start on the dispatcher (modified to be safer)
-        self.dispatcher.start();
-        
-        // Log startup
-        log_security(
-            LogLevel::Info,
-            "MessageBus started",
-            None
-        );
+        // Call start on the dispatcher with the receiver
+        if let Some(receiver) = self.receiver.take() {
+            self.dispatcher.start(receiver);
+            
+            // Log startup
+            log_security(
+                LogLevel::Info,
+                "MessageBus started",
+                None
+            );
+        } else {
+            log_security(
+                LogLevel::Error,
+                "Failed to start MessageBus: receiver already consumed",
+                None
+            );
+        }
     }
     
     pub fn stop(&self) {
@@ -687,6 +776,40 @@ impl MessageBus {
     
     // Rate-limited publish
     pub fn publish(&self, event_type: EventType, payload: &str, priority: MessagePriority) {
+        // Perform security boundary validation for security-sensitive event types
+        if self.is_security_boundary_event(event_type) {
+            log_security(
+                LogLevel::Info,
+                &format!("Security boundary crossing: {}", event_type),
+                Some(json!({ 
+                    "event_type": event_type.to_string(),
+                    "priority": format!("{:?}", priority),
+                    "boundary_type": self.get_boundary_type(event_type)
+                }))
+            );
+            
+            // Validate payload for security-sensitive content
+            if let Err(validation_error) = self.validate_security_payload(event_type, payload) {
+                log_security(
+                    LogLevel::Error,
+                    &format!("Security boundary validation failed: {}", validation_error),
+                    Some(json!({ 
+                        "event_type": event_type.to_string(),
+                        "error": validation_error 
+                    }))
+                );
+                
+                // Record failure in dead letter channel if available
+                if let Some(ref dlc) = self.dead_letter_channel {
+                    let id = self.dispatcher.next_id();
+                    let message = IpcMessage::new(id, event_type, payload, priority);
+                    dlc.record_failure(message, &format!("Security validation failed: {}", validation_error));
+                }
+                
+                return;
+            }
+        }
+        
         // Skip rate limiting for critical events
         if priority != MessagePriority::Critical {
             let mut limiter = self.rate_limiter.lock().unwrap();
@@ -703,17 +826,73 @@ impl MessageBus {
         self.dispatcher.create_and_dispatch(event_type, payload, priority);
     }
     
+    /// Determines if an event type crosses a security boundary
+    fn is_security_boundary_event(&self, event_type: EventType) -> bool {
+        matches!(event_type, 
+            EventType::CoreRequest | 
+            EventType::CoreResponse | 
+            EventType::UiRequest | 
+            EventType::UiResponse |
+            EventType::SecurityAlert |
+            EventType::KeyEvent
+        )
+    }
+    
+    /// Gets the boundary type description for a security boundary event
+    fn get_boundary_type(&self, event_type: EventType) -> &'static str {
+        match event_type {
+            EventType::CoreRequest => "UI-to-Core",
+            EventType::CoreResponse => "Core-to-UI",
+            EventType::UiRequest => "Core-to-UI-Peripheral",
+            EventType::UiResponse => "UI-Peripheral-to-Core",
+            EventType::SecurityAlert => "Security-Alert",
+            EventType::KeyEvent => "Key-Management",
+            _ => "Non-Boundary"
+        }
+    }
+    
+    /// Validates payloads crossing security boundaries to prevent leakage of sensitive data
+    fn validate_security_payload(&self, event_type: EventType, payload: &str) -> Result<(), &'static str> {
+        // Ensure payload is valid JSON (to prevent injection attacks)
+        if let Err(_) = serde_json::from_str::<serde_json::Value>(payload) {
+            return Err("Invalid JSON payload");
+        }
+        
+        // Specific validations based on event type
+        match event_type {
+            EventType::KeyEvent => {
+                // Check for sensitive key material in payload
+                if payload.contains("private_key") || 
+                   payload.contains("seed") || 
+                   payload.contains("mnemonic") {
+                    return Err("Sensitive key material detected in event payload");
+                }
+            },
+            EventType::CoreRequest | EventType::UiRequest => {
+                // Validate input requests to prevent injection attacks
+                // Check for overly large payloads that might be DoS attempts
+                if payload.len() > 10000 {
+                    return Err("Request payload exceeds maximum allowed size");
+                }
+            },
+            _ => {}
+        }
+        
+        Ok(())
+    }
+    
     pub fn subscribe(&self, event_type: EventType) -> Receiver<IpcMessage> {
         self.dispatcher.subscribe(event_type)
     }
     
     // Subscribe with a filter
     pub fn subscribe_filtered(&self, filter: EventFilter) -> Receiver<IpcMessage> {
-        let (sender, receiver) = unbounded();
-        let global_receiver = self.dispatcher.receiver.clone();
+        let (sender, receiver) = mpsc::channel();
+        // Create a new subscription to get messages
+        let event_receiver = self.dispatcher.subscribe(EventType::WalletUpdate);
         
         thread::spawn(move || {
-            while let Ok(message) = global_receiver.recv() {
+            while let Ok(message) = event_receiver.recv() {
                 if filter.should_process(&message) {
                     if sender.send(message).is_err() {
                         // Subscriber has been dropped, stop filtering
@@ -733,7 +912,7 @@ impl MessageBus {
     
     pub fn subscribe_multiple(&self, event_types: &[EventType]) -> Receiver<IpcMessage> {
         // Create a new channel
-        let (sender, receiver) = unbounded();
+        let (sender, receiver) = mpsc::channel();
         
         // For each event type, create a subscription and spawn a thread to forward messages
         for &event_type in event_types {
@@ -838,8 +1017,8 @@ pub mod test_helpers {
     }
 }
 
-/// Event types for key management operations
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+/// KeyManagementEvent defines domain-specific key management events
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KeyManagementEvent {
     /// Triggered when a key is generated
     KeyGenerated,
@@ -849,10 +1028,71 @@ pub enum KeyManagementEvent {
     KeyDecryptionFailed,
 }
 
-/// Simple message bus for publishing and subscribing to key management events
-/// 
-/// For larger event needs, use the more comprehensive MessageBus implementation
-/// in this module.
+/// UtxoEvent defines domain-specific UTXO events for UTXO selection and management
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UtxoEvent {
+    /// Triggered when UTXOs are selected with a specific strategy
+    Selected {
+        /// The UTXOs that were selected
+        utxos: Vec<OutPointInfo>,
+        /// The strategy used for selection
+        strategy: String,
+        /// The target amount that was requested
+        target_amount: u64,
+        /// The fee amount calculated
+        fee_amount: u64,
+        /// The change amount (if any)
+        change_amount: Option<u64>,
+    },
+    /// Triggered when a UTXO is frozen
+    Frozen {
+        /// The outpoint of the UTXO that was frozen
+        outpoint: OutPointInfo,
+    },
+    /// Triggered when a UTXO is unfrozen
+    Unfrozen {
+        /// The outpoint of the UTXO that was unfrozen
+        outpoint: OutPointInfo,
+    },
+    /// Triggered when a selection operation fails
+    SelectionFailed {
+        /// The reason for the failure
+        reason: String,
+        /// The strategy that was being used
+        strategy: String,
+        /// The target amount
+        target_amount: u64,
+        /// Available amount
+        available_amount: u64,
+    },
+    /// Triggered when a UTXO's status changes
+    StatusChanged {
+        /// The outpoint of the UTXO
+        outpoint: OutPointInfo,
+        /// The new status
+        status: String,
+    },
+}
+
+/// OutPointInfo is a serializable representation of a Bitcoin OutPoint
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OutPointInfo {
+    /// Transaction ID as a string
+    pub txid: String,
+    /// Output index
+    pub vout: u32,
+}
+
+impl From<&bitcoin::OutPoint> for OutPointInfo {
+    fn from(outpoint: &bitcoin::OutPoint) -> Self {
+        Self {
+            txid: outpoint.txid.to_string(),
+            vout: outpoint.vout,
+        }
+    }
+}
+
+/// Simple message bus for key management events
 pub struct KeyManagementBus {
     subscribers: Arc<Mutex<HashMap<KeyManagementEvent, Vec<std::sync::mpsc::Sender<KeyManagementEvent>>>>>,
 }
@@ -880,6 +1120,168 @@ impl KeyManagementBus {
                 let _ = subscriber.send(event.clone());
             }
         }
+    }
+}
+
+/// Simple message bus for UTXO events
+pub struct UtxoEventBus {
+    subscribers: Arc<Mutex<HashMap<String, Vec<std::sync::mpsc::Sender<UtxoEvent>>>>>,
+    general_bus: Option<Arc<MessageBus>>,
+}
+
+impl UtxoEventBus {
+    /// Create a new UTXO event bus
+    pub fn new() -> Self {
+        Self {
+            subscribers: Arc::new(Mutex::new(HashMap::new())),
+            general_bus: None,
+        }
+    }
+
+    /// Create a new UTXO event bus with a connection to the general message bus
+    pub fn with_general_bus(general_bus: Arc<MessageBus>) -> Self {
+        Self {
+            subscribers: Arc::new(Mutex::new(HashMap::new())),
+            general_bus: Some(general_bus),
+        }
+    }
+
+    /// Subscribe to all UTXO events
+    pub fn subscribe_all(&self) -> std::sync::mpsc::Receiver<UtxoEvent> {
+        self.subscribe("all")
+    }
+
+    /// Subscribe to a specific type of UTXO event
+    /// 
+    /// # Arguments
+    /// 
+    /// * `event_type` - The type of event to subscribe to (e.g., "selected", "frozen", "unfrozen", "status_changed")
+    ///                 or "all" for all events
+    pub fn subscribe(&self, event_type: &str) -> std::sync::mpsc::Receiver<UtxoEvent> {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        
+        let mut subscribers = self.subscribers.lock().unwrap();
+        let event_type = event_type.to_lowercase();
+        
+        subscribers
+            .entry(event_type)
+            .or_insert_with(Vec::new)
+            .push(sender);
+            
+        receiver
+    }
+
+    /// Publish a UTXO event
+    /// 
+    /// Also forwards the event to the general message bus if configured
+    pub fn publish(&self, event: UtxoEvent) {
+        // Convert the event type to a string for the subscriber map
+        let event_type = match &event {
+            UtxoEvent::Selected { .. } => "selected",
+            UtxoEvent::Frozen { .. } => "frozen",
+            UtxoEvent::Unfrozen { .. } => "unfrozen",
+            UtxoEvent::SelectionFailed { .. } => "selection_failed",
+            UtxoEvent::StatusChanged { .. } => "status_changed",
+        };
+        
+        // Forward to generic event bus if available
+        if let Some(ref bus) = self.general_bus {
+            if let Ok(json_payload) = serde_json::to_string(&event) {
+                let generic_event_type = match &event {
+                    UtxoEvent::Selected { .. } => EventType::UtxoSelected,
+                    UtxoEvent::Frozen { .. } | UtxoEvent::Unfrozen { .. } | UtxoEvent::StatusChanged { .. } => EventType::UtxoStatusChanged,
+                    UtxoEvent::SelectionFailed { .. } => EventType::UtxoSelectionCompleted,
+                };
+                
+                bus.publish(
+                    generic_event_type,
+                    &json_payload,
+                    MessagePriority::Medium,
+                );
+            }
+        }
+        
+        // Distribute to specific subscribers
+        let subscribers_map = self.subscribers.lock().unwrap();
+        
+        // Send to subscribers of this specific event type
+        if let Some(subscribers) = subscribers_map.get(event_type) {
+            for subscriber in subscribers {
+                // Ignore errors from closed channels
+                let _ = subscriber.send(event.clone());
+            }
+        }
+        
+        // Send to subscribers of "all" events
+        if let Some(subscribers) = subscribers_map.get("all") {
+            for subscriber in subscribers {
+                // Ignore errors from closed channels
+                let _ = subscriber.send(event.clone());
+            }
+        }
+    }
+
+    /// Get the number of subscribers
+    pub fn subscriber_count(&self) -> usize {
+        let subscribers = self.subscribers.lock().unwrap();
+        subscribers.values().map(|v| v.len()).sum()
+    }
+}
+
+#[cfg(test)]
+mod utxo_event_tests {
+    use super::*;
+    
+    #[test]
+    fn test_basic_subscribe_publish() {
+        let bus = UtxoEventBus::new();
+        let receiver = bus.subscribe("selected");
+        
+        let outpoint_info = OutPointInfo {
+            txid: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            vout: 0,
+        };
+        
+        let event = UtxoEvent::Selected {
+            utxos: vec![outpoint_info.clone()],
+            strategy: "MinimizeFee".to_string(),
+            target_amount: 10000,
+            fee_amount: 1000,
+            change_amount: Some(2000),
+        };
+        
+        bus.publish(event.clone());
+        
+        let received = receiver.recv().unwrap();
+        assert_eq!(received, event);
+    }
+    
+    #[test]
+    fn test_subscribe_all() {
+        let bus = UtxoEventBus::new();
+        let receiver = bus.subscribe_all();
+        
+        let outpoint_info = OutPointInfo {
+            txid: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            vout: 0,
+        };
+        
+        let event1 = UtxoEvent::Frozen {
+            outpoint: outpoint_info.clone(),
+        };
+        
+        let event2 = UtxoEvent::Unfrozen {
+            outpoint: outpoint_info,
+        };
+        
+        bus.publish(event1.clone());
+        bus.publish(event2.clone());
+        
+        let received1 = receiver.recv().unwrap();
+        let received2 = receiver.recv().unwrap();
+        
+        assert_eq!(received1, event1);
+        assert_eq!(received2, event2);
     }
 }
 

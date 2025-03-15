@@ -919,6 +919,12 @@ pub enum WalletError {
     
     #[error("IO error: {0}")]
     IoError(String),
+    
+    #[error("Security error: {0}")]
+    Security(String),
+    
+    #[error("Configuration error: {0}")]
+    Configuration(String),
 }
 
 impl From<bdk::Error> for WalletError {

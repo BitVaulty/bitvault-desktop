@@ -61,13 +61,8 @@ fn test_add_and_get_entry() {
     
     let mut address_book = AddressBook::new(Network::Bitcoin);
     
-    // Add an entry
-    let result = address_book.add_entry(
-        MAINNET_ADDRESS,
-        "Satoshi",
-        Some("First Bitcoin address"),
-        AddressCategory::Personal
-    );
+    // Add an entry - using add_entry_simple instead of add_entry
+    let result = address_book.add_entry_simple(MAINNET_ADDRESS, "Satoshi", Some("First Bitcoin address"), AddressCategory::Personal);
     
     // Check success
     assert!(result.is_ok());
@@ -97,7 +92,7 @@ fn test_add_invalid_address() {
     let mut address_book = AddressBook::new(Network::Bitcoin);
     
     // Try adding an invalid address
-    let result = address_book.add_entry(
+    let result = address_book.add_entry_simple(
         INVALID_ADDRESS,
         "Invalid",
         None,
@@ -109,14 +104,14 @@ fn test_add_invalid_address() {
     assert_eq!(address_book.len(), 0);
     
     // Try adding a testnet address to a mainnet book
-    let result = address_book.add_entry(
+    let result = address_book.add_entry_simple(
         TESTNET_ADDRESS,
         "Testnet",
         None,
         AddressCategory::Personal
     );
     
-    // Should fail on wrong network
+    // Should fail
     assert!(result.is_err());
     assert_eq!(address_book.len(), 0);
 }
@@ -128,7 +123,7 @@ fn test_remove_entry() {
     let mut address_book = AddressBook::new(Network::Bitcoin);
     
     // Add an entry
-    let _ = address_book.add_entry(
+    let _ = address_book.add_entry_simple(
         MAINNET_ADDRESS,
         "Satoshi",
         None,
@@ -154,7 +149,7 @@ fn test_update_entry() {
     let mut address_book = AddressBook::new(Network::Bitcoin);
     
     // Add an entry
-    let _ = address_book.add_entry(
+    let _ = address_book.add_entry_simple(
         MAINNET_ADDRESS,
         "Satoshi",
         None,
@@ -179,9 +174,9 @@ fn test_update_entry() {
     
     // Try to update non-existent entry
     let invalid_result = address_book.update_entry(
-        "non-existent",
-        Some("Test"),
-        None,
+        "not-a-valid-address",
+        Some("Invalid"),
+        Some("This is not a valid Bitcoin address"),
         None
     );
     
@@ -195,7 +190,7 @@ fn test_mark_as_used() {
     let mut address_book = AddressBook::new(Network::Bitcoin);
     
     // Add an entry
-    let _ = address_book.add_entry(
+    let _ = address_book.add_entry_simple(
         MAINNET_ADDRESS,
         "Satoshi",
         None,
@@ -262,21 +257,21 @@ fn test_find_by_label() {
     let mut address_book = AddressBook::new(Network::Bitcoin);
     
     // Add multiple entries
-    let _ = address_book.add_entry(
+    let _ = address_book.add_entry_simple(
         MAINNET_ADDRESS,
         "Bitcoin Foundation",
         None,
         AddressCategory::Donation
     );
     
-    let _ = address_book.add_entry(
+    let _ = address_book.add_entry_simple(
         "12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S",
         "Bitcoin Core Donation",
         None,
         AddressCategory::Donation
     );
     
-    let _ = address_book.add_entry(
+    let _ = address_book.add_entry_simple(
         "38Segwittt9kLMmFUvn17osR58MzuoiJz9",
         "Personal Wallet",
         None,
@@ -304,38 +299,36 @@ fn test_find_by_category() {
     let mut address_book = AddressBook::new(Network::Bitcoin);
     
     // Add multiple entries with different categories
-    let _ = address_book.add_entry(
+    let _ = address_book.add_entry_simple(
         MAINNET_ADDRESS,
         "Bitcoin Foundation",
         None,
         AddressCategory::Donation
     );
     
-    let _ = address_book.add_entry(
+    let _ = address_book.add_entry_simple(
         "12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S",
         "Bitcoin Core Donation",
         None,
         AddressCategory::Donation
     );
     
-    let _ = address_book.add_entry(
+    let _ = address_book.add_entry_simple(
         "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy",
         "Personal Wallet",
         None,
         AddressCategory::Personal
     );
     
-    // Find by category - Donation should have 2 entries
-    let donation_results = address_book.find_by_category(&AddressCategory::Donation);
-    assert_eq!(donation_results.len(), 2);
+    // Find entries by category
+    let donation_entries = address_book.find_by_category(&AddressCategory::Donation);
+    assert_eq!(donation_entries.len(), 2);
     
-    // Find by category - Personal should have 1 entry
-    let personal_results = address_book.find_by_category(&AddressCategory::Personal);
-    assert_eq!(personal_results.len(), 1);
+    let personal_entries = address_book.find_by_category(&AddressCategory::Personal);
+    assert_eq!(personal_entries.len(), 1);
     
-    // Find by non-existent category
-    let exchange_results = address_book.find_by_category(&AddressCategory::Exchange);
-    assert_eq!(exchange_results.len(), 0);
+    let business_entries = address_book.find_by_category(&AddressCategory::Business);
+    assert_eq!(business_entries.len(), 0);
 }
 
 #[test]
@@ -345,7 +338,7 @@ fn test_json_serialization() {
     let mut address_book = AddressBook::new(Network::Bitcoin);
     
     // Add an entry
-    let _ = address_book.add_entry(
+    let _ = address_book.add_entry_simple(
         MAINNET_ADDRESS,
         "Satoshi",
         Some("First Bitcoin address"),
@@ -377,7 +370,7 @@ fn test_import_entries() {
     
     // Create first address book
     let mut book1 = AddressBook::new(Network::Bitcoin);
-    let _ = book1.add_entry(
+    let _ = book1.add_entry_simple(
         MAINNET_ADDRESS,
         "First Book Entry",
         None,
@@ -386,7 +379,7 @@ fn test_import_entries() {
     
     // Create second address book
     let mut book2 = AddressBook::new(Network::Bitcoin);
-    let _ = book2.add_entry(
+    let _ = book2.add_entry_simple(
         "12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S",
         "Second Book Entry",
         None,
@@ -394,7 +387,7 @@ fn test_import_entries() {
     );
     
     // Common entry with different label
-    let _ = book2.add_entry(
+    let _ = book2.add_entry_simple(
         MAINNET_ADDRESS,
         "Different Label",
         None,
@@ -452,7 +445,7 @@ fn test_address_entry_creation_timestamp() {
     
     // Create a new address book and entry
     let mut address_book = AddressBook::new(Network::Bitcoin);
-    let _ = address_book.add_entry(
+    let _ = address_book.add_entry_simple(
         MAINNET_ADDRESS,
         "Test Entry",
         None,
@@ -471,7 +464,7 @@ fn test_address_entry_creation_timestamp() {
 fn test_address_entry_last_used_update() {
     // Create a new address book and entry
     let mut address_book = AddressBook::new(Network::Bitcoin);
-    let _ = address_book.add_entry(
+    let _ = address_book.add_entry_simple(
         MAINNET_ADDRESS,
         "Test Entry",
         None,
@@ -497,4 +490,38 @@ fn test_address_entry_last_used_update() {
     assert!(entry.last_used.is_some());
     let last_used = entry.last_used.unwrap();
     assert!(last_used >= before_time);
+}
+
+#[test]
+fn test_add_multiple_entries() {
+    setup_address_book_tests();
+    
+    let mut address_book = AddressBook::new(Network::Bitcoin);
+    
+    // Add several entries
+    let _ = address_book.add_entry_simple(
+        MAINNET_ADDRESS,
+        "Satoshi 1",
+        Some("First entry"),
+        AddressCategory::Personal
+    );
+    
+    let _ = address_book.add_entry_simple(
+        "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+        "Satoshi 2",
+        Some("Second entry"),
+        AddressCategory::Business
+    );
+    
+    // Verify entries were added
+    assert_eq!(address_book.len(), 2);
+    
+    // Get all entries
+    let entries = address_book.get_all_entries();
+    assert_eq!(entries.len(), 2);
+    
+    // Verify labels
+    let labels: Vec<&str> = entries.iter().map(|e| e.label.as_str()).collect();
+    assert!(labels.contains(&"Satoshi 1"));
+    assert!(labels.contains(&"Satoshi 2"));
 } 

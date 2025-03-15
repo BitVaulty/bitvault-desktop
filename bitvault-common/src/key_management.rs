@@ -1159,8 +1159,8 @@ pub fn decrypt_and_retrieve_key(password: &str, storage_path: &str) -> Result<(E
                     }
                 }
             },
-            Err(e) => {
-                println!("TEST MODE: PBKDF2 derivation failed: {:?}", e);
+            Err(_e) => {
+                println!("TEST MODE: PBKDF2 derivation failed: {:?}", _e);
                 
                 log_security_with_level(log::Level::Error, "PBKDF2 key derivation failed");
                 return Err(create_crypto_error(
@@ -1314,9 +1314,9 @@ fn derive_key_from_password(password: &str, salt: &[u8]) -> Result<SecureKeyByte
             #[cfg(test)]
             println!("TEST MODE: PBKDF2 derivation successful, key bytes: {:02X?}", key_bytes);
         },
-        Err(e) => {
+        Err(_e) => {
             #[cfg(test)]
-            println!("TEST MODE: PBKDF2 derivation failed: {:?}", e);
+            println!("TEST MODE: PBKDF2 derivation failed: {:?}", _e);
             
             log_security_with_level(log::Level::Error, "PBKDF2 key derivation failed");
             return Err(create_crypto_error(

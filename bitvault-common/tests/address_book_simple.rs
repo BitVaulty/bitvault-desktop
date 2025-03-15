@@ -34,7 +34,7 @@ fn test_add_and_get_entry() {
     let mut address_book = AddressBook::new(Network::Bitcoin);
     
     // Add an entry
-    let result = address_book.add_entry(
+    let result = address_book.add_entry_simple(
         MAINNET_ADDRESS,
         "Satoshi",
         Some("First Bitcoin address"),
@@ -63,21 +63,21 @@ fn test_find_by_category_simple() {
     let mut address_book = AddressBook::new(Network::Bitcoin);
     
     // Add multiple entries with different categories
-    let _ = address_book.add_entry(
+    let _ = address_book.add_entry_simple(
         MAINNET_ADDRESS,
         "Bitcoin Foundation",
         None,
         AddressCategory::Donation
     );
     
-    let _ = address_book.add_entry(
+    let _ = address_book.add_entry_simple(
         "12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S",
         "Bitcoin Core Donation",
         None,
         AddressCategory::Donation
     );
     
-    let _ = address_book.add_entry(
+    let _ = address_book.add_entry_simple(
         "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy",  // Valid P2SH address instead of the invalid one
         "Personal Wallet",
         None,

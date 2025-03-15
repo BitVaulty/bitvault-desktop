@@ -1,5 +1,7 @@
-use bitvault_common::utxo_selection::{Utxo, UtxoSet, UtxoSelector, SelectionStrategy, SelectionResult};
-use bitcoin::{Amount, OutPoint, Txid};
+use bitvault_common::utxo_selection::types::{Utxo, SelectionStrategy, SelectionResult, UtxoSet};
+use bitvault_common::utxo_selection::selector::UtxoSelector;
+use bitvault_common::events::UtxoEventBus;
+use bitcoin::{Amount, OutPoint, Txid, Network};
 use std::str::FromStr;
 use log::{info, error};
 use std::sync::Once;
@@ -42,18 +44,20 @@ fn test_utxo_transaction_integration() {
     info!("UTXOs setup: {:?}", utxos);
 
     // Create a UTXO set
-    let mut utxo_set = UtxoSet::new_empty();
+    let mut utxo_set = UtxoSet::new(Vec::new(), Network::Bitcoin);
     for utxo in &utxos {
         utxo_set.add(utxo.clone());
     }
 
     // Simulate a transaction creation
-    let selector = UtxoSelector::with_fee_rate(1.0); // 1 sat/vByte
+    let selector = UtxoSelector::new();
     let target = Amount::from_sat(30_000);
 
     info!("Selecting UTXOs for target: {} satoshis", target.to_sat());
 
-    match selector.select_utxos(&utxos, target, SelectionStrategy::MinimizeFee) {
+    let result = selector.select_utxos(&utxos[..], target, SelectionStrategy::MinimizeFee, None, None);
+
+    match result {
         SelectionResult::Success { selected, fee_amount, change_amount } => {
             info!("Selected UTXOs: {:?}", selected);
             info!("Transaction fee: {} satoshis", fee_amount.to_sat());
@@ -110,21 +114,21 @@ fn test_utxo_selection_maximize_privacy_integration() {
     info!("UTXOs setup for MaximizePrivacy: {:?}", utxos);
 
     // Create a UTXO set
-    let mut utxo_set = UtxoSet::new_empty();
+    let mut utxo_set = UtxoSet::new(Vec::new(), Network::Bitcoin);
     for utxo in &utxos {
         utxo_set.add(utxo.clone());
     }
 
     // Simulate a transaction creation with MaximizePrivacy strategy
-    let selector = UtxoSelector::with_fee_rate(1.0); // 1 sat/vByte
+    let selector = UtxoSelector::new();
     let target = Amount::from_sat(30_000);
 
     info!("Selecting UTXOs for target: {} satoshis with MaximizePrivacy strategy", target.to_sat());
 
-    let selection_result = selector.select_utxos(&utxos, target, SelectionStrategy::MaximizePrivacy);
-    info!("Result of UTXO selection: {:?}", selection_result);
+    let result = selector.select_utxos(&utxos[..], target, SelectionStrategy::MaximizePrivacy, None, None);
+    info!("Result of UTXO selection: {:?}", result);
 
-    match selection_result {
+    match result {
         SelectionResult::Success { selected, fee_amount, change_amount } => {
             info!("Selected UTXOs: {:?}", selected);
             info!("Transaction fee: {} satoshis", fee_amount.to_sat());
@@ -144,4 +148,10 @@ fn test_utxo_selection_maximize_privacy_integration() {
             panic!("Expected success but got failure");
         },
     }
+}
+
+#[test]
+fn test_debug_test_runner() {
+    println!("Debug test runner is working");
+    assert!(true, "This test should always pass");
 }

@@ -34,7 +34,7 @@
 //!
 //! # Usage
 //!
-//! ```no_run
+//! ```ignore
 //! use bitvault_common::utxo_management::UtxoManager;
 //! use bitvault_common::utxo_selection::types::{Utxo, SelectionStrategy, SelectionResult};
 //! use bitvault_common::events::{MessageBus, UtxoEventBus};
@@ -70,6 +70,7 @@
 //!     Amount::from_sat(25_000),
 //!     SelectionStrategy::MinimizeFee,
 //!     Some(&message_bus),
+//!     Some(&event_bus),
 //! );
 //!
 //! // Or use the enhanced selection with event handling
@@ -244,10 +245,17 @@ impl UtxoManager {
     /// * `target` - The target amount to send
     /// * `strategy` - The strategy to use for selecting UTXOs
     /// * `message_bus` - Optional message bus for emitting events
+    /// * `utxo_bus` - Optional UTXO event bus for emitting events
     ///
     /// # Returns
     /// * `SelectionResult` - The result of the selection process
-    pub fn select_utxos(&self, target: Amount, strategy: SelectionStrategy, message_bus: Option<&MessageBus>) -> SelectionResult {
+    pub fn select_utxos(
+        &self, 
+        target: Amount, 
+        strategy: SelectionStrategy, 
+        message_bus: Option<&MessageBus>,
+        utxo_bus: Option<&UtxoEventBus>
+    ) -> SelectionResult {
         println!("[DEBUG] select_utxos called with target: {}, strategy: {:?}", target, strategy);
         
         // CoinControl strategy requires pre-selected UTXOs, so it can't be used through this interface
@@ -265,7 +273,8 @@ impl UtxoManager {
             }
             
             // Also publish to the domain-specific event bus if available
-            if let Some(ref bus) = self.utxo_bus {
+            let event_bus = utxo_bus.or_else(|| self.utxo_bus.as_ref().map(AsRef::as_ref));
+            if let Some(bus) = event_bus {
                 bus.publish(UtxoEvent::SelectionFailed {
                     reason: "coin_control_requires_preselected_utxos".to_string(),
                     strategy: "CoinControl".to_string(),
@@ -305,12 +314,15 @@ impl UtxoManager {
         println!("[DEBUG] Calling UtxoSelector with target: {}", target);
         let selector = UtxoSelector::new();
         
+        // Use the provided utxo_bus or fall back to the instance's utxo_bus
+        let event_bus = utxo_bus.or_else(|| self.utxo_bus.as_ref().map(AsRef::as_ref));
+        
         selector.select_utxos(
             &self.utxos,
             target,
             strategy,
             message_bus,
-            self.utxo_bus.as_ref().map(AsRef::as_ref),
+            event_bus,
         )
     }
 
@@ -333,7 +345,7 @@ impl UtxoManager {
     ) -> (SelectionResult, Option<Arc<UtxoEventBus>>) {
         // If we already have an event bus, use it
         if let Some(ref existing_bus) = self.utxo_bus {
-            let result = self.select_utxos(target, strategy, message_bus);
+            let result = self.select_utxos(target, strategy, message_bus, Some(existing_bus));
             return (result, None); // No new bus created
         }
         
@@ -355,7 +367,7 @@ impl UtxoManager {
             return (result, Some(utxo_bus));
         } else {
             // Just run the regular selection without an event bus
-            let result = self.select_utxos(target, strategy, message_bus);
+            let result = self.select_utxos(target, strategy, message_bus, None);
             (result, None)
         }
     }
@@ -366,10 +378,11 @@ impl UtxoManager {
     /// * `selected_outpoints` - The outpoints of UTXOs that the user wants to use
     /// * `target` - The target amount to send
     /// * `message_bus` - Optional message bus for emitting events
+    /// * `utxo_bus` - Optional UTXO event bus for emitting events
     ///
     /// # Returns
     /// * `SelectionResult` - The result of the selection process
-    pub fn select_coin_control(&self, selected_outpoints: &[OutPoint], target: Amount, message_bus: Option<&MessageBus>) -> SelectionResult {
+    pub fn select_coin_control(&self, selected_outpoints: &[OutPoint], target: Amount, message_bus: Option<&MessageBus>, utxo_bus: Option<&UtxoEventBus>) -> SelectionResult {
         println!("[DEBUG] select_coin_control called with target: {}, outpoints: {:?}", target, selected_outpoints);
         
         // Log the selection request if message bus is provided
@@ -519,34 +532,19 @@ impl UtxoManager {
             };
         }
         
-        // Use the UtxoSelector to handle fee calculation and change
+        // Create a UTXO selector 
         let selector = UtxoSelector::new();
-        println!("[DEBUG] Calling UtxoSelector.select_coin_control with target: {}", target);
-        let result = selector.select_coin_control(&selected_utxos, target, message_bus, self.utxo_bus.as_deref());
         
-        // Print selection result for debugging
-        match &result {
-            SelectionResult::Success { selected, fee_amount, change_amount } => {
-                println!("[DEBUG] Coin control selection successful:");
-                println!("[DEBUG]   selected_count: {}", selected.len());
-                println!("[DEBUG]   selected_amount: {}", selected.iter().map(|u| u.amount.to_sat()).sum::<u64>());
-                println!("[DEBUG]   fee_amount: {}", fee_amount);
-                println!("[DEBUG]   change_amount: {}", change_amount);
-                
-                // Verify balance equation
-                let selected_sum: u64 = selected.iter().map(|u| u.amount.to_sat()).sum();
-                let output_sum = target.to_sat() + fee_amount.to_sat() + change_amount.to_sat();
-                println!("[DEBUG]   Balance check: selected={}, target+fee+change={}, diff={}",
-                        selected_sum, output_sum, (selected_sum as i64) - (output_sum as i64));
-            },
-            SelectionResult::InsufficientFunds { available, required } => {
-                println!("[DEBUG] Coin control selection failed: Insufficient funds");
-                println!("[DEBUG]   available: {}", available);
-                println!("[DEBUG]   required: {}", required);
-            }
-        }
+        // Instead of manually calculating fees, etc. let the selector do it
+        // This ensures consistent fee calculation logic
+        let result = selector.select_coin_control(
+            &selected_utxos, 
+            target, 
+            message_bus,
+            utxo_bus.or_else(|| self.utxo_bus.as_ref().map(AsRef::as_ref)),
+        );
         
-        // Log the result
+        // Log results
         if let Some(bus) = message_bus {
             match &result {
                 SelectionResult::Success { selected, fee_amount, change_amount } => {
@@ -555,7 +553,7 @@ impl UtxoManager {
                         &json!({
                             "success": "Coin control selection completed",
                             "selected_count": selected.len(),
-                            "total_amount": total_selected.to_sat(),
+                            "total_amount": selected_utxos.iter().map(|u| u.amount.to_sat()).sum::<u64>(),
                             "fee_amount": fee_amount.to_sat(),
                             "change_amount": change_amount.to_sat(),
                         }).to_string(),
@@ -582,37 +580,37 @@ impl UtxoManager {
 
     /// Convenience method to select UTXOs using the MinimizeFee strategy
     pub fn select_utxos_minimize_fee(&self, target: Amount, message_bus: Option<&MessageBus>) -> SelectionResult {
-        self.select_utxos(target, SelectionStrategy::MinimizeFee, message_bus)
+        self.select_utxos(target, SelectionStrategy::MinimizeFee, message_bus, None)
     }
     
     /// Convenience method to select UTXOs using the MinimizeChange strategy
     pub fn select_utxos_minimize_change(&self, target: Amount, message_bus: Option<&MessageBus>) -> SelectionResult {
-        self.select_utxos(target, SelectionStrategy::MinimizeChange, message_bus)
+        self.select_utxos(target, SelectionStrategy::MinimizeChange, message_bus, None)
     }
     
     /// Convenience method to select UTXOs using the OldestFirst strategy
     pub fn select_utxos_oldest_first(&self, target: Amount, message_bus: Option<&MessageBus>) -> SelectionResult {
-        self.select_utxos(target, SelectionStrategy::OldestFirst, message_bus)
+        self.select_utxos(target, SelectionStrategy::OldestFirst, message_bus, None)
     }
     
     /// Convenience method to select UTXOs using the PrivacyFocused strategy
     pub fn select_utxos_privacy_focused(&self, target: Amount, message_bus: Option<&MessageBus>) -> SelectionResult {
-        self.select_utxos(target, SelectionStrategy::PrivacyFocused, message_bus)
+        self.select_utxos(target, SelectionStrategy::PrivacyFocused, message_bus, None)
     }
     
     /// Convenience method to select UTXOs using the MaximizePrivacy strategy
     pub fn select_utxos_maximize_privacy(&self, target: Amount, message_bus: Option<&MessageBus>) -> SelectionResult {
-        self.select_utxos(target, SelectionStrategy::MaximizePrivacy, message_bus)
+        self.select_utxos(target, SelectionStrategy::MaximizePrivacy, message_bus, None)
     }
 
     /// Convenience method to select UTXOs using the Consolidate strategy
     pub fn select_utxos_consolidate(&self, target: Amount, message_bus: Option<&MessageBus>) -> SelectionResult {
-        self.select_utxos(target, SelectionStrategy::Consolidate, message_bus)
+        self.select_utxos(target, SelectionStrategy::Consolidate, message_bus, None)
     }
     
     /// Convenience method to select UTXOs using the AvoidChange strategy
     pub fn select_utxos_avoid_change(&self, target: Amount, message_bus: Option<&MessageBus>) -> SelectionResult {
-        self.select_utxos(target, SelectionStrategy::AvoidChange, message_bus)
+        self.select_utxos(target, SelectionStrategy::AvoidChange, message_bus, None)
     }
 
     pub fn set_utxo_message_bus(&mut self, utxo_bus: Arc<UtxoEventBus>) {

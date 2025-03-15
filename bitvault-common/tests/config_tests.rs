@@ -169,7 +169,7 @@ fn test_config_validation() -> Result<()> {
     // Save the invalid config
     let invalid_path = _temp_dir.path().join("invalid_port_config.toml");
     let invalid_path_str = invalid_path.to_string_lossy().to_string();
-    config.save(&invalid_path_str)?;
+    config.save(&invalid_path_str, None)?;
 
     // Reload and validate - should fail validation
     let invalid_config = Config::load(&invalid_path_str)?;
@@ -205,7 +205,7 @@ fn test_config_modification_and_save() -> Result<()> {
     // Save the modified config to a new file
     let modified_path = _temp_dir.path().join("modified_config.toml");
     let modified_path_str = modified_path.to_string_lossy().to_string();
-    config.save(&modified_path_str)?;
+    config.save(&modified_path_str, None)?;
 
     // Load the modified config and verify changes were saved
     let modified_config = Config::load(&modified_path_str)?;

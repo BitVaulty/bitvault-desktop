@@ -19,7 +19,7 @@
 //! let mut address_book = AddressBook::new(Network::Bitcoin);
 //!
 //! // Add an entry
-//! address_book.add_entry(
+//! address_book.add_entry_simple(
 //!     "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
 //!     "Satoshi Donation",
 //!     Some("First ever Bitcoin address"),
@@ -36,6 +36,8 @@ use serde::{Deserialize, Serialize};
 use bitcoin::{Address, Network};
 use crate::bitcoin_utils;
 use crate::types::WalletError;
+use crate::events::{MessageBus, EventType, MessagePriority};
+use serde_json::json;
 
 /// Categories for address book entries
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -171,6 +173,7 @@ impl AddressBook {
     /// * `label` - Human-readable label
     /// * `notes` - Optional notes about the address
     /// * `category` - Category for grouping
+    /// * `message_bus` - Optional message bus to emit address book update event
     ///
     /// # Returns
     /// * Result with () on success, error on failure
@@ -180,33 +183,61 @@ impl AddressBook {
         label: &str,
         notes: Option<&str>,
         category: AddressCategory,
+        message_bus: Option<&MessageBus>,
     ) -> Result<(), WalletError> {
         // Validate the address
         if !bitcoin_utils::is_valid_bitcoin_address(address, self.network) {
             return Err(WalletError::InvalidAddress(format!(
-                "Invalid address for {} network: {}",
-                self.network, address
+                "Address {} is not valid for {} network", 
+                address, self.network
             )));
         }
-
-        // Validate label is not empty
-        if label.trim().is_empty() {
-            return Err(WalletError::ValidationError("Label cannot be empty".to_string()));
-        }
-
-        // Convert Option<&str> to Option<String>
-        let notes_owned = notes.map(|s| s.to_string());
-
-        // Create and add the entry
+        
+        // Create a new entry
         let entry = AddressEntry::new(
             address.to_string(),
             label.to_string(),
-            notes_owned,
+            notes.map(|s| s.to_string()),
             category,
         );
-
+        
+        // Add to the map
         self.entries.insert(address.to_string(), entry);
+        
+        // Emit event if message bus is provided
+        if let Some(bus) = message_bus {
+            bus.publish(
+                EventType::AddressBookUpdate,
+                &json!({
+                    "action": "add",
+                    "address": address,
+                    "label": label,
+                }).to_string(),
+                MessagePriority::Low,
+            );
+        }
+        
         Ok(())
+    }
+    
+    /// Add a new entry to the address book (convenience method without message bus)
+    ///
+    /// # Arguments
+    /// * `address` - Bitcoin address string
+    /// * `label` - Human-readable label
+    /// * `notes` - Optional additional notes
+    /// * `category` - Category for grouping
+    ///
+    /// # Returns
+    /// * Result with () on success, error on failure
+    pub fn add_entry_simple(
+        &mut self,
+        address: &str,
+        label: &str,
+        notes: Option<&str>,
+        category: AddressCategory,
+    ) -> Result<(), WalletError> {
+        self.add_entry(address, label, notes, category, None)
     }
 
     /// Get an entry by address
@@ -408,5 +439,25 @@ impl AddressBook {
         serde_json::from_str(json).map_err(|e| {
             WalletError::DeserializationError(format!("Failed to deserialize address book: {}", e))
         })
+    }
+
+    /// Add an entry to the address book (backward compatibility with API that doesn't have message_bus)
+    ///
+    /// # Arguments
+    /// * `address` - Bitcoin address to add
+    /// * `label` - User-friendly name for this address
+    /// * `notes` - Optional additional notes about this address
+    /// * `category` - Category for grouping
+    ///
+    /// # Returns
+    /// * Result with () on success, error on failure
+    pub fn add_entry_with_defaults(
+        &mut self,
+        address: &str,
+        label: &str,
+        notes: Option<&str>,
+        category: AddressCategory,
+    ) -> Result<(), WalletError> {
+        self.add_entry(address, label, notes, category, None)
     }
 } 

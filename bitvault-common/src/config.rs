@@ -4,17 +4,34 @@
 //! It provides a strongly-typed configuration structure with validation
 //! and reasonable defaults.
 //!
+//! ## Security Boundary Documentation
+//!
+//! This module implements a non-critical security boundary between user preferences
+//! and core wallet functionality. The configuration data is considered non-sensitive
+//! but must be protected from tampering.
+//!
+//! ### Security Boundaries:
+//!
+//! - **Config/Core Boundary**: Separates user-configurable options from core wallet operations
+//!   - All configuration values must be validated before use in security-sensitive operations
+//!   - Configuration changes must be audited via event system
+//!
 //! ## Security Considerations
 //!
 //! - No security-critical information should be stored in this configuration
 //! - The configuration module does not handle encryption/decryption
 //! - Sensitive values are validated to ensure they meet security requirements
+//! - Configuration changes should be logged via the event system
+//! - All configuration values must be validated before use in security-sensitive functions
+//! - Configuration files must be protected from unauthorized modification
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use std::vec::Vec;
+use serde_json::json;
+use crate::events::{MessageBus, EventType, MessagePriority};
 
 /// Main configuration structure for BitVault
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -193,11 +210,30 @@ impl Config {
     }
 
     /// Save configuration to file
-    pub fn save(&self, path: &str) -> Result<()> {
+    pub fn save(&self, path: &str, message_bus: Option<&MessageBus>) -> Result<()> {
         let content = toml::to_string_pretty(self)
             .map_err(|e| anyhow!("Failed to serialize config: {}", e))?;
 
         fs::write(path, content).map_err(|e| anyhow!("Failed to write config file: {}", e))?;
+        
+        // Emit config update event if message bus is provided
+        if let Some(bus) = message_bus {
+            let payload = json!({
+                "action": "config_saved",
+                "path": path,
+                "wallet_network": self.wallet.network,
+                "fiat_currency": self.wallet.fiat_currency,
+                "fee_level": self.wallet.fee_level,
+                "ui_language": self.ui.language,
+                "dark_mode": self.ui.dark_mode,
+            });
+            
+            bus.publish(
+                EventType::ConfigUpdate,
+                &payload.to_string(),
+                MessagePriority::Low
+            );
+        }
 
         Ok(())
     }

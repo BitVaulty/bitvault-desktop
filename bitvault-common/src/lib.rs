@@ -12,6 +12,7 @@
 //! - `config`: Configuration management
 //! - `config_manager`: Enhanced configuration management with profiles and validation
 //! - `events`: Event system for domain-specific and general event publishing/subscribing
+//! - `error`: Standardized error handling with context support
 //! - `localization`: Internationalization and localization support
 //! - `wallet_operations`: Wallet operations using BDK
 //! - `address_book`: Bitcoin address book functionality
@@ -40,6 +41,9 @@ pub mod math;
 
 /// Secure logging functionality
 pub mod logging;
+
+/// Standardized error handling with context support
+pub mod error;
 
 /// Platform-specific functionality
 ///
@@ -88,27 +92,6 @@ pub mod address_book;
 /// - Domain-specific event bus for UTXO-related events
 pub mod utxo_selection;
 
-/// Original UTXO selection implementation (legacy)
-/// 
-/// @deprecated This is kept for backward compatibility but will be removed in a future version.
-/// Use the modular utxo_selection instead.
-///
-/// This module is not meant to be used directly. Instead, use the types and utilities
-/// re-exported at the crate root or from the `utxo_selection` module.
-#[deprecated(since = "0.2.0", note = "Use the modular utxo_selection module instead")]
-mod utxo_selection_orig;
-
-/// UTXO selection fixed implementation (legacy)
-/// 
-/// @deprecated This is kept for backward compatibility but will be removed in a future version.
-/// Use the modular utxo_selection instead.
-#[deprecated(since = "0.2.0", note = "Use the modular utxo_selection module instead")]
-mod utxo_selection_fixed;
-
-/// UTXO selection v2 (future implementation)
-#[doc(hidden)]
-pub mod utxo_selection_v2;
-
 /// UTXO management functionality
 ///
 /// Manages the lifecycle of UTXOs with event-driven capabilities:
@@ -137,11 +120,6 @@ pub use utxo_selection::types::{
 pub use utxo_selection::selector::UtxoSelector;
 
 /// Backward compatibility re-exports for utxo_selection module
-#[deprecated(since = "0.2.0", note = "Use imports from utxo_selection sub-modules instead")]
-pub mod utxo_selection_compat {
-    pub use crate::utxo_selection::types::{Utxo, UtxoSet, SelectionStrategy, SelectionResult};
-    pub use crate::utxo_selection::selector::UtxoSelector;
-}
 
 // Re-export important Bitcoin and BDK types
 pub use bdk::{blockchain, wallet, Balance, FeeRate, TransactionDetails};
@@ -213,9 +191,6 @@ pub use events::{
 
 /// Library version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-/// Build timestamp (set at compile time)
-pub const BUILD_TIMESTAMP: &str = env!("CARGO_PKG_VERSION");
 
 /// Check if the library was built in debug mode
 pub const fn is_debug_build() -> bool {

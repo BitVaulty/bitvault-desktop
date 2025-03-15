@@ -1,3 +1,42 @@
+//! Input validation and sanitization for secure operations
+//!
+//! # Security Model
+//!
+//! This module provides validation functions for all security-sensitive inputs in the BitVault wallet.
+//! It serves as a critical security boundary for external data entering the system.
+//!
+//! ## Security Boundaries
+//!
+//! This module sits at several critical security boundaries:
+//! - Between user input and internal processing
+//! - Between external data sources (RPC, APIs) and wallet operations
+//! - Between serialized formats and their parsed representations
+//! - Between UI inputs and cryptographic operations
+//!
+//! ## Threat Model Assumptions
+//!
+//! 1. All external input is potentially malicious and must be validated
+//! 2. Input validation occurs before sensitive operations are performed
+//! 3. Special attention is needed for data crossing trust boundaries
+//! 4. Validation errors must be descriptive without leaking sensitive information
+//!
+//! ## Security Considerations
+//!
+//! - All address validation must verify the correct network type
+//! - String inputs must be checked for injection attacks (SQL, script)
+//! - Amount validation must enforce bounds to prevent overflow/underflow
+//! - Transaction validation ensures no unexpected behaviors in transaction structure
+//! - URL validation prevents open redirect and SSRF vulnerabilities
+//! - Derivation path validation prevents potential key leakage through unusual paths
+//!
+//! # Usage
+//!
+//! This module should be used at all trust boundaries in the application:
+//! - When accepting user input from the UI
+//! - When receiving data from external APIs
+//! - When parsing data from storage
+//! - Before performing any security-sensitive operation
+
 use bitcoin::{Address, Network, Transaction, TxIn, TxOut, Script, OutPoint};
 use bitcoin::address::Payload;
 use bitcoin::hashes::Hash;

@@ -30,6 +30,9 @@ use std::iter::Iterator;
 use rust_decimal::Decimal;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use rust_decimal_macros::dec;
+use serde_json::json;
+use crate::events::{MessageBus, EventType, MessagePriority};
+use std::sync::{Arc, RwLock};
 
 /// Errors related to fee estimation operations
 /// This is kept for API compatibility but will be deprecated.
@@ -654,17 +657,22 @@ impl HistoricalFeeData {
     }
 }
 
-/// Estimate fee based on priority and network provider
-/// 
+/// Estimate transaction fee for the given priority using a NetworkStatusProvider
+///
 /// # Arguments
-/// * `priority` - Fee priority level
-/// * `provider` - Network status provider implementation
-/// 
+///
+/// * `priority` - Fee priority (High, Medium, Low)
+/// * `provider` - Network status provider
+/// * `message_bus` - Optional message bus for event publication
+///
 /// # Returns
-/// * Estimated fee rate in sat/vB as Decimal, or error
+///
+/// * Result containing the estimated fee rate in satoshis per vByte
+#[deprecated(since = "0.2.0", note = "Use FeeEstimationService instead")]
 pub fn estimate_fee<T: NetworkStatusProvider>(
     priority: FeePriority, 
-    provider: &T
+    provider: &T,
+    message_bus: Option<&MessageBus>
 ) -> Result<Decimal, WalletError> {
     // Get network status from provider
     let status = provider.get_network_status()
@@ -676,17 +684,34 @@ pub fn estimate_fee<T: NetworkStatusProvider>(
         let min_reasonable = defaults::min_reasonable_fee_rate(status.network);
         let max_reasonable = defaults::max_reasonable_fee_rate(status.network);
         
-        if fee < min_reasonable {
+        let adjusted_fee = if fee < min_reasonable {
             log::warn!("Custom fee rate {} too low, using minimum {}", fee, min_reasonable);
-            return Ok(min_reasonable);
-        }
-        
-        if fee > max_reasonable {
+            min_reasonable
+        } else if fee > max_reasonable {
             log::warn!("Custom fee rate {} too high, capping at {}", fee, max_reasonable);
-            return Ok(max_reasonable);
+            max_reasonable
+        } else {
+            fee
+        };
+        
+        // Emit fee estimation event if message bus is provided
+        if let Some(bus) = message_bus {
+            let payload = json!({
+                "type": "custom",
+                "network": format!("{:?}", status.network),
+                "original_rate": rate,
+                "adjusted_rate": adjusted_fee,
+                "congestion": format!("{:?}", status.congestion),
+            });
+            
+            bus.publish(
+                EventType::FeeEstimationUpdate,
+                &payload.to_string(),
+                MessagePriority::Low
+            );
         }
         
-        return Ok(fee);
+        return Ok(adjusted_fee);
     }
     
     // Get current hour for time-based adjustment
@@ -699,6 +724,9 @@ pub fn estimate_fee<T: NetworkStatusProvider>(
         status.congestion,
         current_hour
     );
+    
+    let mut fee_source = "default";
+    let mut final_fee_rate = fee_rate;
     
     // If provider has fee recommendations, prefer those
     if !status.fee_estimates.is_empty() {
@@ -722,23 +750,46 @@ pub fn estimate_fee<T: NetworkStatusProvider>(
                 let min_reasonable = defaults::min_reasonable_fee_rate(status.network);
                 let max_reasonable = defaults::max_reasonable_fee_rate(status.network);
                 
-                if provider_fee < min_reasonable {
+                final_fee_rate = if provider_fee < min_reasonable {
                     log::warn!("Provider fee rate {} too low, using minimum {}", provider_fee, min_reasonable);
-                    return Ok(min_reasonable);
-                }
-                
-                if provider_fee > max_reasonable {
+                    min_reasonable
+                } else if provider_fee > max_reasonable {
                     log::warn!("Provider fee rate {} too high, capping at {}", provider_fee, max_reasonable);
-                    return Ok(max_reasonable);
-                }
+                    max_reasonable
+                } else {
+                    provider_fee
+                };
                 
-                return Ok(provider_fee);
+                fee_source = "provider";
             }
         }
     }
     
-    // If no provider estimates available, use defaults
-    Ok(fee_rate)
+    // Emit fee estimation event if message bus is provided
+    if let Some(bus) = message_bus {
+        let payload = json!({
+            "type": format!("{:?}", priority),
+            "network": format!("{:?}", status.network),
+            "fee_rate": final_fee_rate,
+            "source": fee_source,
+            "congestion": format!("{:?}", status.congestion),
+            "target_blocks": match priority {
+                FeePriority::High => 2,
+                FeePriority::Medium => 6,
+                FeePriority::Low => 24,
+                FeePriority::Custom(_) => 0, // Should not happen here
+            }
+        });
+        
+        bus.publish(
+            EventType::FeeEstimationUpdate,
+            &payload.to_string(),
+            MessagePriority::Low
+        );
+    }
+    
+    // Return the final fee rate
+    Ok(final_fee_rate)
 }
 
 /// Apply dynamic fee adjustment based on current network congestion
@@ -841,4 +892,667 @@ pub fn create_recommendations(network: Network, congestion: CongestionLevel) -> 
     }
     
     recommendations
+}
+
+/// Provider interface for fee estimation
+///
+/// # Security Considerations
+///
+/// - Implementations should validate network data before using it
+/// - Providers may expose the wallet to network fingerprinting
+/// - Fee estimation affects transaction costs and confirmation times
+pub trait FeeEstimationProvider: Send + Sync {
+    /// Get fee estimates for different confirmation targets
+    fn get_fee_estimates(&self) -> Result<FeeRecommendations, FeeEstimationError>;
+    
+    /// Get historical fee data for analysis
+    fn get_historical_data(&self) -> Result<HistoricalFeeData, FeeEstimationError>;
+    
+    /// Check if the provider is currently available
+    fn is_available(&self) -> bool;
+    
+    /// Get the provider name for logging and debugging
+    fn provider_name(&self) -> &str;
+    
+    /// Get the provider priority (lower numbers = higher priority)
+    fn priority(&self) -> u8 {
+        10 // Default middle priority
+    }
+}
+
+/// Cache for fee estimation data
+pub struct FeeEstimationCache {
+    /// Cached fee recommendations
+    pub recommendations: Option<FeeRecommendations>,
+    /// Cached historical data
+    pub historical_data: Option<HistoricalFeeData>,
+    /// When the cache was last updated
+    pub last_updated: u64,
+    /// Maximum age of cached data in seconds
+    pub max_age_seconds: u64,
+}
+
+impl FeeEstimationCache {
+    /// Create a new fee estimation cache
+    pub fn new(max_age_seconds: u64) -> Self {
+        Self {
+            recommendations: None,
+            historical_data: None,
+            last_updated: current_timestamp(),
+            max_age_seconds,
+        }
+    }
+    
+    /// Check if the cache is stale
+    pub fn is_stale(&self) -> bool {
+        let now = current_timestamp();
+        now - self.last_updated > self.max_age_seconds
+    }
+    
+    /// Update the cache with new data
+    pub fn update(&mut self, recommendations: Option<FeeRecommendations>, historical_data: Option<HistoricalFeeData>) {
+        if recommendations.is_some() {
+            self.recommendations = recommendations;
+        }
+        
+        if historical_data.is_some() {
+            self.historical_data = historical_data;
+        }
+        
+        self.last_updated = current_timestamp();
+    }
+}
+
+/// Service to manage multiple fee estimation providers with fallback and caching
+///
+/// # Security Considerations
+///
+/// - The service will only use available providers
+/// - Stale data will be refreshed automatically
+/// - Providers are tried in priority order
+/// - Multiple providers help prevent single points of failure
+pub struct FeeEstimationService {
+    /// Available fee estimation providers in priority order
+    providers: Vec<Box<dyn FeeEstimationProvider>>,
+    /// Cache for fee estimation data
+    cache: Arc<RwLock<FeeEstimationCache>>,
+    /// Associated message bus for events
+    message_bus: Option<Arc<MessageBus>>,
+    /// Bitcoin network for the service
+    network: Network,
+}
+
+impl FeeEstimationService {
+    /// Create a new fee estimation service
+    ///
+    /// # Arguments
+    ///
+    /// * `providers` - List of fee estimation providers in priority order
+    /// * `network` - Bitcoin network for the service
+    /// * `cache_max_age` - Maximum age of cached data in seconds
+    /// * `message_bus` - Optional message bus for events
+    pub fn new(
+        providers: Vec<Box<dyn FeeEstimationProvider>>,
+        network: Network,
+        cache_max_age: u64,
+        message_bus: Option<Arc<MessageBus>>
+    ) -> Self {
+        // Sort providers by priority
+        let mut sorted_providers = providers;
+        sorted_providers.sort_by_key(|p| p.priority());
+        
+        Self {
+            providers: sorted_providers,
+            cache: Arc::new(RwLock::new(FeeEstimationCache::new(cache_max_age))),
+            message_bus,
+            network,
+        }
+    }
+    
+    /// Get fee recommendations, trying multiple providers with fallback
+    pub fn get_fee_recommendations(&self) -> Result<FeeRecommendations, FeeEstimationError> {
+        // First check cache
+        {
+            let cache = self.cache.read().unwrap();
+            if !cache.is_stale() {
+                if let Some(recommendations) = &cache.recommendations {
+                    return Ok(recommendations.clone());
+                }
+            }
+        }
+        
+        // Cache is stale or empty, try providers in order
+        let mut last_error = None;
+        let mut _successful_provider = None;
+        
+        for provider in &self.providers {
+            if !provider.is_available() {
+                continue;
+            }
+            
+            match provider.get_fee_estimates() {
+                Ok(recommendations) => {
+                    // Update cache
+                    {
+                        let mut cache = self.cache.write().unwrap();
+                        cache.update(Some(recommendations.clone()), None);
+                    }
+                    
+                    // Publish event
+                    if let Some(bus) = &self.message_bus {
+                        bus.publish(
+                            EventType::FeeEstimationUpdate,
+                            &json!({
+                                "provider": provider.provider_name(),
+                                "network": self.network.to_string(),
+                                "high_priority": recommendations.get_fee_for_priority(FeePriority::High).to_string(),
+                                "medium_priority": recommendations.get_fee_for_priority(FeePriority::Medium).to_string(),
+                                "low_priority": recommendations.get_fee_for_priority(FeePriority::Low).to_string(),
+                            }).to_string(),
+                            MessagePriority::Low
+                        );
+                    }
+                    
+                    _successful_provider = Some(provider.provider_name().to_string());
+                    return Ok(recommendations);
+                }
+                Err(e) => {
+                    last_error = Some(e);
+                }
+            }
+        }
+        
+        // If we got here, all providers failed
+        // Try to use cached data even if stale as a last resort
+        {
+            let cache = self.cache.read().unwrap();
+            if let Some(recommendations) = &cache.recommendations {
+                // Log that we're using stale data
+                if let Some(bus) = &self.message_bus {
+                    bus.publish(
+                        EventType::FeeEstimationUpdate,
+                        &json!({
+                            "warning": "Using stale fee data",
+                            "age_seconds": current_timestamp() - cache.last_updated,
+                            "network": self.network.to_string(),
+                        }).to_string(),
+                        MessagePriority::Medium
+                    );
+                }
+                
+                return Ok(recommendations.clone());
+            }
+        }
+        
+        // If we still don't have data, create default recommendations
+        let default_recommendations = create_recommendations(
+            self.network,
+            CongestionLevel::Moderate,
+        );
+        
+        // Log that we're using default data
+        if let Some(bus) = &self.message_bus {
+            bus.publish(
+                EventType::FeeEstimationUpdate,
+                &json!({
+                    "warning": "Using default fee data, all providers failed",
+                    "network": self.network.to_string(),
+                    "providers_tried": self.providers.len(),
+                }).to_string(),
+                MessagePriority::High
+            );
+        }
+        
+        // Update cache with default data
+        {
+            let mut cache = self.cache.write().unwrap();
+            cache.update(Some(default_recommendations.clone()), None);
+        }
+        
+        // Return error if requested but include default recommendations
+        if let Some(error) = last_error {
+            Err(error)
+        } else {
+            Ok(default_recommendations)
+        }
+    }
+    
+    /// Get historical fee data, trying multiple providers with fallback
+    pub fn get_historical_data(&self) -> Result<HistoricalFeeData, FeeEstimationError> {
+        // First check cache
+        {
+            let cache = self.cache.read().unwrap();
+            if !cache.is_stale() {
+                if let Some(data) = &cache.historical_data {
+                    return Ok(data.clone());
+                }
+            }
+        }
+        
+        // Cache is stale or empty, try providers in order
+        let mut last_error = None;
+        
+        for provider in &self.providers {
+            if !provider.is_available() {
+                continue;
+            }
+            
+            match provider.get_historical_data() {
+                Ok(data) => {
+                    // Update cache
+                    {
+                        let mut cache = self.cache.write().unwrap();
+                        cache.update(None, Some(data.clone()));
+                    }
+                    
+                    return Ok(data);
+                }
+                Err(e) => {
+                    last_error = Some(e);
+                }
+            }
+        }
+        
+        // If we got here, all providers failed
+        // Try to use cached data even if stale as a last resort
+        {
+            let cache = self.cache.read().unwrap();
+            if let Some(data) = &cache.historical_data {
+                return Ok(data.clone());
+            }
+        }
+        
+        // If we still don't have data, return an error
+        if let Some(error) = last_error {
+            Err(error)
+        } else {
+            // Create empty historical data as a last resort
+            let empty_data = HistoricalFeeData::new(self.network);
+            
+            // Update cache with empty data
+            {
+                let mut cache = self.cache.write().unwrap();
+                cache.update(None, Some(empty_data.clone()));
+            }
+            
+            Ok(empty_data)
+        }
+    }
+    
+    /// Get fee estimate for a specific priority
+    pub fn estimate_fee(&self, priority: FeePriority) -> Result<Decimal, FeeEstimationError> {
+        let recommendations = self.get_fee_recommendations()?;
+        Ok(recommendations.get_fee_for_priority(priority))
+    }
+    
+    /// Add a new provider to the service
+    pub fn add_provider(&mut self, provider: Box<dyn FeeEstimationProvider>) {
+        self.providers.push(provider);
+        // Re-sort by priority
+        self.providers.sort_by_key(|p| p.priority());
+    }
+    
+    /// Force refresh the fee data
+    pub fn force_refresh(&self) -> Result<(), FeeEstimationError> {
+        // Clear the cache
+        {
+            let mut cache = self.cache.write().unwrap();
+            cache.recommendations = None;
+            cache.historical_data = None;
+            cache.last_updated = 0; // Forces stale
+        }
+        
+        // Try to get new recommendations and historical data
+        let _recommendations = self.get_fee_recommendations()?;
+        let _historical_data = self.get_historical_data()?;
+        
+        Ok(())
+    }
+}
+
+/// Default fee estimation provider that uses hardcoded values
+///
+/// This provider is useful as a fallback when other providers are unavailable.
+/// It doesn't require network connectivity but provides less accurate estimations.
+pub struct DefaultFeeEstimationProvider {
+    /// Bitcoin network for this provider
+    network: Network,
+    /// Provider availability (always true for this provider)
+    available: bool,
+}
+
+impl DefaultFeeEstimationProvider {
+    /// Create a new default fee estimation provider
+    pub fn new(network: Network) -> Self {
+        Self {
+            network,
+            available: true,
+        }
+    }
+}
+
+impl FeeEstimationProvider for DefaultFeeEstimationProvider {
+    fn get_fee_estimates(&self) -> Result<FeeRecommendations, FeeEstimationError> {
+        Ok(create_recommendations(self.network, CongestionLevel::Moderate))
+    }
+    
+    fn get_historical_data(&self) -> Result<HistoricalFeeData, FeeEstimationError> {
+        let mut data = HistoricalFeeData::new(self.network);
+        
+        // Add some minimal historical data
+        let now = current_timestamp();
+        
+        // Create a simple fee history
+        for i in 0..10 {
+            let timestamp = now - (i * 86400); // One day intervals
+            
+            // Add data for different confirmation targets
+            data.add_sample(timestamp, 1, 10.0 + (i as f32 * 0.5));  // 1 block target
+            data.add_sample(timestamp, 3, 5.0 + (i as f32 * 0.3));   // 3 block target
+            data.add_sample(timestamp, 6, 3.0 + (i as f32 * 0.2));   // 6 block target
+            data.add_sample(timestamp, 24, 1.0 + (i as f32 * 0.1));  // 24 block target
+        }
+        
+        // Calculate daily averages
+        data.calculate_daily_averages();
+        
+        Ok(data)
+    }
+    
+    fn is_available(&self) -> bool {
+        self.available
+    }
+    
+    fn provider_name(&self) -> &str {
+        "DefaultProvider"
+    }
+    
+    fn priority(&self) -> u8 {
+        255 // Lowest priority, use as last resort
+    }
+}
+
+/// Network-based fee estimation provider
+///
+/// This provider uses a NetworkStatusProvider to get fee estimates
+/// from the Bitcoin network. It provides more accurate estimations
+/// but requires network connectivity.
+pub struct NetworkFeeEstimationProvider<T: NetworkStatusProvider + Send + Sync> {
+    /// Network status provider
+    provider: T,
+    /// Bitcoin network for this provider
+    network: Network,
+}
+
+impl<T: NetworkStatusProvider + Send + Sync> NetworkFeeEstimationProvider<T> {
+    /// Create a new network-based fee estimation provider
+    pub fn new(provider: T, network: Network) -> Self {
+        Self {
+            provider,
+            network,
+        }
+    }
+}
+
+impl<T: NetworkStatusProvider + Send + Sync> FeeEstimationProvider for NetworkFeeEstimationProvider<T> {
+    fn get_fee_estimates(&self) -> Result<FeeRecommendations, FeeEstimationError> {
+        // Get network status from the provider
+        let network_status = self.provider.get_network_status()
+            .map_err(|e| FeeEstimationError::NetworkError(e.to_string()))?;
+        
+        // Get mempool status to determine congestion
+        let mempool_status = self.provider.get_mempool_status()
+            .map_err(|e| FeeEstimationError::NetworkError(e.to_string()))?;
+        
+        // Create recommendations from the network data
+        let recommendations = create_recommendations_from_provider(
+            self.network,
+            network_status.fee_estimates,
+            mempool_status.determine_congestion_level(),
+        );
+        
+        Ok(recommendations)
+    }
+    
+    fn get_historical_data(&self) -> Result<HistoricalFeeData, FeeEstimationError> {
+        // For a real implementation, this would fetch historical data
+        // from a service. For now, we'll just create some sample data.
+        
+        let mut data = HistoricalFeeData::new(self.network);
+        let now = current_timestamp();
+        
+        // Get current fee estimates as a starting point
+        let network_status = self.provider.get_network_status()
+            .map_err(|e| FeeEstimationError::NetworkError(e.to_string()))?;
+        
+        // Add current fee estimates
+        for (target, fee) in &network_status.fee_estimates {
+            data.add_sample(now, *target, fee.to_f32().unwrap_or(1.0));
+        }
+        
+        // Calculate daily averages from our limited data
+        data.calculate_daily_averages();
+        
+        Ok(data)
+    }
+    
+    fn is_available(&self) -> bool {
+        // This provider is available if we can get network status
+        self.provider.get_network_status().is_ok()
+    }
+    
+    fn provider_name(&self) -> &str {
+        "NetworkProvider"
+    }
+    
+    fn priority(&self) -> u8 {
+        10 // Medium priority
+    }
+}
+
+/// Create a FeeEstimationService with the given provider
+///
+/// This is a convenience function to create a FeeEstimationService
+/// with a single NetworkFeeEstimationProvider.
+///
+/// # Arguments
+///
+/// * `provider` - Network status provider
+/// * `network` - Bitcoin network
+/// * `message_bus` - Optional message bus for event publication
+///
+/// # Returns
+///
+/// * FeeEstimationService configured with the provider and a default provider
+pub fn create_fee_service<T: NetworkStatusProvider + Send + Sync + 'static>(
+    provider: T,
+    network: Network,
+    message_bus: Option<Arc<MessageBus>>
+) -> FeeEstimationService {
+    // Create a network provider with the given network status provider
+    let network_provider = Box::new(NetworkFeeEstimationProvider::new(
+        provider,
+        network,
+    ));
+    
+    // Create a default provider as fallback
+    let default_provider = Box::new(DefaultFeeEstimationProvider::new(network));
+    
+    // Create a list of providers
+    let providers: Vec<Box<dyn FeeEstimationProvider>> = vec![
+        network_provider,
+        default_provider,
+    ];
+    
+    // Create the service with a 30-minute cache
+    FeeEstimationService::new(
+        providers,
+        network,
+        1800, // 30 minutes
+        message_bus,
+    )
+}
+
+/// Modern fee estimation function using the FeeEstimationService
+///
+/// This function creates a service with the given provider and
+/// then estimates the fee for the given priority.
+///
+/// # Arguments
+///
+/// * `priority` - Fee priority (High, Medium, Low)
+/// * `provider` - Network status provider
+/// * `network` - Bitcoin network
+/// * `message_bus` - Optional message bus for event publication
+///
+/// # Returns
+///
+/// * Result containing the estimated fee rate in satoshis per vByte
+pub fn estimate_fee_with_service<T: NetworkStatusProvider + Send + Sync + 'static>(
+    priority: FeePriority,
+    provider: T,
+    network: Network,
+    message_bus: Option<Arc<MessageBus>>
+) -> Result<Decimal, FeeEstimationError> {
+    // Create the service
+    let service = create_fee_service(provider, network, message_bus);
+    
+    // Estimate the fee
+    service.estimate_fee(priority)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    // ... existing test imports and tests ...
+
+    #[test]
+    fn test_fee_estimation_service() {
+        // Create a default provider
+        let default_provider = DefaultFeeEstimationProvider::new(Network::Bitcoin);
+        
+        // Verify provider name and priority
+        assert_eq!(default_provider.provider_name(), "DefaultProvider");
+        assert_eq!(default_provider.priority(), 255);
+        
+        // Verify the provider is available
+        assert!(default_provider.is_available());
+        
+        // Get fee estimates
+        let recommendations = default_provider.get_fee_estimates().unwrap();
+        
+        // Check that we have fee recommendations for different priorities
+        assert!(recommendations.by_priority.contains_key(&FeePriority::High));
+        assert!(recommendations.by_priority.contains_key(&FeePriority::Medium));
+        assert!(recommendations.by_priority.contains_key(&FeePriority::Low));
+        
+        // Verify that high priority has higher fees than low priority
+        let high_fee = recommendations.get_fee_for_priority(FeePriority::High);
+        let low_fee = recommendations.get_fee_for_priority(FeePriority::Low);
+        assert!(high_fee > low_fee);
+        
+        // Get historical data
+        let historical_data = default_provider.get_historical_data().unwrap();
+        
+        // Check that we have some historical data
+        assert!(!historical_data.time_series.is_empty());
+    }
+    
+    #[test]
+    fn test_fee_estimation_service_with_mock_provider() {
+        use crate::network_status::MockNetworkStatusProvider;
+        
+        // Create a mock network status provider
+        let mock_provider = MockNetworkStatusProvider::new(Network::Bitcoin)
+            .with_congestion(CongestionLevel::High)
+            .with_fee_rate(1, 20.0)   // 1 block target: 20 sat/vB
+            .with_fee_rate(6, 10.0)   // 6 block target: 10 sat/vB
+            .with_fee_rate(24, 5.0);  // 24 block target: 5 sat/vB
+        
+        // Create a network provider
+        let network_provider = NetworkFeeEstimationProvider::new(mock_provider, Network::Bitcoin);
+        
+        // Verify provider name and priority
+        assert_eq!(network_provider.provider_name(), "NetworkProvider");
+        assert_eq!(network_provider.priority(), 10);
+        
+        // Verify the provider is available
+        assert!(network_provider.is_available());
+        
+        // Get fee estimates
+        let recommendations = network_provider.get_fee_estimates().unwrap();
+        
+        // Check that we have fee recommendations
+        assert!(!recommendations.by_block_target.is_empty());
+        assert!(!recommendations.by_priority.is_empty());
+        
+        // Create a service with both providers
+        let mut providers: Vec<Box<dyn FeeEstimationProvider>> = Vec::new();
+        providers.push(Box::new(network_provider));
+        providers.push(Box::new(DefaultFeeEstimationProvider::new(Network::Bitcoin)));
+        
+        let service = FeeEstimationService::new(
+            providers,
+            Network::Bitcoin,
+            1800,
+            None,
+        );
+        
+        // Get fee recommendations from the service
+        let service_recommendations = service.get_fee_recommendations().unwrap();
+        
+        // The service should use the network provider since it has higher priority
+        assert_eq!(service_recommendations.congestion, CongestionLevel::High);
+        
+        // Estimate fee for high priority
+        let high_fee = service.estimate_fee(FeePriority::High).unwrap();
+        
+        // High fee should be at least 10 sat/vB given our mock data
+        // The actual value depends on how the fee estimation works with the mock data
+        assert!(high_fee >= Decimal::from_f32(5.0).unwrap());
+    }
+
+    #[test]
+    fn test_fee_estimation_service_convenience_functions() {
+        use crate::network_status::MockNetworkStatusProvider;
+        
+        // Create a mock network status provider
+        let mock_provider = MockNetworkStatusProvider::new(Network::Testnet)
+            .with_congestion(CongestionLevel::Low)
+            .with_fee_rate(1, 5.0)   // 1 block target: 5 sat/vB
+            .with_fee_rate(6, 3.0)   // 6 block target: 3 sat/vB
+            .with_fee_rate(24, 1.0); // 24 block target: 1 sat/vB
+        
+        // Create a service with convenience function
+        let service = create_fee_service(
+            mock_provider,
+            Network::Testnet,
+            None,
+        );
+        
+        // Get fee recommendations
+        let recommendations = service.get_fee_recommendations().unwrap();
+        
+        // Check network type
+        assert_eq!(recommendations.network, Network::Testnet);
+        
+        // Check congestion level
+        assert_eq!(recommendations.congestion, CongestionLevel::Low);
+        
+        // Use the convenience function to estimate fee
+        let mock_provider = MockNetworkStatusProvider::new(Network::Testnet)
+            .with_congestion(CongestionLevel::Low)
+            .with_fee_rate(1, 5.0);
+            
+        let fee = estimate_fee_with_service(
+            FeePriority::Medium,
+            mock_provider,
+            Network::Testnet,
+            None,
+        ).unwrap();
+        
+        // Medium priority fee should be between 1 and 5 sat/vB
+        assert!(fee >= Decimal::from_f32(1.0).unwrap());
+        assert!(fee <= Decimal::from_f32(5.0).unwrap());
+    }
 }

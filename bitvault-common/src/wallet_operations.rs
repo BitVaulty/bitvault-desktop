@@ -1,5 +1,40 @@
 // wallet_operations.rs
 //! Wallet operations using BDK
+//!
+//! # Security Model
+//!
+//! This module serves as a bridge between high-level wallet functionality and the Bitcoin Development
+//! Kit (BDK). It handles operations that interact with Bitcoin blockchain data and transaction signing.
+//!
+//! ## Security Boundaries
+//!
+//! This module sits at several important security boundaries:
+//! - Between user-initiated actions and blockchain operations
+//! - Between application logic and cryptographic signing operations
+//! - Between wallet state and transaction construction
+//!
+//! ## Threat Model Assumptions
+//!
+//! 1. The BDK library's cryptographic implementations are correct and secure
+//! 2. Input validation occurs before data crosses into this module
+//! 3. Transaction data may be intercepted or modified if not properly validated
+//! 4. Address validation is critical to prevent funds being sent to invalid or malicious destinations
+//!
+//! ## Security Considerations
+//!
+//! - All transaction processing must validate inputs thoroughly
+//! - Address validation must be performed with network type checking
+//! - Fee estimation must include reasonable bounds to prevent fee-siphoning attacks
+//! - All errors must be properly handled without leaking sensitive wallet state
+//! - Events emitted from this module should not contain private key material or complete wallet state
+//!
+//! # Usage
+//!
+//! This module is used by higher-level wallet code to perform Bitcoin-specific operations:
+//! - Transaction creation and signing
+//! - Address generation and validation
+//! - Wallet initialization and restoration
+//! - Output selection and fee calculation
 
 use bdk::wallet::Wallet;
 use bdk::database::MemoryDatabase;

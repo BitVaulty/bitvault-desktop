@@ -5,6 +5,13 @@ use bitvault_common::types::DUST_THRESHOLD;
 
 #[test]
 fn test_is_dust_amount() {
+    // Test that dust amount detection works correctly
+    assert!(math::is_dust_amount(545));  // Values below dust threshold should be dust
+    assert!(!math::is_dust_amount(547)); // Values above dust threshold should not be dust
+} 
+
+#[test]
+fn test_is_dust_amount_detailed() {
     // Test dust threshold
     assert!(math::is_dust_amount(DUST_THRESHOLD - 1));
     assert!(!math::is_dust_amount(DUST_THRESHOLD));
