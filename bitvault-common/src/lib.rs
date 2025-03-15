@@ -10,12 +10,13 @@
 //! - `logging`: Security-aware logging infrastructure
 //! - `platform`: Platform-specific functionality
 //! - `config`: Configuration management
-//! - `events`: Events module for testing
+//! - `config_manager`: Enhanced configuration management with profiles and validation
+//! - `events`: Event system for domain-specific and general event publishing/subscribing
 //! - `localization`: Internationalization and localization support
 //! - `wallet_operations`: Wallet operations using BDK
 //! - `address_book`: Bitcoin address book functionality
-//! - `utxo_selection`: UTXO selection algorithms and utilities
-//! - `utxo_management`: UTXO management functionality
+//! - `utxo_selection`: UTXO selection algorithms and utilities with event-driven architecture
+//! - `utxo_management`: UTXO management functionality with event-driven capabilities
 //! - `network_status`: Bitcoin network status tracking utilities
 //! - `fee_estimation`: Fee estimation utilities
 //! - `key_management`: Key management functionality for secure handling of wallet keys
@@ -27,6 +28,7 @@
 //! - Secure logging practices
 //! - Type safety for Bitcoin operations
 //! - Platform-specific security features
+//! - Event-driven architecture for better encapsulation of sensitive components
 //!
 //! This library leverages BDK (Bitcoin Development Kit) for core Bitcoin functionality.
 
@@ -40,12 +42,33 @@ pub mod math;
 pub mod logging;
 
 /// Platform-specific functionality
+///
+/// Provides abstractions for platform-specific operations including:
+/// - File paths and directory handling
+/// - Secure storage locations
+/// - Memory protection
+/// - OS-specific security features
+///
+/// This module uses a provider-based architecture that allows for:
+/// - Platform-specific implementations with a common interface
+/// - Runtime detection of platform capabilities
+/// - Testing with mock implementations
+/// - Feature flags for optional platform-specific features
 pub mod platform;
 
 /// Configuration management
 pub mod config;
 
-/// Events module for testing
+/// Enhanced configuration management with profiles and validation
+pub mod config_manager;
+
+/// Event system for domain-specific and general event publishing/subscribing
+///
+/// Implements an event-driven architecture pattern with:
+/// - General message bus for system-wide events
+/// - Domain-specific event buses for targeted functionality
+/// - Asynchronous communication between components
+/// - Publisher/subscriber pattern
 pub mod events;
 
 /// Internationalization and localization support
@@ -57,10 +80,42 @@ pub mod wallet_operations;
 /// Address book functionality
 pub mod address_book;
 
-/// UTXO selection algorithms and utilities
+/// UTXO selection algorithms and utilities (modular implementation)
+///
+/// Implements the Strategy pattern for UTXO selection with event-driven integration:
+/// - Multiple selection strategies (minimize fee, maximize privacy, etc.)
+/// - Event publishing for operation monitoring
+/// - Domain-specific event bus for UTXO-related events
 pub mod utxo_selection;
 
+/// Original UTXO selection implementation (legacy)
+/// 
+/// @deprecated This is kept for backward compatibility but will be removed in a future version.
+/// Use the modular utxo_selection instead.
+///
+/// This module is not meant to be used directly. Instead, use the types and utilities
+/// re-exported at the crate root or from the `utxo_selection` module.
+#[deprecated(since = "0.2.0", note = "Use the modular utxo_selection module instead")]
+mod utxo_selection_orig;
+
+/// UTXO selection fixed implementation (legacy)
+/// 
+/// @deprecated This is kept for backward compatibility but will be removed in a future version.
+/// Use the modular utxo_selection instead.
+#[deprecated(since = "0.2.0", note = "Use the modular utxo_selection module instead")]
+mod utxo_selection_fixed;
+
+/// UTXO selection v2 (future implementation)
+#[doc(hidden)]
+pub mod utxo_selection_v2;
+
 /// UTXO management functionality
+///
+/// Manages the lifecycle of UTXOs with event-driven capabilities:
+/// - UTXO tracking and status management
+/// - Integration with UTXO selection strategies
+/// - Event publishing for wallet state changes
+/// - Domain-specific event handling for UTXO operations
 pub mod utxo_management;
 
 /// Bitcoin network status tracking utilities
@@ -75,13 +130,18 @@ pub mod key_management;
 /// Re-export address book types
 pub use address_book::{AddressBook, AddressEntry, AddressCategory};
 
-/// Re-export UTXO selection types
-pub use utxo_selection::{
-    Utxo, UtxoSet, UtxoSelector, SelectionStrategy, SelectionResult,
+/// Re-export UTXO selection types and utilities
+pub use utxo_selection::types::{
+    Utxo, UtxoSet, SelectionStrategy, SelectionResult,
 };
+pub use utxo_selection::selector::UtxoSelector;
 
-/// Re-export UTXO selection sub-modules
-pub use utxo_selection::{persistence, tagging, advanced};
+/// Backward compatibility re-exports for utxo_selection module
+#[deprecated(since = "0.2.0", note = "Use imports from utxo_selection sub-modules instead")]
+pub mod utxo_selection_compat {
+    pub use crate::utxo_selection::types::{Utxo, UtxoSet, SelectionStrategy, SelectionResult};
+    pub use crate::utxo_selection::selector::UtxoSelector;
+}
 
 // Re-export important Bitcoin and BDK types
 pub use bdk::{blockchain, wallet, Balance, FeeRate, TransactionDetails};
@@ -120,7 +180,11 @@ pub use network_status::MockNetworkStatusProvider;
 
 // Re-export mock platform provider for testing only
 #[cfg(test)]
-pub use platform::MockPlatformProvider;
+pub use platform::mock::MockPlatformProvider;
+
+// Re-export platform testing utilities
+pub use platform::mock;
+pub use platform::set_platform_provider;
 
 /// Re-export fee estimation types and utilities
 pub use fee_estimation::{
@@ -132,6 +196,18 @@ pub use fee_estimation::{
     adjust_fee_for_congestion,
     create_recommendations,
     create_recommendations_from_provider,
+};
+
+/// Re-export event types
+pub use events::{
+    MessageBus,
+    EventType,
+    MessagePriority,
+    KeyManagementEvent,
+    KeyManagementBus,
+    UtxoEvent,
+    UtxoEventBus,
+    OutPointInfo,
 };
 
 /// Library version information
@@ -439,7 +515,89 @@ pub mod version {
     }
 }
 
-// Re-export KeyManagementEvent and KeyManagementBus from events module
-pub use events::{KeyManagementEvent, KeyManagementBus};
-
 // No test modules declared here - integration tests are in the tests/ directory
+
+// Backward compatibility wrapper for existing code
+#[doc(hidden)]
+pub mod compat {
+    // UTXO selection types and utilities
+    pub use crate::utxo_selection::types::{Utxo, UtxoSet, SelectionStrategy, SelectionResult};
+    pub use crate::utxo_selection::selector::UtxoSelector;
+    
+    pub use crate::address_book::{AddressBook, AddressEntry, AddressCategory};
+    
+    // This implementation will be used if old code tries to call add_entry with 4 arguments
+    impl crate::address_book::AddressBook {
+        #[allow(unused_variables)]
+        pub fn add_entry_compat(
+            &mut self,
+            address: &str,
+            label: &str,
+            notes: Option<&str>,
+            category: crate::address_book::AddressCategory,
+            message_bus: Option<&dyn std::any::Any>,
+        ) -> Result<(), crate::types::WalletError> {
+            self.add_entry_simple(address, label, notes, category)
+        }
+    }
+}
+
+#[cfg(test)]
+mod address_book_test {
+    use crate::address_book::{AddressBook, AddressCategory};
+    use bitcoin::Network;
+    
+    #[test]
+    fn address_book() {
+        // Create a new address book for mainnet
+        let mut address_book = AddressBook::new(Network::Bitcoin);
+        
+        // Add an entry
+        address_book.add_entry_simple(
+            "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+            "Satoshi Donation",
+            Some("First ever Bitcoin address"),
+            AddressCategory::Donation
+        ).expect("Failed to add entry");
+        
+        // Verify the entry was added
+        let entry = address_book.get_entry("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa").expect("Entry not found");
+        assert_eq!(entry.label, "Satoshi Donation");
+    }
+}
+
+#[cfg(test)]
+mod utxo_selection_test {
+    // Import directly from the crate root where these are re-exported
+    use crate::{Utxo, UtxoSelector, SelectionStrategy, SelectionResult};
+    use bitcoin::{Amount, Network, OutPoint, Txid};
+    use std::str::FromStr;
+    
+    #[test]
+    fn utxo_selection_orig() {
+        // Simple test to verify imports
+        let selector = UtxoSelector::new();
+        let strategy = SelectionStrategy::MinimizeFee;
+        
+        // Create a test UTXO with a valid txid
+        let txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+        let outpoint = OutPoint::new(txid, 0);
+        let amount = Amount::from_sat(10000);
+        let _utxo = Utxo::new(outpoint, amount, 0, false);
+        
+        // Just testing that types can be used correctly
+        let _result: Option<SelectionResult> = None;
+    }
+}
+
+// Re-export platform types and functions for convenience
+pub use platform::{
+    get_platform_type, 
+    platform,
+    PlatformError,
+    PlatformResult
+};
+
+// Re-export platform types directly from their modules
+pub use platform::types::PlatformType;
+pub use platform::capabilities::PlatformCapabilities;
