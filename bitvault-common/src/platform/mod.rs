@@ -193,11 +193,38 @@ pub fn platform() -> PlatformProviderRef {
 }
 
 /// For tests, allow replacing the global instance
+/// 
+/// This sets the test platform provider that will be used by all subsequent calls
+/// to platform() until reset_platform_provider() is called.
+/// 
+/// # Thread Safety
+/// This function uses a mutex to ensure thread-safe access to the global provider.
+/// 
+/// # Example
+/// ```
+/// use bitvault_common::platform::{set_platform_provider, platform};
+/// use bitvault_common::platform::mock::MockPlatformProvider;
+/// 
+/// let mock = MockPlatformProvider::new()
+///     .with_secure_storage(true);
+/// 
+/// set_platform_provider(Box::new(mock));
+/// 
+/// // Now platform() will use our mock
+/// assert!(platform().get_capabilities().has_secure_storage);
+/// ```
 pub fn set_platform_provider(provider: Box<dyn PlatformProvider>) {
     println!("Setting test platform provider");
     
-    // Activate the test provider
+    // Reset any previous provider first to ensure clean state
     if let Ok(mut active) = TEST_PROVIDER_ACTIVE.lock() {
+        if *active {
+            if let Ok(mut test_provider) = TEST_PROVIDER.lock() {
+                *test_provider = None;
+            }
+        }
+        
+        // Now activate the new provider
         *active = true;
     }
     
@@ -207,6 +234,27 @@ pub fn set_platform_provider(provider: Box<dyn PlatformProvider>) {
         println!("Test platform provider set successfully");
     } else {
         println!("Failed to set test platform provider - couldn't acquire lock");
+    }
+}
+
+/// Reset the platform provider to the default implementation
+/// 
+/// This removes any test provider that was set with set_platform_provider()
+/// and restores the default platform-specific implementation.
+pub fn reset_platform_provider() {
+    println!("Resetting to default platform provider");
+    
+    // Deactivate the test provider
+    if let Ok(mut active) = TEST_PROVIDER_ACTIVE.lock() {
+        *active = false;
+    }
+    
+    // Clear the test provider
+    if let Ok(mut test_provider) = TEST_PROVIDER.lock() {
+        *test_provider = None;
+        println!("Platform provider reset successfully");
+    } else {
+        println!("Failed to reset platform provider - couldn't acquire lock");
     }
 }
 

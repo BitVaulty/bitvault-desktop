@@ -185,6 +185,7 @@ pub use platform::mock::MockPlatformProvider;
 // Re-export platform testing utilities
 pub use platform::mock;
 pub use platform::set_platform_provider;
+pub use platform::reset_platform_provider;
 
 /// Re-export fee estimation types and utilities
 pub use fee_estimation::{
