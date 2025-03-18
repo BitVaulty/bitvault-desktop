@@ -1,10 +1,10 @@
-# Setting Up SSH Access to the BitVaultWallet Repository
+# Setting Up SSH Access to the BitVault Repository
 
-This guide will walk you through setting up SSH authentication to access the private BitVaultWallet repository on GitHub.
+This guide will walk you through setting up SSH authentication to access the BitVault repository on GitHub, with special consideration for the security-focused nature of the project.
 
 ## Generate an SSH Key
 
-1. Open your terminal and run the following command to generate a new SSH key:
+1. Open your terminal and run the following command to generate a new SSH key using Ed25519 (a more secure algorithm):
 
    ```bash
    ssh-keygen -t ed25519 -C "your.email@example.com"
@@ -12,7 +12,7 @@ This guide will walk you through setting up SSH authentication to access the pri
 
 2. When prompted for a file location, press Enter to accept the default location (`~/.ssh/id_ed25519`).
 
-3. You'll be asked to enter a passphrase. For better security, create a strong passphrase. This adds an extra layer of security if someone gains access to your computer.
+3. You'll be asked to enter a passphrase. Since BitVault is security-focused, it's critical to create a strong passphrase. This adds an essential layer of security if someone gains access to your computer.
 
 ## Add Your SSH Key to the SSH Agent
 
@@ -26,6 +26,13 @@ This guide will walk you through setting up SSH authentication to access the pri
 
    ```bash
    ssh-add ~/.ssh/id_ed25519
+   ```
+
+3. For added security, consider setting a timeout for your SSH keys:
+
+   ```bash
+   # Add key with a 4-hour timeout
+   ssh-add -t 4h ~/.ssh/id_ed25519
    ```
 
 ## Add Your SSH Key to GitHub
@@ -46,7 +53,7 @@ This guide will walk you through setting up SSH authentication to access the pri
 
 5. Click **New SSH key** or **Add SSH key**.
 
-6. In the "Title" field, add a descriptive label for the key (e.g., "Work Laptop").
+6. In the "Title" field, add a descriptive label for the key (e.g., "BitVault Development Machine").
 
 7. Paste your key into the "Key" field.
 
@@ -69,13 +76,37 @@ If everything is set up correctly, you'll see a message like:
 Hi username! You've successfully authenticated, but GitHub does not provide shell access.
 ```
 
-## Clone the BitVaultWallet Repository
+## Clone the BitVault Repository
 
-Now you can clone the private repository using SSH:
+Now you can clone the repository using SSH:
 
 ```bash
 git clone git@github.com:BitVaulty/BitVaultWallet.git
 ```
+
+## Security Considerations for BitVault Development
+
+Due to the security-critical nature of BitVault, follow these additional security practices:
+
+1. **Private Key Security**:
+   - Never share your private SSH key with anyone
+   - Keep your key passphrase strong and unique
+   - Consider hardware security keys (like YubiKey) for SSH authentication
+
+2. **Repository Security**:
+   - Be extremely careful when pushing code that deals with cryptographic operations
+   - Never commit sensitive test data, private keys, or seeds
+   - Ensure all security-critical code undergoes proper review
+
+3. **Development Machine Security**:
+   - Keep your development machine updated with security patches
+   - Consider using disk encryption (like LUKS on Linux)
+   - Be cautious when installing software from untrusted sources
+
+4. **Working with Security-Critical Code**:
+   - Pay special attention when modifying code in `bitvault-core`
+   - All modifications crossing security boundaries require thorough review
+   - Follow the security guidelines in the project documentation
 
 ## Working with the Repository
 
@@ -99,6 +130,23 @@ After cloning, set up your development environment as described in the project d
    ```
 
 4. Create a pull request through the GitHub web interface.
+
+5. For security-critical changes, explicitly request review from security team members.
+
+## Setting Up Git Hooks for Security
+
+BitVault uses Git hooks to prevent accidental commits of sensitive information:
+
+```bash
+# Enable the pre-commit hook
+cp .github/hooks/pre-commit .git/hooks/
+chmod +x .git/hooks/pre-commit
+
+# Test the pre-commit hook
+echo "TEST_SEED_PHRASE='word1 word2 word3'" > test_file.txt
+git add test_file.txt
+git commit -m "Test commit"  # This should be blocked by the hook
+```
 
 ## Troubleshooting SSH Issues
 

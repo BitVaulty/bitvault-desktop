@@ -1,69 +1,104 @@
-# BitVault
+# BitVault Wallet
 
-A secure multi-signature wallet
+BitVault is a secure Bitcoin wallet built with Rust, focusing on security, reliability, and proper isolation of cryptographic operations.
 
-## Architecture
+## Project Structure
 
-BitVault uses a workspace structure with the following components:
-
-- **bitvault-ui**: Leptos-based frontend (WASM)
-- **bitvault-app**: Tauri application shell
-- **bitvault-ipc**: IPC layer between app and core
-- **bitvault-core**: Secure cryptographic core
-- **bitvault-common**: Shared types and utilities
+BitVault is a Rust workspace project with the following crates:
+- `bitvault-app` - Main application crate that ties everything together
+- `bitvault-core` - Core wallet functionality and cryptographic operations
+- `bitvault-common` - Shared utilities and types
+- `bitvault-ipc` - Inter-process communication between components
+- `bitvault-ui` - User interface components
 
 ## Development Setup
 
 ### Prerequisites
 
-Make sure you have installed the prerequisites for your OS: https://v2.tauri.app
+- Rust (latest stable)
+- Cargo (Rust package manager)
+- Familiarity with Bitcoin concepts (for core functionality)
 
-For Arch Linux users, refer to the [Development Environment Setup](./docs/setup/arch-linux-setup.md) guide.
+### Installation
 
-### Repository Access
+1. Clone the repository:
+   ```
+   git clone https://github.com/yourusername/BitVaultWallet.git
+   cd BitVaultWallet
+   ```
 
-To access the private repository, follow the [SSH setup instructions](./docs/setup/ssh-guide.md).
+2. Install dependencies:
+   ```
+   make setup
+   ```
 
-### Recommended IDE Setup
+### Development
 
-[VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer).
-
-## Build and Run
-
-The project uses a Rust workspace structure. You can build and run using the Makefile or from individual component directories.
-
-### Using the Makefile
-
-Run the desktop app in development mode:
-```bash
+To start the development server:
+```
 make dev
 ```
 
-Run the UI only:
-```bash
-make ui
+This will launch the application in development mode.
+
+### Building
+
+To build the application for production:
+```
+make build
 ```
 
-Build the UI with trunk:
-```bash
-make trunk
+This will create platform-specific binaries in the release directory.
+
+### Testing
+
+To run tests:
+```
+make test
 ```
 
-Run the Android app in development mode:
-```bash
-make android
+### Linting
+
+To lint the codebase:
+```
+make lint
 ```
 
-### From the Root Directory
-
-Build all components:
-```bash
-cargo build --workspace
+To automatically fix linting issues:
+```
+make lint-fix
 ```
 
-Run tests for all components:
-```bash
-cargo test --workspace
-```
+## Documentation
 
-Then access at: http://localhost:1777
+For detailed documentation on the BitVault architecture, API, and security model, please refer to the [docs/](docs/) directory.
+
+## Contributing
+
+We welcome contributions to BitVault! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to make contributions.
+
+This includes information on:
+- Code style and standards
+- Pull request process
+- Development workflow
+- Testing requirements
+
+## Code of Conduct
+
+This project adheres to a [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) that all contributors are expected to follow. Please read it before participating.
+
+## Security
+
+BitVault prioritizes security in handling Bitcoin keys and transactions. The wallet implements proper security isolation between UI components and core cryptographic operations.
+
+Key security features include:
+- Separation of cryptographic operations from UI code
+- Secure entropy generation for key creation
+- Encrypted storage of sensitive data
+- Memory protection for private key operations
+
+If you discover a security vulnerability, please refer to our [SECURITY.md](SECURITY.md) for the responsible disclosure process.
+
+## License
+
+[Apache License 2.0](LICENSE)

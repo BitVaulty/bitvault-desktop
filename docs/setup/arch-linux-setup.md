@@ -1,4 +1,7 @@
-# Development Environment Setup for Multi-Signature Wallet on Arch Linux
+# BitVault Development Environment Setup for Arch Linux
+
+## Overview
+This guide helps you set up a development environment for BitVault, a Bitcoin-only wallet with a focus on security through a 2-of-3 threshold signature scheme and strict security boundaries.
 
 ## Prerequisites
 This guide assumes you have:
@@ -9,15 +12,15 @@ This guide assumes you have:
 
 Install essential development tools and libraries:
 ```bash
-sudo pacman -S base-devel git cmake nodejs npm openssl pkg-config
+sudo pacman -S base-devel git cmake openssl pkg-config libxcb xcb-util-keysyms libxkbcommon
 ```
 
 This installs:
 - Base development tools (compilers, make, etc.)
 - Git for version control
 - CMake for build configuration
-- Node.js and npm (for Figma integration)
 - OpenSSL and pkg-config (for cryptographic functions)
+- X11 libraries required for egui
 
 ## Step 2: Install Rust
 Arch Linux provides rustup for managing Rust installations:
@@ -31,7 +34,7 @@ Initialize rustup and install the stable toolchain:
 rustup default stable
 ```
 
-Add WebAssembly target:
+Add WebAssembly target (for future web interface development):
 ```bash
 rustup target add wasm32-unknown-unknown
 ```
@@ -44,19 +47,31 @@ cargo --version
 
 ## Step 3: Set Up WebAssembly Support
 
-Install the WebAssembly tools:
+Install the WebAssembly tools (for future web interface development):
 ```bash
 cargo install wasm-pack
 ```
 
 ## Step 4: Install Trunk for Web Development
 
-Trunk is a WASM web application bundler for Rust:
+Trunk is a WASM web application bundler for Rust (for future web interface):
 ```bash
 cargo install trunk
 ```
 
-## Step 5: Choose and Install Your IDE
+## Step 5: Install Bitcoin Development Kit Tools
+
+BitVault relies on the Bitcoin Development Kit (BDK) for Bitcoin operations:
+
+```bash
+# Install Bitcoin Core for testing (optional but recommended)
+sudo pacman -S bitcoin
+
+# Install SQLite for BDK storage
+sudo pacman -S sqlite
+```
+
+## Step 6: Choose and Install Your IDE
 
 You have three options for your development environment:
 
@@ -94,23 +109,19 @@ chmod +x Cursor.AppImage
 ./Cursor.AppImage
 ```
 
-Or use Flatpak:
-```bash
-flatpak install flathub sh.cursor.Cursor
-flatpak run sh.cursor.Cursor
-```
-
-## Step 6: Configure Your IDE for Rust Development
+## Step 7: Configure Your IDE for Rust Development
 
 Install these helpful extensions from the marketplace:
 - Rust Analyzer: For Rust language support
 - Even Better TOML: For better TOML file editing
-- WebAssembly: For WASM support
+- LLDB: For debugging
+- WebAssembly: For WASM support (for future web interface)
 
 ### For VSCode:
 ```bash
 code --install-extension rust-lang.rust-analyzer
 code --install-extension tamasfe.even-better-toml
+code --install-extension vadimcn.vscode-lldb
 code --install-extension ms-vscode.wasm-wasi-core
 ```
 
@@ -118,62 +129,81 @@ code --install-extension ms-vscode.wasm-wasi-core
 ```bash
 codium --install-extension rust-lang.rust-analyzer
 codium --install-extension tamasfe.even-better-toml
+codium --install-extension vadimcn.vscode-lldb
 codium --install-extension ms-vscode.wasm-wasi-core
-codium --install-extension GitHub.copilot
-codium --install-extension GitHub.copilot-chat
 ```
-
-Note: GitHub Copilot requires a subscription and authentication with your GitHub account.
 
 ### For Cursor IDE:
 ```bash
 cursor --install-extension rust-lang.rust-analyzer
 cursor --install-extension tamasfe.even-better-toml
+cursor --install-extension vadimcn.vscode-lldb
 cursor --install-extension ms-vscode.wasm-wasi-core
 ```
 
-Note: Cursor IDE comes with built-in AI capabilities that can assist with coding, debugging, and understanding the codebase.
+## Step 8: Security-Specific Setup for Development
 
-## Step 7: Project Setup
+BitVault uses process isolation as a security boundary. Set up the necessary tools for security testing:
 
-For instructions on setting up SSH access and cloning the project repository, refer to the [SSH Access Setup Guide](./ssh-access-setup.md) in the same directory.
+```bash
+# Install tools for security isolation testing
+sudo pacman -S strace ltrace valgrind
+
+# Set up seccomp-bpf development tools
+sudo pacman -S libseccomp linux-headers
+
+# Optional: Install IPC testing tools
+sudo pacman -S socat netcat
+```
+
+## Step 9: Project Setup
+
+For instructions on setting up SSH access and cloning the project repository, refer to the [SSH Access Setup Guide](./ssh-guide.md) in the same directory.
 
 Once you have cloned the repository, build the project:
 ```bash
+# Build the entire workspace
 cargo build --workspace
+
+# Build specific crates
+cargo build -p bitvault-core
+cargo build -p bitvault-ui
 ```
 
-This will download and compile all dependencies specified in your `Cargo.toml` files.
+## Step 10: Run the Development Environment
 
-## Step 8: Run the Development Server
-
-Start the development server:
 ```bash
+# Run the development build with security isolation
 make dev
+
+# Run tests for the core module
+cargo test -p bitvault-core
+
+# Run tests for the UI module
+cargo test -p bitvault-ui
+
+# Run security boundary tests
+make security-test
 ```
 
-For Android development:
+For future web development:
 ```bash
-make android
+# Run the web development server
+trunk serve
 ```
 
-This will:
-1. Compile your Rust code
-2. Start the development environment
-3. Launch the application in development mode
+## Step 11: Development Workflow
 
-## Step 9: Development Workflow
+BitVault consists of multiple crates separated by security boundaries:
+- `bitvault-core`: Security-critical operations within the secure boundary
+- `bitvault-common`: Shared code that crosses boundaries
+- `bitvault-ui`: User interface using egui
+- `bitvault-app`: Platform integration and process management
 
-1. Edit your Rust code in your chosen IDE
-2. When you save, Trunk will automatically rebuild and refresh the browser
-3. Check the terminal for any compile errors
-
-### Cursor IDE-Specific Features
-If using Cursor IDE, you can take advantage of its AI features:
-- Use Cmd+K / Ctrl+K to get AI assistance with code understanding
-- Generate code explanations and documentation
-- Get help with implementing complex algorithms
-- Debug issues with AI assistance
+When developing, be mindful of the security boundaries:
+1. Never move security-critical code outside of `bitvault-core`
+2. Be cautious when modifying IPC interfaces in `bitvault-common`
+3. All key operations must remain within the secure process
 
 ## Troubleshooting
 
@@ -197,14 +227,30 @@ source ~/.bashrc
 ```
 
 ### WebAssembly Optimization Issues
-For better WASM optimization:
+For better WASM optimization (future web interface):
 ```bash
 sudo pacman -S binaryen
 ```
 
-### Rust Toolchain Issues
-If you encounter problems with the Rust toolchain:
+### Security Boundary Testing Issues
+If you encounter problems with process isolation or IPC:
 ```bash
-rustup update
-rustup target add wasm32-unknown-unknown
+# Check if IPC mechanisms are working properly
+ls -la /run/user/$(id -u)/
 ```
+
+### Permission Issues with Secure Process
+If the secure process fails to start with permission errors:
+```bash
+# Check seccomp filter capabilities
+grep SECCOMP /boot/config-$(uname -r)
+
+# Ensure proper namespace permissions
+sudo sysctl -w kernel.unprivileged_userns_clone=1
+```
+
+## Additional Resources
+
+- Refer to the project documentation under `docs/design/` for comprehensive information about BitVault's architecture and security model
+- See `docs/design/architecture-overview.md` for the codebase structure
+- Review `docs/design/security-boundaries.md` for details on security isolation
