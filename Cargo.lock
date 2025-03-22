@@ -625,17 +625,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6099cdc01846bc367c4e7dd630dc5966dccf36b652fae7a74e17b640411a91b2"
 
 [[package]]
-name = "bitvault-common"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "log",
- "serde",
- "serde_json",
- "zeroize",
-]
-
-[[package]]
 name = "bitvault-core"
 version = "0.1.0"
 dependencies = [
@@ -643,24 +632,14 @@ dependencies = [
  "anyhow",
  "argon2",
  "bip39",
- "bitvault-common",
- "bitvault-ipc",
  "getrandom 0.3.2",
+ "hex",
  "log",
+ "phc",
  "rand 0.9.0",
  "serde",
  "serde_json",
  "zeroize",
-]
-
-[[package]]
-name = "bitvault-ipc"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bitvault-common",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -671,8 +650,7 @@ dependencies = [
  "anyhow",
  "argon2",
  "bip39",
- "bitvault-common",
- "bitvault-ipc",
+ "bitvault-core",
  "dirs",
  "eframe",
  "egui",

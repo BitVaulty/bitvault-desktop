@@ -2,9 +2,8 @@
 resolver = "2"
 default-members = ["bitvault-ui"]
 members = [
-    "bitvault-ui",     # Current Leptos frontend
-    "bitvault-core",   # Security-focused core component
-    "bitvault-common", # Shared types and utilities
+    "bitvault-ui",   # Current Leptos frontend
+    "bitvault-core", # Security-focused core component
 ]
 
 # Workspace-wide settings (shared by all members)
@@ -38,4 +37,4 @@ lto = false
 # This is a key addition - define specific target configuration
 [workspace.metadata.leptos]
 # Components that can be built for wasm
-wasm-components = ["bitvault-ui", "bitvault-core", "bitvault-common"]
+wasm-components = ["bitvault-ui", "bitvault-core"]
