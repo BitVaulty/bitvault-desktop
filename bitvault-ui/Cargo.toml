@@ -22,7 +22,7 @@ getrandom.workspace = true
 # egui dependencies
 eframe = "0.26.2"
 egui = "0.26.2"
-egui_extras = "0.26.2"
+egui_extras = { version = "0.26.2", features = ["svg"] }
 egui_plot = "0.26.2"
 
 # Logging
@@ -41,3 +41,6 @@ image = "0.25.5"
 # Internal dependencies
 bitvault-core = { path = "../bitvault-core" }
 toml = "0.8.20"
+usvg = "0.45.0"
+resvg = "0.45.0"
+tiny-skia = "0.11.4"

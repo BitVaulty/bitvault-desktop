@@ -9,6 +9,7 @@ use eframe::{
     egui::{self, Color32, Context, Id, Rect, RichText, Ui},
     CreationContext,
 };
+use egui_extras::RetainedImage;
 use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
 
@@ -74,13 +75,84 @@ pub struct BitVaultApp {
     settings: Settings,
 }
 
+// Add this helper module for asset management at the top level before BitVaultApp struct
+mod assets {
+    use eframe::egui;
+    use egui_extras::RetainedImage;
+    use std::path::PathBuf;
+    use std::sync::OnceLock;
+
+    // Base paths to try for asset loading
+    const BASE_PATHS: [&str; 3] = ["bitvault-ui", ".", ".."];
+
+    // Find the correct base path once
+    fn get_base_path() -> &'static PathBuf {
+        static BASE_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+        BASE_PATH.get_or_init(|| {
+            for base in BASE_PATHS {
+                let path = PathBuf::from(base);
+                if path.exists() {
+                    return path;
+                }
+            }
+            // Default to current directory if nothing found
+            PathBuf::from(".")
+        })
+    }
+
+    // Load a font file
+    pub fn load_font(font_name: &str) -> Option<Vec<u8>> {
+        let base = get_base_path();
+        let font_path = base.join("assets").join(font_name);
+
+        std::fs::read(&font_path).ok()
+    }
+
+    // Load an image file
+    pub fn load_image(path: &str) -> Option<Vec<u8>> {
+        let base = get_base_path();
+        let img_path = base.join(path);
+
+        std::fs::read(&img_path).ok()
+    }
+
+    // Load an SVG file
+    pub fn load_svg(name: &str, path: &str) -> Option<RetainedImage> {
+        let base = get_base_path();
+        let svg_path = base.join(path);
+
+        std::fs::read_to_string(&svg_path)
+            .ok()
+            .and_then(|svg_data| RetainedImage::from_svg_str(name, &svg_data).ok())
+    }
+
+    // Get a texture handle for an image
+    pub fn get_image_texture(
+        ctx: &egui::Context,
+        name: &str,
+        path: &str,
+    ) -> Option<egui::TextureHandle> {
+        load_image(path).and_then(|image_data| {
+            image::load_from_memory(&image_data).ok().map(|image| {
+                let size = [image.width() as _, image.height() as _];
+                let image_buffer = image.to_rgba8();
+                let pixels = image_buffer.as_flat_samples();
+
+                let color_image = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
+                ctx.load_texture(name, color_image, Default::default())
+            })
+        })
+    }
+}
+
 impl BitVaultApp {
     pub fn new(cc: &CreationContext<'_>) -> Self {
         // Attempt to configure a font with good Unicode support
         let mut fonts = egui::FontDefinitions::default();
 
         // Try to add Noto Sans which has good Unicode character support
-        if let Ok(font_data) = std::fs::read("bitvault-ui/assets/NotoSans-Regular.ttf") {
+        if let Some(font_data) = assets::load_font("NotoSans-Regular.ttf") {
             log::info!("Successfully loaded Noto Sans font");
 
             // Add font data
@@ -231,15 +303,12 @@ impl BitVaultApp {
             ui.label("Choose a secure PIN to protect your wallet");
             ui.add_space(10.0);
 
-            let mut pin_input = String::new();
-            let mut pin_confirm = String::new();
-            let mut back_button_clicked = false;
-
-            // Read current state values
-            if let Ok(state) = self.state.read() {
-                pin_input = state.pin_input.clone();
-                pin_confirm = state.pin_confirm.clone();
-            }
+            // Read current state values once
+            let (mut pin_input, mut pin_confirm) = if let Ok(state) = self.state.read() {
+                (state.pin_input.clone(), state.pin_confirm.clone())
+            } else {
+                (String::new(), String::new())
+            };
 
             // PIN input fields
             ui.horizontal(|ui| {
@@ -251,7 +320,7 @@ impl BitVaultApp {
                         .desired_width(200.0),
                 );
 
-                // Update state with new input
+                // Update state with new input if changed
                 if response.changed() {
                     if let Ok(mut state) = self.state.write() {
                         state.pin_input = pin_input.clone();
@@ -270,21 +339,11 @@ impl BitVaultApp {
                         .desired_width(200.0),
                 );
 
-                // Update state with new input
+                // Update state with new input if changed
                 if response.changed() {
                     if let Ok(mut state) = self.state.write() {
                         state.pin_confirm = pin_confirm.clone();
                     }
-                }
-
-                // Check for Enter key press
-                let enter_pressed =
-                    response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                if enter_pressed {
-                    // Store the enter key state in memory for use outside this scope
-                    ui.memory_mut(|mem| {
-                        mem.data.insert_temp(Id::new("pin_enter_pressed"), true);
-                    });
                 }
             });
 
@@ -293,23 +352,15 @@ impl BitVaultApp {
             // Calculate pin_valid based on current values
             let pin_valid = !pin_input.is_empty() && pin_input == pin_confirm;
 
-            // Get the enter key state from memory
-            let enter_pressed = ui
-                .memory(|mem| mem.data.get_temp::<bool>(Id::new("pin_enter_pressed")))
-                .unwrap_or(false);
-
             // Set PIN button
             if ui
                 .add_enabled(pin_valid, egui::Button::new("Set PIN"))
                 .clicked()
-                || (enter_pressed && pin_valid)
             {
-                log::info!("Set PIN button clicked, PIN is valid: {}", pin_valid);
-
                 if pin_valid {
                     if let Ok(mut state) = self.state.write() {
                         // Store the PIN
-                        state.user_pin = Some(pin_input.clone());
+                        state.user_pin = Some(pin_input);
                         log::info!("PIN set successfully");
 
                         // Clear the input fields for security
@@ -319,25 +370,18 @@ impl BitVaultApp {
                         // Move to the next step
                         if state.wallet_state == WalletState::Creating {
                             log::info!("Moving to Seed view for new wallet creation");
-                            // For creating a new wallet, move to the seed view
                             state.current_view = View::Seed;
                         } else if state.wallet_state == WalletState::Restoring {
                             log::info!("Moving to Seed view for wallet restoration");
-                            // For restoring, go to the seed view where the user can enter their seed phrase
                             state.current_view = View::Seed;
                         }
                     }
                 }
             }
 
-            // Back button
+            // Back button with simpler structure
             let back_response = ui.button("Go Back");
             if back_response.clicked() {
-                back_button_clicked = true;
-            }
-
-            // Handle back button click outside the state read lock
-            if back_button_clicked {
                 if let Ok(mut state) = self.state.write() {
                     state.current_view = View::Disclaimer;
                 }
@@ -501,16 +545,14 @@ impl BitVaultApp {
             );
 
             // Read state once to get the values we need
-            let (original_seed, mut verification_input, mut verification_result) =
-                if let Ok(state) = self.state.read() {
-                    (
-                        state.seed_phrase.clone().unwrap_or_default(),
-                        state.verification_input.clone(),
-                        None,
-                    )
-                } else {
-                    (String::new(), String::new(), None)
-                };
+            let (original_seed, mut verification_input) = if let Ok(state) = self.state.read() {
+                (
+                    state.seed_phrase.clone().unwrap_or_default(),
+                    state.verification_input.clone(),
+                )
+            } else {
+                (String::new(), String::new())
+            };
 
             ui.add_space(20.0);
 
@@ -529,10 +571,6 @@ impl BitVaultApp {
                 }
             }
 
-            // Check for Enter key press
-            let enter_pressed =
-                response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-
             ui.add_space(20.0);
 
             // Check if the entered text matches the original seed phrase
@@ -549,53 +587,25 @@ impl BitVaultApp {
 
             ui.add_space(10.0);
 
-            let verify_clicked = ui.button("Verify").clicked();
-            let back_button = ui.add(egui::Button::new("Go Back"));
-            let back_clicked = back_button.clicked();
-
-            // Store the back button rect for the icon
-            if back_button.rect.width() > 0.0 {
-                ui.memory_mut(|mem| {
-                    mem.data
-                        .insert_temp(Id::new("back_button"), back_button.rect)
-                });
-            }
-
-            // Handle button clicks outside of any locks
-            if verify_clicked || enter_pressed {
-                if is_correct {
-                    // Verification successful - update state once
-                    if let Ok(mut state) = self.state.write() {
-                        log::info!("Seed verification successful, moving to wallet view");
-                        state.current_view = View::Wallet;
-                        state.wallet_state = WalletState::Unlocked;
-                    }
-                } else {
-                    // Verification failed
-                    log::warn!("Seed verification failed - phrases don't match");
-                    verification_result = Some(false);
+            // Verify button
+            if ui.button("Verify").clicked() && is_correct {
+                if let Ok(mut state) = self.state.write() {
+                    log::info!("Seed verification successful, moving to wallet view");
+                    state.current_view = View::Wallet;
+                    state.wallet_state = WalletState::Unlocked;
                 }
             }
 
-            if back_clicked {
+            // Back button with simpler structure
+            let back_button = ui.button("Go Back");
+            if back_button.clicked() {
                 if let Ok(mut state) = self.state.write() {
                     state.current_view = View::Seed;
                 }
             }
 
-            // Show verification result if needed
-            if let Some(false) = verification_result {
-                ui.add_space(5.0);
-                ui.label(
-                    RichText::new("Verification failed. Please check your recovery phrase.")
-                        .color(Color32::RED),
-                );
-            }
-
             // Draw back button icon
-            if let Some(rect) = ui.memory(|m| m.data.get_temp::<Rect>(Id::new("back_button"))) {
-                crate::icons::draw_caret_left(ui, rect, Color32::WHITE);
-            }
+            crate::icons::draw_caret_left(ui, back_button.rect, Color32::WHITE);
         });
     }
 
@@ -829,42 +839,8 @@ impl BitVaultApp {
             static TEXTURE_ID: OnceLock<Option<egui::TextureHandle>> = OnceLock::new();
 
             let texture_id = TEXTURE_ID.get_or_init(|| {
-                log::debug!("Loading image - this should only happen once");
-
-                // Try to load the image from the file system - try multiple paths
-                let possible_paths = [
-                    "public/splash_logo.png",
-                    "./public/splash_logo.png",
-                    "../public/splash_logo.png",
-                    "bitvault-ui/public/splash_logo.png",
-                ];
-
-                for path in possible_paths {
-                    log::debug!("Trying to load image from: {}", path);
-                    if let Ok(image_data) = std::fs::read(path) {
-                        // Use the image crate to decode the image
-                        if let Ok(image) = image::load_from_memory(&image_data) {
-                            let size = [image.width() as _, image.height() as _];
-                            let image_buffer = image.to_rgba8();
-                            let pixels = image_buffer.as_flat_samples();
-
-                            let color_image =
-                                egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
-
-                            let texture = ui.ctx().load_texture(
-                                "splash_logo",
-                                color_image,
-                                Default::default(),
-                            );
-
-                            log::debug!("Image loaded successfully from {}", path);
-                            return Some(texture);
-                        }
-                    }
-                }
-
-                log::error!("Failed to read image file from any path");
-                None
+                log::debug!("Loading splash logo - this should only happen once");
+                assets::get_image_texture(ui.ctx(), "splash_logo", "public/splash_logo.png")
             });
 
             match texture_id {
@@ -929,59 +905,27 @@ impl BitVaultApp {
             // Upper panel with illustration
             ui.add_space(80.0); // Status bar + top spacing
 
-            // Illustration frame
-            let _ill_frame = ui.allocate_ui(egui::vec2(328.0, 249.0), |ui| {
-                // Center shape with circle outline
-                let circle_center = ui.min_rect().center();
-                let circle_radius = 97.0;
+            // Illustration frame - use the SVG image instead of manually drawing
+            ui.allocate_ui(egui::vec2(328.0, 249.0), |ui| {
+                // Load and display the image
+                static ONBOARDING_IMG: OnceLock<Option<RetainedImage>> = OnceLock::new();
 
-                // Draw outer circle outline
-                ui.painter().circle_stroke(
-                    circle_center,
-                    circle_radius,
-                    egui::Stroke::new(0.8, Color32::from_rgb(212, 212, 212)),
-                );
+                let image = ONBOARDING_IMG.get_or_init(|| {
+                    log::debug!("Loading onboarding image - this should only happen once");
+                    assets::load_svg("onboarding1", "assets/onboarding1.svg")
+                });
 
-                // Draw the 'V' icon in the center
-                let rect = egui::Rect::from_center_size(
-                    circle_center,
-                    egui::vec2(43.0, 42.0),
-                );
-                ui.painter().rect_filled(
-                    rect,
-                    0.0,
-                    Color32::BLACK,
-                );
-
-                // Draw bubbles
-                // Blue bubble (Cloud)
-                self.draw_feature_bubble(ui,
-                    circle_center + egui::vec2(-69.0, -80.0),
-                    Color32::from_rgb(204, 236, 253), // Light blue
-                    Color32::from_rgb(51, 176, 246), // Blue icon
-                    "☁");
-
-                // Purple bubble (Devices)
-                self.draw_feature_bubble(ui,
-                    circle_center + egui::vec2(-85.0, 40.0),
-                    Color32::from_rgb(227, 224, 252), // Light purple
-                    Color32::from_rgb(114, 105, 218), // Purple icon
-                    "⚙");
-
-                // Red bubble (Mobile)
-                self.draw_feature_bubble(ui,
-                    circle_center + egui::vec2(80.0, 40.0),
-                    Color32::from_rgb(255, 202, 202), // Light red
-                    Color32::from_rgb(250, 82, 82), // Red icon
-                    "📱");
-
-                // Orange circle (Bitcoin logo)
-                let bitcoin_center = circle_center + egui::vec2(85.0, -70.0);
-                ui.painter().circle_filled(
-                    bitcoin_center,
-                    18.0,
-                    Color32::from_rgb(247, 147, 26), // Bitcoin orange
-                );
+                if let Some(image) = image {
+                    // Center the image in the available space
+                    ui.centered_and_justified(|ui| {
+                        // Use the original image dimensions from the SVG (209x196)
+                        let size = [209.0, 196.0];
+                        image.show_size(ui, egui::vec2(size[0], size[1]));
+                    });
+                } else {
+                    // Fallback to text if image loading fails
+                    ui.colored_label(Color32::RED, "Failed to load onboarding image");
+                }
             });
 
             // Content
@@ -1052,43 +996,27 @@ impl BitVaultApp {
             // Upper panel with illustration
             ui.add_space(80.0); // Status bar + top spacing
 
-            // Illustration frame
+            // Illustration frame - use the SVG image instead of manually drawing
             ui.allocate_ui(egui::vec2(328.0, 249.0), |ui| {
-                // Center shape with square outline
-                let center = ui.min_rect().center();
+                // Load and display the image
+                static ONBOARDING_IMG: OnceLock<Option<RetainedImage>> = OnceLock::new();
 
-                // Create a square outline (main frame)
-                let square_size = 140.0;
-                let square_rect = egui::Rect::from_center_size(
-                    center,
-                    egui::vec2(square_size, square_size),
-                );
-                ui.painter().rect_stroke(
-                    square_rect,
-                    0.0,
-                    egui::Stroke::new(1.5, Color32::from_rgb(38, 38, 38))
-                );
+                let image = ONBOARDING_IMG.get_or_init(|| {
+                    log::debug!("Loading onboarding image - this should only happen once");
+                    assets::load_svg("onboarding2", "assets/onboarding2.svg")
+                });
 
-                // Add the clock in the middle
-                let clock_size = 64.0;
-                let _clock_rect = egui::Rect::from_center_size(
-                    center,
-                    egui::vec2(clock_size, clock_size),
-                );
-                // Draw clock circle
-                ui.painter().circle_filled(
-                    center,
-                    clock_size / 2.0,
-                    Color32::from_rgb(153, 194, 77),  // Green color for clock
-                );
-
-                // Add cube elements on the left
-                self.draw_cube(ui, center + egui::vec2(-93.5, -46.5));
-                self.draw_cube(ui, center + egui::vec2(-93.5, 46.5));
-
-                // Add cube elements on the right
-                self.draw_cube(ui, center + egui::vec2(93.5, -46.5));
-                self.draw_cube(ui, center + egui::vec2(93.5, 46.5));
+                if let Some(image) = image {
+                    // Center the image in the available space
+                    ui.centered_and_justified(|ui| {
+                        // Use the original image dimensions from the SVG (187x186)
+                        let size = [187.0, 186.0];
+                        image.show_size(ui, egui::vec2(size[0], size[1]));
+                    });
+                } else {
+                    // Fallback to text if image loading fails
+                    ui.colored_label(Color32::RED, "Failed to load onboarding image");
+                }
             });
 
             // Content
