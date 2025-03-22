@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
-default-members = ["bitvault-ui"]
+default-members = ["bitvault-ui", "bitvault-core"]
 members = [
-    "bitvault-ui",   # Current Leptos frontend
+    "bitvault-ui",   # Current egui frontend
     "bitvault-core", # Security-focused core component
 ]
 

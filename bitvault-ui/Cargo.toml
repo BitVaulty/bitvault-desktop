@@ -30,7 +30,7 @@ simple_logger = "5.0"
 
 # Bitcoin
 bip39 = { version = "2.0.0", features = ["rand"] }
-phc = "0.2.0"
+password-hash = "0.5.0"
 
 # File system
 dirs = "5.0.1"
