@@ -12,6 +12,7 @@ use eframe::{
 use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
 
+use crate::config::Settings;
 use crate::wallet;
 use bitvault_core::crypto;
 
@@ -70,6 +71,7 @@ pub type SharedAppState = Arc<RwLock<AppState>>;
 
 pub struct BitVaultApp {
     state: SharedAppState,
+    settings: Settings,
 }
 
 impl BitVaultApp {
@@ -80,6 +82,9 @@ impl BitVaultApp {
             log::info!("Running in TESTING mode - lock screen will be bypassed");
         }
 
+        // Load settings or use defaults
+        let settings = Settings::load();
+
         // Create the app with default state
         let app = Self {
             state: Arc::new(RwLock::new(AppState {
@@ -88,6 +93,7 @@ impl BitVaultApp {
                 testing_mode,
                 ..Default::default()
             })),
+            settings,
         };
 
         // Check if a wallet file exists and load it
@@ -1417,6 +1423,13 @@ impl BitVaultApp {
 
 impl eframe::App for BitVaultApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+        // Check for window resize events and save the new size
+        let screen_rect = ctx.input(|i| i.screen_rect);
+        let size = screen_rect.size();
+        if size.x != self.settings.window_width || size.y != self.settings.window_height {
+            self.settings.update_window_size(size.x, size.y);
+        }
+
         // Always request a repaint when in splash screen mode to ensure timer updates
         if let Ok(state) = self.state.read() {
             if state.current_view == View::SplashScreen {

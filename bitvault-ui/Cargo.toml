@@ -40,3 +40,4 @@ image = "0.25.5"
 
 # Internal dependencies
 bitvault-core = { path = "../bitvault-core" }
+toml = "0.8.20"
