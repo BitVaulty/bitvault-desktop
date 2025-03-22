@@ -12,8 +12,8 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            window_width: 800.0,
-            window_height: 600.0,
+            window_width: 1440.0,
+            window_height: 900.0,
         }
     }
 }
