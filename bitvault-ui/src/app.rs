@@ -6,10 +6,9 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use eframe::{
-    egui::{self, Color32, Context, Id, Rect, RichText, Ui},
+    egui::{self, Color32, Context, RichText, Ui},
     CreationContext,
 };
-use egui_extras::RetainedImage;
 use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
 
@@ -78,7 +77,6 @@ pub struct BitVaultApp {
 // Add this helper module for asset management at the top level before BitVaultApp struct
 mod assets {
     use eframe::egui;
-    use egui_extras::RetainedImage;
     use std::path::PathBuf;
     use std::sync::OnceLock;
 
@@ -117,14 +115,55 @@ mod assets {
         std::fs::read(&img_path).ok()
     }
 
-    // Load an SVG file
-    pub fn load_svg(name: &str, path: &str) -> Option<RetainedImage> {
+    // SVG loading function that works with the existing dependencies
+    pub fn load_svg_as_texture(
+        ctx: &egui::Context,
+        name: &str,
+        path: &str,
+    ) -> Option<egui::TextureHandle> {
         let base = get_base_path();
         let svg_path = base.join(path);
 
-        std::fs::read_to_string(&svg_path)
-            .ok()
-            .and_then(|svg_data| RetainedImage::from_svg_str(name, &svg_data).ok())
+        log::debug!("Loading SVG from: {:?}", svg_path);
+
+        // First read the SVG file
+        let svg_data = std::fs::read_to_string(&svg_path).ok()?;
+
+        // Parse SVG with usvg
+        let opt = usvg::Options {
+            ..Default::default()
+        };
+
+        let tree = usvg::Tree::from_str(&svg_data, &opt).ok()?;
+
+        // Get the size and create a pixmap
+        let size = tree.size();
+
+        // Apply a scale factor to increase resolution (2.0 = double resolution)
+        let scale_factor = 2.0;
+        let scaled_width = (size.width() * scale_factor) as u32;
+        let scaled_height = (size.height() * scale_factor) as u32;
+
+        let pixmap_size = tiny_skia::IntSize::from_wh(scaled_width, scaled_height)?;
+
+        // Create a pixmap (tiny-skia's bitmap for rendering)
+        let mut pixmap = tiny_skia::Pixmap::new(pixmap_size.width(), pixmap_size.height())?;
+
+        // Render the SVG tree to the pixmap with the scale transform
+        resvg::render(
+            &tree,
+            tiny_skia::Transform::from_scale(scale_factor, scale_factor),
+            &mut pixmap.as_mut(),
+        );
+
+        // Convert to egui texture
+        let image_size = [pixmap_size.width() as _, pixmap_size.height() as _];
+        let image_data = pixmap.data();
+
+        // Create the color image and texture
+        let color_image = egui::ColorImage::from_rgba_unmultiplied(image_size, image_data);
+
+        Some(ctx.load_texture(name, color_image, Default::default()))
     }
 
     // Get a texture handle for an image
@@ -356,25 +395,24 @@ impl BitVaultApp {
             if ui
                 .add_enabled(pin_valid, egui::Button::new("Set PIN"))
                 .clicked()
+                && pin_valid
             {
-                if pin_valid {
-                    if let Ok(mut state) = self.state.write() {
-                        // Store the PIN
-                        state.user_pin = Some(pin_input);
-                        log::info!("PIN set successfully");
+                if let Ok(mut state) = self.state.write() {
+                    // Store the PIN
+                    state.user_pin = Some(pin_input);
+                    log::info!("PIN set successfully");
 
-                        // Clear the input fields for security
-                        state.pin_input.clear();
-                        state.pin_confirm.clear();
+                    // Clear the input fields for security
+                    state.pin_input.clear();
+                    state.pin_confirm.clear();
 
-                        // Move to the next step
-                        if state.wallet_state == WalletState::Creating {
-                            log::info!("Moving to Seed view for new wallet creation");
-                            state.current_view = View::Seed;
-                        } else if state.wallet_state == WalletState::Restoring {
-                            log::info!("Moving to Seed view for wallet restoration");
-                            state.current_view = View::Seed;
-                        }
+                    // Move to the next step
+                    if state.wallet_state == WalletState::Creating {
+                        log::info!("Moving to Seed view for new wallet creation");
+                        state.current_view = View::Seed;
+                    } else if state.wallet_state == WalletState::Restoring {
+                        log::info!("Moving to Seed view for wallet restoration");
+                        state.current_view = View::Seed;
                     }
                 }
             }
@@ -832,9 +870,6 @@ impl BitVaultApp {
 
         // Center the logo
         ui.vertical_centered(|ui| {
-            // Center vertically - push down less to make it more centered
-            ui.add_space(screen_rect.height() / 4.0);
-
             // Use a static texture handle to avoid reloading on every frame
             static TEXTURE_ID: OnceLock<Option<egui::TextureHandle>> = OnceLock::new();
 
@@ -845,8 +880,22 @@ impl BitVaultApp {
 
             match texture_id {
                 Some(texture) => {
-                    // Make the image smaller (50% of original size)
-                    let scale = 0.5;
+                    // Get texture size and available space
+                    let available_size = ui.available_size();
+                    let texture_size = texture.size_vec2();
+
+                    // Calculate appropriate scale - use a smaller maximum to prevent oversizing
+                    // Use a target width of 50-60% of screen width, but never larger than original
+                    let target_width_ratio = 0.5;
+                    let desired_width = available_size.x * target_width_ratio;
+                    let scale = (desired_width / texture_size.x).min(1.0);
+
+                    let display_size = texture_size * scale;
+
+                    // Ensure vertical centering by adjusting spacing
+                    let vertical_center_offset = (available_size.y - display_size.y) / 2.0;
+                    ui.add_space(vertical_center_offset);
+
                     ui.add(egui::Image::new(texture).fit_to_original_size(scale));
                     log::trace!("Image added to frame {}", count);
                 }
@@ -905,27 +954,98 @@ impl BitVaultApp {
             // Upper panel with illustration
             ui.add_space(80.0); // Status bar + top spacing
 
-            // Illustration frame - use the SVG image instead of manually drawing
+            // Illustration frame - use SVG
             ui.allocate_ui(egui::vec2(328.0, 249.0), |ui| {
-                // Load and display the image
-                static ONBOARDING_IMG: OnceLock<Option<RetainedImage>> = OnceLock::new();
+                ui.vertical_centered(|ui| {
+                    // Load and display the SVG image
+                    static TEXTURE_ID: OnceLock<Option<egui::TextureHandle>> = OnceLock::new();
 
-                let image = ONBOARDING_IMG.get_or_init(|| {
-                    log::debug!("Loading onboarding image - this should only happen once");
-                    assets::load_svg("onboarding1", "assets/onboarding1.svg")
-                });
-
-                if let Some(image) = image {
-                    // Center the image in the available space
-                    ui.centered_and_justified(|ui| {
-                        // Use the original image dimensions from the SVG (209x196)
-                        let size = [209.0, 196.0];
-                        image.show_size(ui, egui::vec2(size[0], size[1]));
+                    let texture = TEXTURE_ID.get_or_init(|| {
+                        log::debug!("Loading onboarding1.svg - this should only happen once");
+                        assets::load_svg_as_texture(ui.ctx(), "onboarding1", "assets/onboarding1.svg")
                     });
-                } else {
-                    // Fallback to text if image loading fails
-                    ui.colored_label(Color32::RED, "Failed to load onboarding image");
-                }
+
+                    if let Some(texture) = texture {
+                        // Get texture size and available space
+                        let available_size = ui.available_size();
+                        let texture_size = texture.size_vec2();
+
+                        // Scale to fit within the available space while preserving aspect ratio
+                        let scale = (available_size.x / texture_size.x)
+                            .min(available_size.y / texture_size.y)
+                            .min(1.0); // Don't scale up if image is smaller
+
+                        let display_size = texture_size * scale;
+
+                        ui.add_space((available_size.y - display_size.y) / 2.0); // Center vertically
+                        ui.add(egui::Image::new(texture).fit_to_original_size(scale));
+                    } else {
+                        ui.colored_label(Color32::RED, "Failed to load SVG image");
+
+                        // Fallback to drawn elements if SVG fails to load
+                        ui.add_space(20.0);
+
+                        // Draw a shield with keys icon (for multisig)
+                        let center = ui.available_rect_before_wrap().center();
+                        let shield_size = 120.0;
+
+                        // Shield background
+                        ui.painter().circle_filled(
+                            center,
+                            shield_size/2.0,
+                            Color32::from_rgb(240, 240, 240),
+                        );
+
+                        // Shield border
+                        ui.painter().circle_stroke(
+                            center,
+                            shield_size/2.0 + 1.0,
+                            egui::Stroke::new(1.0, Color32::from_rgb(200, 200, 200)),
+                        );
+
+                        // Draw three key symbols
+                        let key_color = Color32::from_rgb(50, 50, 50);
+                        let key_spacing = shield_size * 0.3;
+
+                        // Draw three symbolic keys
+                        for i in -1..=1 {
+                            let key_center = center + egui::vec2(i as f32 * key_spacing, 0.0);
+
+                            // Key head (circle)
+                            ui.painter().circle_filled(
+                                key_center - egui::vec2(0.0, shield_size * 0.15),
+                                shield_size * 0.08,
+                                key_color,
+                            );
+
+                            // Key shaft
+                            let shaft_rect = egui::Rect::from_min_size(
+                                key_center + egui::vec2(-shield_size * 0.03, -shield_size * 0.05),
+                                egui::vec2(shield_size * 0.06, shield_size * 0.25),
+                            );
+
+                            ui.painter().rect_filled(
+                                shaft_rect,
+                                2.0,
+                                key_color,
+                            );
+
+                            // Key teeth
+                            let teeth_top = key_center.y + shield_size * 0.08;
+                            let teeth_width = shield_size * 0.04;
+                            let teeth_height = shield_size * 0.06;
+
+                            ui.painter().rect_filled(
+                                egui::Rect::from_min_size(
+                                    egui::pos2(key_center.x - teeth_width/2.0, teeth_top),
+                                    egui::vec2(teeth_width, teeth_height)
+                                ),
+                                1.0,
+                                key_color,
+                            );
+                        }
+                    }
+                });
             });
 
             // Content
@@ -996,27 +1116,77 @@ impl BitVaultApp {
             // Upper panel with illustration
             ui.add_space(80.0); // Status bar + top spacing
 
-            // Illustration frame - use the SVG image instead of manually drawing
+            // Illustration frame - use SVG
             ui.allocate_ui(egui::vec2(328.0, 249.0), |ui| {
-                // Load and display the image
-                static ONBOARDING_IMG: OnceLock<Option<RetainedImage>> = OnceLock::new();
+                ui.vertical_centered(|ui| {
+                    // Load and display the SVG image
+                    static TEXTURE_ID: OnceLock<Option<egui::TextureHandle>> = OnceLock::new();
 
-                let image = ONBOARDING_IMG.get_or_init(|| {
-                    log::debug!("Loading onboarding image - this should only happen once");
-                    assets::load_svg("onboarding2", "assets/onboarding2.svg")
-                });
-
-                if let Some(image) = image {
-                    // Center the image in the available space
-                    ui.centered_and_justified(|ui| {
-                        // Use the original image dimensions from the SVG (187x186)
-                        let size = [187.0, 186.0];
-                        image.show_size(ui, egui::vec2(size[0], size[1]));
+                    let texture = TEXTURE_ID.get_or_init(|| {
+                        log::debug!("Loading onboarding2.svg - this should only happen once");
+                        assets::load_svg_as_texture(ui.ctx(), "onboarding2", "assets/onboarding2.svg")
                     });
-                } else {
-                    // Fallback to text if image loading fails
-                    ui.colored_label(Color32::RED, "Failed to load onboarding image");
-                }
+
+                    if let Some(texture) = texture {
+                        // Get texture size and available space
+                        let available_size = ui.available_size();
+                        let texture_size = texture.size_vec2();
+
+                        // Scale to fit within the available space while preserving aspect ratio
+                        let scale = (available_size.x / texture_size.x)
+                            .min(available_size.y / texture_size.y)
+                            .min(1.0); // Don't scale up if image is smaller
+
+                        let display_size = texture_size * scale;
+
+                        ui.add_space((available_size.y - display_size.y) / 2.0); // Center vertically
+                        ui.add(egui::Image::new(texture).fit_to_original_size(scale));
+                    } else {
+                        ui.colored_label(Color32::RED, "Failed to load SVG image");
+
+                        // Fallback to drawn elements if SVG fails to load
+                        ui.add_space(20.0);
+
+                        // Draw a clock (for time delay)
+                        let center = ui.available_rect_before_wrap().center();
+                        let clock_size = 120.0;
+
+                        // Clock face
+                        ui.painter().circle_filled(
+                            center,
+                            clock_size/2.0,
+                            Color32::from_rgb(240, 240, 240),
+                        );
+
+                        // Clock border
+                        ui.painter().circle_stroke(
+                            center,
+                            clock_size/2.0,
+                            egui::Stroke::new(2.0, Color32::from_rgb(50, 50, 50)),
+                        );
+
+                        // Clock hands
+                        let hour_hand = center + egui::vec2(0.0, -clock_size * 0.25);
+                        let minute_hand = center + egui::vec2(clock_size * 0.3, 0.0);
+
+                        ui.painter().line_segment(
+                            [center, hour_hand],
+                            egui::Stroke::new(3.0, Color32::BLACK),
+                        );
+
+                        ui.painter().line_segment(
+                            [center, minute_hand],
+                            egui::Stroke::new(3.0, Color32::BLACK),
+                        );
+
+                        // Clock center dot
+                        ui.painter().circle_filled(
+                            center,
+                            4.0,
+                            Color32::BLACK,
+                        );
+                    }
+                });
             });
 
             // Content
@@ -1086,80 +1256,83 @@ impl BitVaultApp {
             // Upper panel with illustration
             ui.add_space(80.0); // Status bar + top spacing
 
-            // Illustration frame
+            // Illustration frame - use SVG
             ui.allocate_ui(egui::vec2(328.0, 249.0), |ui| {
-                // Center position
-                let center = ui.min_rect().center();
+                ui.vertical_centered(|ui| {
+                    // Load and display the SVG image
+                    static TEXTURE_ID: OnceLock<Option<egui::TextureHandle>> = OnceLock::new();
 
-                // Draw a shield shape for the notification icon
-                let shield_size = 100.0;
-                let shield_radius = shield_size / 2.0;
+                    let texture = TEXTURE_ID.get_or_init(|| {
+                        log::debug!("Loading onboarding3.svg - this should only happen once");
+                        assets::load_svg_as_texture(ui.ctx(), "onboarding3", "assets/onboarding3.svg")
+                    });
 
-                // Draw shield background (light gray)
-                ui.painter().circle_filled(
-                    center,
-                    shield_radius,
-                    Color32::from_rgb(245, 245, 245),
-                );
+                    if let Some(texture) = texture {
+                        // Get texture size and available space
+                        let available_size = ui.available_size();
+                        let texture_size = texture.size_vec2();
 
-                // Draw shield outline
-                ui.painter().circle_stroke(
-                    center,
-                    shield_radius,
-                    egui::Stroke::new(1.0, Color32::from_rgb(200, 200, 200)),
-                );
+                        // Scale to fit within the available space while preserving aspect ratio
+                        let scale = (available_size.x / texture_size.x)
+                            .min(available_size.y / texture_size.y)
+                            .min(1.0); // Don't scale up if image is smaller
 
-                // Draw lock icon inside the shield
-                let lock_size = 40.0;
-                let lock_top = center.y - lock_size * 0.2;
-                let lock_bottom = center.y + lock_size * 0.5;
-                let lock_left = center.x - lock_size * 0.3;
-                let lock_right = center.x + lock_size * 0.3;
+                        let display_size = texture_size * scale;
 
-                // Lock body
-                let lock_body = egui::Rect::from_min_max(
-                    egui::pos2(lock_left, lock_top),
-                    egui::pos2(lock_right, lock_bottom),
-                );
-                ui.painter().rect_filled(
-                    lock_body,
-                    5.0,
-                    Color32::from_rgb(30, 30, 30),
-                );
+                        ui.add_space((available_size.y - display_size.y) / 2.0); // Center vertically
+                        ui.add(egui::Image::new(texture).fit_to_original_size(scale));
+                    } else {
+                        ui.colored_label(Color32::RED, "Failed to load SVG image");
 
-                // Lock shackle (arc)
-                let shackle_radius = lock_size * 0.4;
-                let shackle_center = egui::pos2(center.x, lock_top - shackle_radius * 0.3);
-                let shackle_stroke = egui::Stroke::new(6.0, Color32::from_rgb(30, 30, 30));
+                        // Fallback to the shield rendering if SVG fails
+                        // Center position
+                        let center = ui.min_rect().center();
 
-                // Draw a semi-circle for the shackle
-                ui.painter().circle_stroke(shackle_center, shackle_radius, shackle_stroke);
+                        // Draw a shield shape for the notification icon
+                        let shield_size = 100.0;
+                        let shield_radius = shield_size / 2.0;
 
-                // Draw notification markers (circles) around main icon
-                let marker_positions = [
-                    egui::vec2(-120.0, -70.0),
-                    egui::vec2(120.0, -70.0),
-                    egui::vec2(-120.0, 70.0),
-                    egui::vec2(120.0, 70.0),
-                ];
+                        // Draw shield background (light gray)
+                        ui.painter().circle_filled(
+                            center,
+                            shield_radius,
+                            Color32::from_rgb(245, 245, 245),
+                        );
 
-                for pos in marker_positions {
-                    let marker_pos = center + pos;
+                        // Draw shield outline
+                        ui.painter().circle_stroke(
+                            center,
+                            shield_radius,
+                            egui::Stroke::new(1.0, Color32::from_rgb(200, 200, 200)),
+                        );
 
-                    // Draw marker circle
-                    ui.painter().circle_filled(
-                        marker_pos,
-                        10.0,
-                        Color32::from_rgb(240, 240, 240),
-                    );
+                        // Draw lock icon inside the shield
+                        let lock_size = 40.0;
+                        let lock_top = center.y - lock_size * 0.2;
+                        let lock_bottom = center.y + lock_size * 0.5;
+                        let lock_left = center.x - lock_size * 0.3;
+                        let lock_right = center.x + lock_size * 0.3;
 
-                    // Draw a small dot inside the circle
-                    ui.painter().circle_filled(
-                        marker_pos,
-                        3.0,
-                        Color32::from_rgb(150, 150, 150),
-                    );
-                }
+                        // Lock body
+                        let lock_body = egui::Rect::from_min_max(
+                            egui::pos2(lock_left, lock_top),
+                            egui::pos2(lock_right, lock_bottom),
+                        );
+                        ui.painter().rect_filled(
+                            lock_body,
+                            5.0,
+                            Color32::from_rgb(30, 30, 30),
+                        );
+
+                        // Lock shackle (arc)
+                        let shackle_radius = lock_size * 0.4;
+                        let shackle_center = egui::pos2(center.x, lock_top - shackle_radius * 0.3);
+                        let shackle_stroke = egui::Stroke::new(6.0, Color32::from_rgb(30, 30, 30));
+
+                        // Draw a semi-circle for the shackle
+                        ui.painter().circle_stroke(shackle_center, shackle_radius, shackle_stroke);
+                    }
+                });
             });
 
             // Content
@@ -1223,40 +1396,6 @@ impl BitVaultApp {
                 .size(10.0)
             );
         });
-    }
-
-    // Helper function to draw feature bubbles on the onboarding screen
-    fn draw_feature_bubble(
-        &self,
-        ui: &mut Ui,
-        center: egui::Pos2,
-        bg_color: Color32,
-        icon_color: Color32,
-        icon: &str,
-    ) {
-        // Draw circle background
-        ui.painter().circle_filled(center, 18.0, bg_color);
-
-        // Draw icon
-        ui.painter().text(
-            center,
-            egui::Align2::CENTER_CENTER,
-            icon,
-            egui::FontId::proportional(14.0),
-            icon_color,
-        );
-    }
-
-    // Helper function to draw cubes for the time-delay screen
-    fn draw_cube(&self, ui: &mut Ui, pos: egui::Pos2) {
-        let cube_size = 48.0;
-        let cube_rect = egui::Rect::from_center_size(pos, egui::vec2(cube_size, cube_size));
-
-        // Draw cube inner shape
-        let inner_margin = cube_size * 0.094; // 9.38% of size
-        let inner_rect = cube_rect.shrink(inner_margin);
-        ui.painter()
-            .rect_filled(inner_rect, 0.0, Color32::from_rgb(38, 38, 38));
     }
 
     // Helper function to draw arrow navigation indicators
