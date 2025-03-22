@@ -1397,90 +1397,102 @@ impl BitVaultApp {
 
     // Helper function to draw arrow navigation indicators
     fn draw_navigation_arrows(&self, ui: &mut Ui, screen_number: usize) {
-        let total_width = ui.available_width();
+        // Available width needed for centering calculation
+        let available_width = ui.available_width();
+
+        // Create fixed-width dots
+        let active_width = 15.0;
+        let inactive_width = 5.0;
+        let dot_height = 4.0; // Slightly thicker for better visibility while still bead-like
+        let dot_spacing = 3.0;
+        let click_padding = 12.0; // Larger click area padding for better usability
+
+        // Calculate total width of all dots
+        let total_dot_width = match screen_number {
+            1 => active_width + 2.0 * inactive_width + 2.0 * dot_spacing,
+            2 => inactive_width + active_width + inactive_width + 2.0 * dot_spacing,
+            3 => 2.0 * inactive_width + active_width + 2.0 * dot_spacing,
+            _ => active_width + 2.0 * inactive_width + 2.0 * dot_spacing,
+        };
+
+        // Add space for centering
+        let left_padding = (available_width - total_dot_width) / 2.0;
 
         ui.horizontal(|ui| {
-            // Left padding - depends on the current screen (no left arrow on first screen)
-            let left_arrow_visible = screen_number > 1;
-            let offset_mult = if left_arrow_visible { 6.0 } else { 7.5 };
-            ui.add_space(total_width / offset_mult);
+            ui.add_space(left_padding);
 
-            // Left arrow - only for screens 2 and 3
-            if left_arrow_visible {
-                // Use separate labels for emoji and text to avoid rendering issues
-                ui.label(
-                    RichText::new("◀")
-                        .color(Color32::from_rgb(120, 120, 120))
-                        .size(16.0),
-                );
-                ui.add_space(2.0);
-                ui.label(
-                    RichText::new("Prev")
-                        .color(Color32::from_rgb(120, 120, 120))
-                        .size(16.0),
-                );
-                ui.add_space(10.0);
-            }
+            // Create a container for our dots with extra height for easier clicking
+            let response = ui.allocate_rect(
+                egui::Rect::from_min_size(
+                    ui.cursor().min,
+                    egui::vec2(total_dot_width, dot_height + click_padding),
+                ),
+                egui::Sense::click(), // Make the entire area clickable
+            );
 
-            // Indicator dots
+            // Draw the dots directly using the painter
+            let painter = ui.painter();
+            let mut current_x = response.rect.min.x;
+            let center_y = response.rect.center().y;
+
+            // Store click positions for later processing
+            let mut click_areas = Vec::new();
+
+            // Draw all dots
             for i in 1..=3 {
                 if i > 1 {
-                    ui.add_space(4.0);
+                    current_x += dot_spacing;
                 }
 
-                if i == screen_number {
-                    // Active indicator
-                    ui.add(
-                        egui::widgets::Button::new("")
-                            .min_size(egui::vec2(15.0, 5.0))
-                            .fill(Color32::from_rgb(17, 165, 238))
-                            .frame(false),
-                    );
+                // Determine dot properties based on state
+                let (width, color) = if i == screen_number {
+                    (active_width, Color32::from_rgb(17, 165, 238))
                 } else {
-                    // Inactive indicator (clickable)
-                    let clicked = ui
-                        .add(
-                            egui::widgets::Button::new("")
-                                .min_size(egui::vec2(5.0, 5.0))
-                                .fill(Color32::from_rgb(217, 217, 217))
-                                .frame(false),
-                        )
-                        .clicked();
+                    (inactive_width, Color32::from_rgb(217, 217, 217))
+                };
 
-                    if clicked {
-                        // Store which view to navigate to
-                        let target_view = match i {
-                            1 => View::OnboardingOne,
-                            2 => View::OnboardingTwo,
-                            3 => View::OnboardingThree,
-                            _ => View::OnboardingOne, // Fallback
-                        };
+                // Calculate the dot rectangle
+                let dot_rect = egui::Rect::from_min_size(
+                    egui::pos2(current_x, center_y - dot_height / 2.0),
+                    egui::vec2(width, dot_height),
+                );
 
-                        // Update state in a separate step after UI is processed
-                        ui.ctx().request_repaint();
+                // Draw the dot
+                painter.rect_filled(dot_rect, dot_height / 2.0, color);
 
-                        if let Ok(mut state) = self.state.write() {
-                            state.current_view = target_view;
+                // Store click area if this is an inactive dot
+                if i != screen_number {
+                    // Create a larger clickable area
+                    let click_rect = egui::Rect::from_min_max(
+                        egui::pos2(current_x - 2.0, center_y - (click_padding / 2.0)),
+                        egui::pos2(current_x + width + 2.0, center_y + (click_padding / 2.0)),
+                    );
+
+                    click_areas.push((click_rect, i));
+                }
+
+                // Move to the next dot position
+                current_x += width;
+            }
+
+            // Handle clicks for navigation
+            if response.clicked() {
+                if let Some(mouse_pos) = ui.ctx().pointer_latest_pos() {
+                    // Handle clicks directly on dots
+                    for (rect, idx) in click_areas {
+                        if rect.contains(mouse_pos) {
+                            if let Ok(mut state) = self.state.write() {
+                                state.current_view = match idx {
+                                    1 => View::OnboardingOne,
+                                    2 => View::OnboardingTwo,
+                                    3 => View::OnboardingThree,
+                                    _ => View::OnboardingOne,
+                                };
+                            }
+                            break;
                         }
                     }
                 }
-            }
-
-            // Right arrow - only for screens 1 and 2
-            if screen_number < 3 {
-                ui.add_space(10.0);
-                // Use separate labels for text and emoji to avoid rendering issues
-                ui.label(
-                    RichText::new("Next")
-                        .color(Color32::from_rgb(120, 120, 120))
-                        .size(16.0),
-                );
-                ui.add_space(2.0);
-                ui.label(
-                    RichText::new("▶")
-                        .color(Color32::from_rgb(120, 120, 120))
-                        .size(16.0),
-                );
             }
         });
     }
