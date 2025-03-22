@@ -1,11 +1,9 @@
 [workspace]
 resolver = "2"
-default-members = ["bitvault-ui"]
+default-members = ["bitvault-ui", "bitvault-core"]
 members = [
-    "bitvault-ui",     # Current Leptos frontend
-    "bitvault-app",    # Current Tauri shell (src-tauri)
-    "bitvault-core",   # Security-focused core component
-    "bitvault-common", # Shared types and utilities
+    "bitvault-ui",   # Current egui frontend
+    "bitvault-core", # Security-focused core component
 ]
 
 # Workspace-wide settings (shared by all members)
@@ -25,21 +23,9 @@ log = "0.4"
 
 # Security-related dependencies
 zeroize = "1.7.0"
-getrandom = "0.3.1"
+getrandom = "0.3.2"
 aes-gcm = "0.10.3"
 rand = "0.9.0"
 rand_core = "0.9.3"
 argon2 = "0.5.2"
 hex = "0.4.3"
-
-# Optimization settings for all workspace members
-[profile.release]
-lto = false
-
-# This is a key addition - define specific target configuration
-[workspace.metadata.leptos]
-# Components that can be built for wasm
-wasm-components = ["bitvault-ui", "bitvault-core", "bitvault-common"]
-
-[workspace.metadata.tauri-cli]
-args = ["--config", "./bitvault-app/tauri.conf.json", "dev"]

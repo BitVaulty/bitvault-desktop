@@ -1,11 +1,13 @@
-# BitVault Wallet
+# BitVault Desktop
 
-BitVault is a secure Bitcoin wallet built with Rust, focusing on security, reliability, and proper isolation of cryptographic operations.
+> Note: BitVault Desktop is an open source Bitcoin wallet currently under development.
+
+BitVault is a secure multisig Bitcoin wallet built with Rust, focusing on security and reliability.
 
 ## Project Structure
 
 BitVault is a Rust workspace project with the following crates:
-- `bitvault-app` - Main application crate that ties everything together
+
 - `bitvault-core` - Core wallet functionality and cryptographic operations
 - `bitvault-common` - Shared utilities and types
 - `bitvault-ipc` - Inter-process communication between components

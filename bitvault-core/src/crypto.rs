@@ -6,23 +6,23 @@ use argon2::{
     password_hash::{PasswordHasher, SaltString},
     Argon2, ParamsBuilder, Version,
 };
-use phc::Salt;
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct EncryptedData {
     ciphertext: String, // hex encoded
     nonce: String,      // hex encoded
-    salt: String,       // phc encoded
+    salt: String,       // password-hash encoded
 }
 
 #[allow(dead_code)]
 pub fn encrypt_seed(seed: &str, pin: &str) -> Result<String, String> {
-    // Generate a random salt
+    // Generate a random salt using getrandom
     let mut salt_bytes = [0u8; 16];
-    rand::rng().fill_bytes(&mut salt_bytes);
-    let salt = Salt::from(&salt_bytes);
+    getrandom::fill(&mut salt_bytes)
+        .map_err(|e| format!("Failed to generate random salt: {}", e))?;
+    let salt =
+        SaltString::encode_b64(&salt_bytes).map_err(|e| format!("Failed to encode salt: {}", e))?;
 
     // Configure Argon2id with strong parameters
     let params = ParamsBuilder::new()
@@ -35,10 +35,6 @@ pub fn encrypt_seed(seed: &str, pin: &str) -> Result<String, String> {
 
     // Create Argon2id instance
     let argon2 = Argon2::new(argon2::Algorithm::Argon2id, Version::V0x13, params);
-
-    // Create salt string from base64
-    let salt =
-        SaltString::from_b64(&salt.to_string()).map_err(|e| format!("Invalid salt: {}", e))?;
 
     // Derive key from PIN
     let key = argon2
@@ -55,7 +51,8 @@ pub fn encrypt_seed(seed: &str, pin: &str) -> Result<String, String> {
 
     // Generate random 12-byte nonce
     let mut nonce_bytes = [0u8; 12];
-    rand::rng().fill_bytes(&mut nonce_bytes);
+    getrandom::fill(&mut nonce_bytes)
+        .map_err(|e| format!("Failed to generate random nonce: {}", e))?;
     let nonce = Nonce::from_slice(&nonce_bytes);
 
     // Encrypt the seed

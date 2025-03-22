@@ -2,7 +2,7 @@
 
 # Primary development targets
 dev:
-	cargo run -p bitvault-app
+	cargo run -p bitvault-ui
 
 build:
 	cargo build --workspace
@@ -29,7 +29,7 @@ security-check:
 	cargo audit
 	cargo clippy --workspace -- -D warnings
 	./scripts/check-security-boundaries.sh
-	
+
 # Cleanup
 clean:
 	cargo clean
@@ -48,11 +48,11 @@ wasm:
 
 # Run in development mode with security boundary logging
 dev-debug:
-	BITVAULT_LOG=debug cargo run -p bitvault-app
+	BITVAULT_LOG=debug cargo run -p bitvault-ui
 
 # Run with process isolation verification
 dev-secure:
-	BITVAULT_VERIFY_ISOLATION=1 cargo run -p bitvault-app
+	BITVAULT_VERIFY_ISOLATION=1 cargo run -p bitvault-ui
 
 # Generate documentation
 docs:
@@ -63,4 +63,4 @@ docs:
 all: clean build release wasm
 
 # Default target
-.DEFAULT_GOAL := build 
+.DEFAULT_GOAL := build

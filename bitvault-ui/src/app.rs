@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
 
 use crate::wallet;
+use bitvault_core::crypto;
 
 #[derive(Serialize, Deserialize)]
 struct GreetArgs<'a> {
@@ -593,7 +594,7 @@ impl BitVaultApp {
                 {
                     if let (Some(seed), Some(pin)) = (&state.seed_phrase, &state.user_pin) {
                         log::info!("Attempting to encrypt and save wallet");
-                        match crate::crypto::encrypt_seed(seed, pin) {
+                        match crypto::encrypt_seed(seed, pin) {
                             Ok(encrypted_data) => {
                                 // Save the encrypted wallet data to memory
                                 state.encrypted_wallet_data = Some(encrypted_data.clone());
@@ -726,7 +727,7 @@ impl BitVaultApp {
                     // Try to load and decrypt the wallet
                     if let Some(encrypted_data) = &state.encrypted_wallet_data {
                         log::info!("Attempting to decrypt wallet");
-                        match crate::crypto::decrypt_seed(encrypted_data, &state.pin_input) {
+                        match crypto::decrypt_seed(encrypted_data, &state.pin_input) {
                             Ok(seed_phrase) => {
                                 // Successfully decrypted
                                 state.seed_phrase = Some(seed_phrase);
