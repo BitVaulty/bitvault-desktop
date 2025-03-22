@@ -1085,8 +1085,7 @@ impl BitVaultApp {
                     .color(Color32::BLACK)
                     .size(16.0))
                 .min_size(egui::vec2(328.0, 48.0))
-                .stroke(egui::Stroke::new(1.0, Color32::from_gray(200)))
-                .rounding(16.0)
+                .frame(false)
             ).clicked() {
                 if let Ok(mut state) = self.state.write() {
                     state.current_view = View::Home;
@@ -1226,8 +1225,7 @@ impl BitVaultApp {
                     .color(Color32::BLACK)
                     .size(16.0))
                 .min_size(egui::vec2(328.0, 48.0))
-                .stroke(egui::Stroke::new(1.0, Color32::from_gray(200)))
-                .rounding(16.0)
+                .frame(false)
             ).clicked() {
                 if let Ok(mut state) = self.state.write() {
                     state.current_view = View::OnboardingOne;
@@ -1373,8 +1371,7 @@ impl BitVaultApp {
                     .color(Color32::BLACK)
                     .size(16.0))
                 .min_size(egui::vec2(328.0, 48.0))
-                .stroke(egui::Stroke::new(1.0, Color32::from_gray(200)))
-                .rounding(16.0)
+                .frame(false)
             ).clicked() {
                 if let Ok(mut state) = self.state.write() {
                     state.current_view = View::OnboardingTwo;
