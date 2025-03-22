@@ -29,12 +29,3 @@ rand = "0.9.0"
 rand_core = "0.9.3"
 argon2 = "0.5.2"
 hex = "0.4.3"
-
-# Optimization settings for all workspace members
-[profile.release]
-lto = false
-
-# This is a key addition - define specific target configuration
-[workspace.metadata.leptos]
-# Components that can be built for wasm
-wasm-components = ["bitvault-ui", "bitvault-core"]
