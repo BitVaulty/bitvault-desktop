@@ -3,7 +3,6 @@ resolver = "2"
 default-members = ["bitvault-ui"]
 members = [
     "bitvault-ui",     # Current Leptos frontend
-    "bitvault-app",    # Current Tauri shell (src-tauri)
     "bitvault-core",   # Security-focused core component
     "bitvault-common", # Shared types and utilities
 ]
@@ -40,6 +39,3 @@ lto = false
 [workspace.metadata.leptos]
 # Components that can be built for wasm
 wasm-components = ["bitvault-ui", "bitvault-core", "bitvault-common"]
-
-[workspace.metadata.tauri-cli]
-args = ["--config", "./bitvault-app/tauri.conf.json", "dev"]
