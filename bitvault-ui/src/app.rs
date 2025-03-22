@@ -75,7 +75,33 @@ pub struct BitVaultApp {
 }
 
 impl BitVaultApp {
-    pub fn new(_cc: &CreationContext<'_>) -> Self {
+    pub fn new(cc: &CreationContext<'_>) -> Self {
+        // Attempt to configure a font with good Unicode support
+        let mut fonts = egui::FontDefinitions::default();
+
+        // Try to add Noto Sans which has good Unicode character support
+        if let Ok(font_data) = std::fs::read("bitvault-ui/assets/NotoSans-Regular.ttf") {
+            log::info!("Successfully loaded Noto Sans font");
+
+            // Add font data
+            fonts
+                .font_data
+                .insert("noto".to_owned(), egui::FontData::from_owned(font_data));
+
+            // Set as primary font
+            fonts
+                .families
+                .get_mut(&egui::FontFamily::Proportional)
+                .unwrap()
+                .insert(0, "noto".to_owned());
+
+            // Apply the font configuration
+            cc.egui_ctx.set_fonts(fonts);
+            log::info!("Applied custom font configuration");
+        } else {
+            log::warn!("Could not load Noto Sans font - using default fonts");
+        }
+
         // Check for testing mode environment variable
         let testing_mode = std::env::var("TESTING").unwrap_or_default() == "1";
         if testing_mode {
@@ -1014,7 +1040,7 @@ impl BitVaultApp {
             // Navigation hint
             ui.add_space(4.0);
             ui.label(
-                RichText::new("Tip: Use ← → arrow keys to navigate")
+                RichText::new("Tip: Use Left/Right arrow keys to navigate")
                 .color(Color32::from_rgb(150, 150, 150))
                 .size(10.0)
             );
@@ -1120,7 +1146,7 @@ impl BitVaultApp {
             // Navigation hint
             ui.add_space(4.0);
             ui.label(
-                RichText::new("Tip: Use ← → arrow keys to navigate")
+                RichText::new("Tip: Use Left/Right arrow keys to navigate")
                 .color(Color32::from_rgb(150, 150, 150))
                 .size(10.0)
             );
@@ -1264,7 +1290,7 @@ impl BitVaultApp {
             // Navigation hint
             ui.add_space(4.0);
             ui.label(
-                RichText::new("Tip: Use ← → arrow keys to navigate")
+                RichText::new("Tip: Use Left/Right arrow keys to navigate")
                 .color(Color32::from_rgb(150, 150, 150))
                 .size(10.0)
             );
@@ -1317,8 +1343,15 @@ impl BitVaultApp {
 
             // Left arrow - only for screens 2 and 3
             if left_arrow_visible {
+                // Use separate labels for emoji and text to avoid rendering issues
                 ui.label(
-                    RichText::new("←")
+                    RichText::new("◀")
+                        .color(Color32::from_rgb(120, 120, 120))
+                        .size(16.0),
+                );
+                ui.add_space(2.0);
+                ui.label(
+                    RichText::new("Prev")
                         .color(Color32::from_rgb(120, 120, 120))
                         .size(16.0),
                 );
@@ -1372,8 +1405,15 @@ impl BitVaultApp {
             // Right arrow - only for screens 1 and 2
             if screen_number < 3 {
                 ui.add_space(10.0);
+                // Use separate labels for text and emoji to avoid rendering issues
                 ui.label(
-                    RichText::new("→")
+                    RichText::new("Next")
+                        .color(Color32::from_rgb(120, 120, 120))
+                        .size(16.0),
+                );
+                ui.add_space(2.0);
+                ui.label(
+                    RichText::new("▶")
                         .color(Color32::from_rgb(120, 120, 120))
                         .size(16.0),
                 );
