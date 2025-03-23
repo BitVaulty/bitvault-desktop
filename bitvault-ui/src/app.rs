@@ -6,12 +6,13 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use eframe::{
-    egui::{self, Color32, Context, Id, Rect, RichText, Ui},
+    egui::{self, Color32, Context, RichText, Ui},
     CreationContext,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
 
+use crate::config::Settings;
 use crate::wallet;
 use bitvault_core::crypto;
 
@@ -41,6 +42,9 @@ pub enum View {
     Wallet,
     LockScreen,
     SplashScreen,
+    OnboardingOne,
+    OnboardingTwo,
+    OnboardingThree,
 }
 
 // Define a struct to hold the global state
@@ -58,6 +62,8 @@ pub struct AppState {
     pub encrypted_wallet_data: Option<String>, // Encrypted wallet data stored on disk
     pub lock_error: Option<String>,   // Error message when unlocking fails
     pub splash_timer: Option<f32>,    // Timer for splash screen (in seconds)
+    pub testing_mode: bool,           // Flag for testing mode to bypass lock screen
+    pub onboarding_completed: bool,   // Flag to track if onboarding has been completed
 }
 
 // Create a type alias for a thread-safe, shared reference to the state
@@ -65,17 +71,166 @@ pub type SharedAppState = Arc<RwLock<AppState>>;
 
 pub struct BitVaultApp {
     state: SharedAppState,
+    settings: Settings,
+}
+
+// Add this helper module for asset management at the top level before BitVaultApp struct
+mod assets {
+    use eframe::egui;
+    use std::path::PathBuf;
+    use std::sync::OnceLock;
+
+    // Base paths to try for asset loading
+    const BASE_PATHS: [&str; 3] = ["bitvault-ui", ".", ".."];
+
+    // Find the correct base path once
+    fn get_base_path() -> &'static PathBuf {
+        static BASE_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+        BASE_PATH.get_or_init(|| {
+            for base in BASE_PATHS {
+                let path = PathBuf::from(base);
+                if path.exists() {
+                    return path;
+                }
+            }
+            // Default to current directory if nothing found
+            PathBuf::from(".")
+        })
+    }
+
+    // Load a font file
+    pub fn load_font(font_name: &str) -> Option<Vec<u8>> {
+        let base = get_base_path();
+        let font_path = base.join("assets").join(font_name);
+
+        std::fs::read(&font_path).ok()
+    }
+
+    // Load an image file
+    pub fn load_image(path: &str) -> Option<Vec<u8>> {
+        let base = get_base_path();
+        let img_path = base.join(path);
+
+        std::fs::read(&img_path).ok()
+    }
+
+    // SVG loading function that works with the existing dependencies
+    pub fn load_svg_as_texture(
+        ctx: &egui::Context,
+        name: &str,
+        path: &str,
+    ) -> Option<egui::TextureHandle> {
+        let base = get_base_path();
+        let svg_path = base.join(path);
+
+        log::debug!("Loading SVG from: {:?}", svg_path);
+
+        // First read the SVG file
+        let svg_data = std::fs::read_to_string(&svg_path).ok()?;
+
+        // Parse SVG with usvg
+        let opt = usvg::Options {
+            ..Default::default()
+        };
+
+        let tree = usvg::Tree::from_str(&svg_data, &opt).ok()?;
+
+        // Get the size and create a pixmap
+        let size = tree.size();
+
+        // Apply a scale factor to increase resolution (2.0 = double resolution)
+        let scale_factor = 2.0;
+        let scaled_width = (size.width() * scale_factor) as u32;
+        let scaled_height = (size.height() * scale_factor) as u32;
+
+        let pixmap_size = tiny_skia::IntSize::from_wh(scaled_width, scaled_height)?;
+
+        // Create a pixmap (tiny-skia's bitmap for rendering)
+        let mut pixmap = tiny_skia::Pixmap::new(pixmap_size.width(), pixmap_size.height())?;
+
+        // Render the SVG tree to the pixmap with the scale transform
+        resvg::render(
+            &tree,
+            tiny_skia::Transform::from_scale(scale_factor, scale_factor),
+            &mut pixmap.as_mut(),
+        );
+
+        // Convert to egui texture
+        let image_size = [pixmap_size.width() as _, pixmap_size.height() as _];
+        let image_data = pixmap.data();
+
+        // Create the color image and texture
+        let color_image = egui::ColorImage::from_rgba_unmultiplied(image_size, image_data);
+
+        Some(ctx.load_texture(name, color_image, Default::default()))
+    }
+
+    // Get a texture handle for an image
+    pub fn get_image_texture(
+        ctx: &egui::Context,
+        name: &str,
+        path: &str,
+    ) -> Option<egui::TextureHandle> {
+        load_image(path).and_then(|image_data| {
+            image::load_from_memory(&image_data).ok().map(|image| {
+                let size = [image.width() as _, image.height() as _];
+                let image_buffer = image.to_rgba8();
+                let pixels = image_buffer.as_flat_samples();
+
+                let color_image = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
+                ctx.load_texture(name, color_image, Default::default())
+            })
+        })
+    }
 }
 
 impl BitVaultApp {
-    pub fn new(_cc: &CreationContext<'_>) -> Self {
+    pub fn new(cc: &CreationContext<'_>) -> Self {
+        // Attempt to configure a font with good Unicode support
+        let mut fonts = egui::FontDefinitions::default();
+
+        // Try to add Noto Sans which has good Unicode character support
+        if let Some(font_data) = assets::load_font("NotoSans-Regular.ttf") {
+            log::info!("Successfully loaded Noto Sans font");
+
+            // Add font data
+            fonts
+                .font_data
+                .insert("noto".to_owned(), egui::FontData::from_owned(font_data));
+
+            // Set as primary font
+            fonts
+                .families
+                .get_mut(&egui::FontFamily::Proportional)
+                .unwrap()
+                .insert(0, "noto".to_owned());
+
+            // Apply the font configuration
+            cc.egui_ctx.set_fonts(fonts);
+            log::info!("Applied custom font configuration");
+        } else {
+            log::warn!("Could not load Noto Sans font - using default fonts");
+        }
+
+        // Check for testing mode environment variable
+        let testing_mode = std::env::var("TESTING").unwrap_or_default() == "1";
+        if testing_mode {
+            log::info!("Running in TESTING mode - lock screen will be bypassed");
+        }
+
+        // Load settings or use defaults
+        let settings = Settings::load();
+
         // Create the app with default state
         let app = Self {
             state: Arc::new(RwLock::new(AppState {
                 current_view: View::SplashScreen,
                 splash_timer: Some(1.0), // 1 second splash screen
+                testing_mode,
                 ..Default::default()
             })),
+            settings,
         };
 
         // Check if a wallet file exists and load it
@@ -187,15 +342,12 @@ impl BitVaultApp {
             ui.label("Choose a secure PIN to protect your wallet");
             ui.add_space(10.0);
 
-            let mut pin_input = String::new();
-            let mut pin_confirm = String::new();
-            let mut back_button_clicked = false;
-
-            // Read current state values
-            if let Ok(state) = self.state.read() {
-                pin_input = state.pin_input.clone();
-                pin_confirm = state.pin_confirm.clone();
-            }
+            // Read current state values once
+            let (mut pin_input, mut pin_confirm) = if let Ok(state) = self.state.read() {
+                (state.pin_input.clone(), state.pin_confirm.clone())
+            } else {
+                (String::new(), String::new())
+            };
 
             // PIN input fields
             ui.horizontal(|ui| {
@@ -207,7 +359,7 @@ impl BitVaultApp {
                         .desired_width(200.0),
                 );
 
-                // Update state with new input
+                // Update state with new input if changed
                 if response.changed() {
                     if let Ok(mut state) = self.state.write() {
                         state.pin_input = pin_input.clone();
@@ -226,21 +378,11 @@ impl BitVaultApp {
                         .desired_width(200.0),
                 );
 
-                // Update state with new input
+                // Update state with new input if changed
                 if response.changed() {
                     if let Ok(mut state) = self.state.write() {
                         state.pin_confirm = pin_confirm.clone();
                     }
-                }
-
-                // Check for Enter key press
-                let enter_pressed =
-                    response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                if enter_pressed {
-                    // Store the enter key state in memory for use outside this scope
-                    ui.memory_mut(|mem| {
-                        mem.data.insert_temp(Id::new("pin_enter_pressed"), true);
-                    });
                 }
             });
 
@@ -249,51 +391,35 @@ impl BitVaultApp {
             // Calculate pin_valid based on current values
             let pin_valid = !pin_input.is_empty() && pin_input == pin_confirm;
 
-            // Get the enter key state from memory
-            let enter_pressed = ui
-                .memory(|mem| mem.data.get_temp::<bool>(Id::new("pin_enter_pressed")))
-                .unwrap_or(false);
-
             // Set PIN button
             if ui
                 .add_enabled(pin_valid, egui::Button::new("Set PIN"))
                 .clicked()
-                || (enter_pressed && pin_valid)
+                && pin_valid
             {
-                log::info!("Set PIN button clicked, PIN is valid: {}", pin_valid);
+                if let Ok(mut state) = self.state.write() {
+                    // Store the PIN
+                    state.user_pin = Some(pin_input);
+                    log::info!("PIN set successfully");
 
-                if pin_valid {
-                    if let Ok(mut state) = self.state.write() {
-                        // Store the PIN
-                        state.user_pin = Some(pin_input.clone());
-                        log::info!("PIN set successfully");
+                    // Clear the input fields for security
+                    state.pin_input.clear();
+                    state.pin_confirm.clear();
 
-                        // Clear the input fields for security
-                        state.pin_input.clear();
-                        state.pin_confirm.clear();
-
-                        // Move to the next step
-                        if state.wallet_state == WalletState::Creating {
-                            log::info!("Moving to Seed view for new wallet creation");
-                            // For creating a new wallet, move to the seed view
-                            state.current_view = View::Seed;
-                        } else if state.wallet_state == WalletState::Restoring {
-                            log::info!("Moving to Seed view for wallet restoration");
-                            // For restoring, go to the seed view where the user can enter their seed phrase
-                            state.current_view = View::Seed;
-                        }
+                    // Move to the next step
+                    if state.wallet_state == WalletState::Creating {
+                        log::info!("Moving to Seed view for new wallet creation");
+                        state.current_view = View::Seed;
+                    } else if state.wallet_state == WalletState::Restoring {
+                        log::info!("Moving to Seed view for wallet restoration");
+                        state.current_view = View::Seed;
                     }
                 }
             }
 
-            // Back button
+            // Back button with simpler structure
             let back_response = ui.button("Go Back");
             if back_response.clicked() {
-                back_button_clicked = true;
-            }
-
-            // Handle back button click outside the state read lock
-            if back_button_clicked {
                 if let Ok(mut state) = self.state.write() {
                     state.current_view = View::Disclaimer;
                 }
@@ -457,16 +583,14 @@ impl BitVaultApp {
             );
 
             // Read state once to get the values we need
-            let (original_seed, mut verification_input, mut verification_result) =
-                if let Ok(state) = self.state.read() {
-                    (
-                        state.seed_phrase.clone().unwrap_or_default(),
-                        state.verification_input.clone(),
-                        None,
-                    )
-                } else {
-                    (String::new(), String::new(), None)
-                };
+            let (original_seed, mut verification_input) = if let Ok(state) = self.state.read() {
+                (
+                    state.seed_phrase.clone().unwrap_or_default(),
+                    state.verification_input.clone(),
+                )
+            } else {
+                (String::new(), String::new())
+            };
 
             ui.add_space(20.0);
 
@@ -485,10 +609,6 @@ impl BitVaultApp {
                 }
             }
 
-            // Check for Enter key press
-            let enter_pressed =
-                response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-
             ui.add_space(20.0);
 
             // Check if the entered text matches the original seed phrase
@@ -505,53 +625,25 @@ impl BitVaultApp {
 
             ui.add_space(10.0);
 
-            let verify_clicked = ui.button("Verify").clicked();
-            let back_button = ui.add(egui::Button::new("Go Back"));
-            let back_clicked = back_button.clicked();
-
-            // Store the back button rect for the icon
-            if back_button.rect.width() > 0.0 {
-                ui.memory_mut(|mem| {
-                    mem.data
-                        .insert_temp(Id::new("back_button"), back_button.rect)
-                });
-            }
-
-            // Handle button clicks outside of any locks
-            if verify_clicked || enter_pressed {
-                if is_correct {
-                    // Verification successful - update state once
-                    if let Ok(mut state) = self.state.write() {
-                        log::info!("Seed verification successful, moving to wallet view");
-                        state.current_view = View::Wallet;
-                        state.wallet_state = WalletState::Unlocked;
-                    }
-                } else {
-                    // Verification failed
-                    log::warn!("Seed verification failed - phrases don't match");
-                    verification_result = Some(false);
+            // Verify button
+            if ui.button("Verify").clicked() && is_correct {
+                if let Ok(mut state) = self.state.write() {
+                    log::info!("Seed verification successful, moving to wallet view");
+                    state.current_view = View::Wallet;
+                    state.wallet_state = WalletState::Unlocked;
                 }
             }
 
-            if back_clicked {
+            // Back button with simpler structure
+            let back_button = ui.button("Go Back");
+            if back_button.clicked() {
                 if let Ok(mut state) = self.state.write() {
                     state.current_view = View::Seed;
                 }
             }
 
-            // Show verification result if needed
-            if let Some(false) = verification_result {
-                ui.add_space(5.0);
-                ui.label(
-                    RichText::new("Verification failed. Please check your recovery phrase.")
-                        .color(Color32::RED),
-                );
-            }
-
             // Draw back button icon
-            if let Some(rect) = ui.memory(|m| m.data.get_temp::<Rect>(Id::new("back_button"))) {
-                crate::icons::draw_caret_left(ui, rect, Color32::WHITE);
-            }
+            crate::icons::draw_caret_left(ui, back_button.rect, Color32::WHITE);
         });
     }
 
@@ -778,55 +870,32 @@ impl BitVaultApp {
 
         // Center the logo
         ui.vertical_centered(|ui| {
-            // Center vertically - push down less to make it more centered
-            ui.add_space(screen_rect.height() / 4.0);
-
             // Use a static texture handle to avoid reloading on every frame
             static TEXTURE_ID: OnceLock<Option<egui::TextureHandle>> = OnceLock::new();
 
             let texture_id = TEXTURE_ID.get_or_init(|| {
-                log::debug!("Loading image - this should only happen once");
-
-                // Try to load the image from the file system - try multiple paths
-                let possible_paths = [
-                    "public/splash_logo.png",
-                    "./public/splash_logo.png",
-                    "../public/splash_logo.png",
-                    "bitvault-ui/public/splash_logo.png",
-                ];
-
-                for path in possible_paths {
-                    log::debug!("Trying to load image from: {}", path);
-                    if let Ok(image_data) = std::fs::read(path) {
-                        // Use the image crate to decode the image
-                        if let Ok(image) = image::load_from_memory(&image_data) {
-                            let size = [image.width() as _, image.height() as _];
-                            let image_buffer = image.to_rgba8();
-                            let pixels = image_buffer.as_flat_samples();
-
-                            let color_image =
-                                egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
-
-                            let texture = ui.ctx().load_texture(
-                                "splash_logo",
-                                color_image,
-                                Default::default(),
-                            );
-
-                            log::debug!("Image loaded successfully from {}", path);
-                            return Some(texture);
-                        }
-                    }
-                }
-
-                log::error!("Failed to read image file from any path");
-                None
+                log::debug!("Loading splash logo - this should only happen once");
+                assets::get_image_texture(ui.ctx(), "splash_logo", "public/splash_logo.png")
             });
 
             match texture_id {
                 Some(texture) => {
-                    // Make the image smaller (50% of original size)
-                    let scale = 0.5;
+                    // Get texture size and available space
+                    let available_size = ui.available_size();
+                    let texture_size = texture.size_vec2();
+
+                    // Calculate appropriate scale - use a smaller maximum to prevent oversizing
+                    // Use a target width of 50-60% of screen width, but never larger than original
+                    let target_width_ratio = 0.5;
+                    let desired_width = available_size.x * target_width_ratio;
+                    let scale = (desired_width / texture_size.x).min(1.0);
+
+                    let display_size = texture_size * scale;
+
+                    // Ensure vertical centering by adjusting spacing
+                    let vertical_center_offset = (available_size.y - display_size.y) / 2.0;
+                    ui.add_space(vertical_center_offset);
+
                     ui.add(egui::Image::new(texture).fit_to_original_size(scale));
                     log::trace!("Image added to frame {}", count);
                 }
@@ -839,6 +908,593 @@ impl BitVaultApp {
 
         // Request a repaint to ensure the timer updates even without mouse movement
         ui.ctx().request_repaint();
+    }
+
+    // Common function to render a centered onboarding container
+    fn render_onboarding_container(&self, ui: &mut Ui, render_content: impl FnOnce(&mut Ui)) {
+        // Set the background to white
+        let screen_rect = ui.max_rect();
+        ui.painter().rect_filled(screen_rect, 0.0, Color32::WHITE);
+
+        // Calculate the available space
+        let available_width = screen_rect.width();
+        let available_height = screen_rect.height();
+
+        // Content width (fixed at 328px for mobile designs)
+        let content_width: f32 = 328.0;
+        let content_height: f32 = 650.0; // Approximate height of content
+
+        // Calculate vertical padding to center content
+        let min_padding: f32 = 10.0;
+        let vertical_padding = (available_height - content_height).max(min_padding) / 2.0;
+
+        // Add container that centers content both horizontally and vertically
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none())
+            .show_inside(ui, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(vertical_padding);
+
+                    // Create a container with fixed width but centered horizontally
+                    let min_side_margin: f32 = 20.0;
+                    let container_width = content_width.min(available_width - min_side_margin);
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(container_width, content_height),
+                        egui::Layout::top_down(egui::Align::Center),
+                        render_content,
+                    );
+
+                    ui.add_space(vertical_padding);
+                });
+            });
+    }
+
+    fn render_onboarding_one(&self, ui: &mut Ui) {
+        self.render_onboarding_container(ui, |ui| {
+            // Upper panel with illustration
+            ui.add_space(80.0); // Status bar + top spacing
+
+            // Illustration frame - use SVG
+            ui.allocate_ui(egui::vec2(328.0, 249.0), |ui| {
+                ui.vertical_centered(|ui| {
+                    // Load and display the SVG image
+                    static TEXTURE_ID: OnceLock<Option<egui::TextureHandle>> = OnceLock::new();
+
+                    let texture = TEXTURE_ID.get_or_init(|| {
+                        log::debug!("Loading onboarding1.svg - this should only happen once");
+                        assets::load_svg_as_texture(ui.ctx(), "onboarding1", "assets/onboarding1.svg")
+                    });
+
+                    if let Some(texture) = texture {
+                        // Get texture size and available space
+                        let available_size = ui.available_size();
+                        let texture_size = texture.size_vec2();
+
+                        // Scale to fit within the available space while preserving aspect ratio
+                        let scale = (available_size.x / texture_size.x)
+                            .min(available_size.y / texture_size.y)
+                            .min(1.0); // Don't scale up if image is smaller
+
+                        let display_size = texture_size * scale;
+
+                        ui.add_space((available_size.y - display_size.y) / 2.0); // Center vertically
+                        ui.add(egui::Image::new(texture).fit_to_original_size(scale));
+                    } else {
+                        ui.colored_label(Color32::RED, "Failed to load SVG image");
+
+                        // Fallback to drawn elements if SVG fails to load
+                        ui.add_space(20.0);
+
+                        // Draw a shield with keys icon (for multisig)
+                        let center = ui.available_rect_before_wrap().center();
+                        let shield_size = 120.0;
+
+                        // Shield background
+                        ui.painter().circle_filled(
+                            center,
+                            shield_size/2.0,
+                            Color32::from_rgb(240, 240, 240),
+                        );
+
+                        // Shield border
+                        ui.painter().circle_stroke(
+                            center,
+                            shield_size/2.0 + 1.0,
+                            egui::Stroke::new(1.0, Color32::from_rgb(200, 200, 200)),
+                        );
+
+                        // Draw three key symbols
+                        let key_color = Color32::from_rgb(50, 50, 50);
+                        let key_spacing = shield_size * 0.3;
+
+                        // Draw three symbolic keys
+                        for i in -1..=1 {
+                            let key_center = center + egui::vec2(i as f32 * key_spacing, 0.0);
+
+                            // Key head (circle)
+                            ui.painter().circle_filled(
+                                key_center - egui::vec2(0.0, shield_size * 0.15),
+                                shield_size * 0.08,
+                                key_color,
+                            );
+
+                            // Key shaft
+                            let shaft_rect = egui::Rect::from_min_size(
+                                key_center + egui::vec2(-shield_size * 0.03, -shield_size * 0.05),
+                                egui::vec2(shield_size * 0.06, shield_size * 0.25),
+                            );
+
+                            ui.painter().rect_filled(
+                                shaft_rect,
+                                2.0,
+                                key_color,
+                            );
+
+                            // Key teeth
+                            let teeth_top = key_center.y + shield_size * 0.08;
+                            let teeth_width = shield_size * 0.04;
+                            let teeth_height = shield_size * 0.06;
+
+                            ui.painter().rect_filled(
+                                egui::Rect::from_min_size(
+                                    egui::pos2(key_center.x - teeth_width/2.0, teeth_top),
+                                    egui::vec2(teeth_width, teeth_height)
+                                ),
+                                1.0,
+                                key_color,
+                            );
+                        }
+                    }
+                });
+            });
+
+            // Content
+            ui.add_space(32.0);
+            ui.heading(RichText::new("Multisig security").color(Color32::BLACK).size(24.0));
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new("Secure your funds with 2-of-3 multisig vaults. For extra security spread the 3 keys across 3 different geolocation and store an extra copy of one key in a physical vault or similar.")
+                .color(Color32::from_rgb(82, 82, 82))
+                .size(14.0)
+            );
+
+            // Indicators
+            ui.add_space(24.0);
+            self.draw_navigation_arrows(ui, 1);
+
+            // Buttons at the bottom
+            ui.add_space(32.0);
+
+            if ui.add(egui::Button::new(
+                    RichText::new("Create a new wallet")
+                    .color(Color32::WHITE)
+                    .size(16.0))
+                .min_size(egui::vec2(328.0, 48.0))
+                .fill(Color32::BLACK)
+                .rounding(16.0)
+            ).clicked() {
+                if let Ok(mut state) = self.state.write() {
+                    state.current_view = View::OnboardingTwo;
+                }
+            }
+
+            ui.add_space(8.0);
+
+            if ui.add(egui::Button::new(
+                    RichText::new("I already have a wallet")
+                    .color(Color32::BLACK)
+                    .size(16.0))
+                .min_size(egui::vec2(328.0, 48.0))
+                .frame(false)
+            ).clicked() {
+                if let Ok(mut state) = self.state.write() {
+                    state.current_view = View::Home;
+                    state.onboarding_completed = true;
+                }
+            }
+
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new("By continuing, I agree to the Terms of Service")
+                .color(Color32::from_rgb(82, 82, 82))
+                .size(12.0)
+            );
+
+            // Navigation hint
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new("Tip: Use Left/Right arrow keys to navigate")
+                .color(Color32::from_rgb(150, 150, 150))
+                .size(10.0)
+            );
+        });
+    }
+
+    fn render_onboarding_two(&self, ui: &mut Ui) {
+        self.render_onboarding_container(ui, |ui| {
+            // Upper panel with illustration
+            ui.add_space(80.0); // Status bar + top spacing
+
+            // Illustration frame - use SVG
+            ui.allocate_ui(egui::vec2(328.0, 249.0), |ui| {
+                ui.vertical_centered(|ui| {
+                    // Load and display the SVG image
+                    static TEXTURE_ID: OnceLock<Option<egui::TextureHandle>> = OnceLock::new();
+
+                    let texture = TEXTURE_ID.get_or_init(|| {
+                        log::debug!("Loading onboarding2.svg - this should only happen once");
+                        assets::load_svg_as_texture(ui.ctx(), "onboarding2", "assets/onboarding2.svg")
+                    });
+
+                    if let Some(texture) = texture {
+                        // Get texture size and available space
+                        let available_size = ui.available_size();
+                        let texture_size = texture.size_vec2();
+
+                        // Scale to fit within the available space while preserving aspect ratio
+                        let scale = (available_size.x / texture_size.x)
+                            .min(available_size.y / texture_size.y)
+                            .min(1.0); // Don't scale up if image is smaller
+
+                        let display_size = texture_size * scale;
+
+                        ui.add_space((available_size.y - display_size.y) / 2.0); // Center vertically
+                        ui.add(egui::Image::new(texture).fit_to_original_size(scale));
+                    } else {
+                        ui.colored_label(Color32::RED, "Failed to load SVG image");
+
+                        // Fallback to drawn elements if SVG fails to load
+                        ui.add_space(20.0);
+
+                        // Draw a clock (for time delay)
+                        let center = ui.available_rect_before_wrap().center();
+                        let clock_size = 120.0;
+
+                        // Clock face
+                        ui.painter().circle_filled(
+                            center,
+                            clock_size/2.0,
+                            Color32::from_rgb(240, 240, 240),
+                        );
+
+                        // Clock border
+                        ui.painter().circle_stroke(
+                            center,
+                            clock_size/2.0,
+                            egui::Stroke::new(2.0, Color32::from_rgb(50, 50, 50)),
+                        );
+
+                        // Clock hands
+                        let hour_hand = center + egui::vec2(0.0, -clock_size * 0.25);
+                        let minute_hand = center + egui::vec2(clock_size * 0.3, 0.0);
+
+                        ui.painter().line_segment(
+                            [center, hour_hand],
+                            egui::Stroke::new(3.0, Color32::BLACK),
+                        );
+
+                        ui.painter().line_segment(
+                            [center, minute_hand],
+                            egui::Stroke::new(3.0, Color32::BLACK),
+                        );
+
+                        // Clock center dot
+                        ui.painter().circle_filled(
+                            center,
+                            4.0,
+                            Color32::BLACK,
+                        );
+                    }
+                });
+            });
+
+            // Content
+            ui.add_space(32.0);
+            ui.heading(RichText::new("Time-delay protection").color(Color32::BLACK).size(28.0));
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new("Set time-delays and prevent unauthorised withdrawals. The xPUB is of VITAL importance to recover your multisig vault. Keep AT LEAST a copy of the xPUB together with each key.")
+                .color(Color32::from_rgb(82, 82, 82))
+                .size(14.0)
+            );
+
+            // Indicators
+            ui.add_space(24.0);
+            self.draw_navigation_arrows(ui, 2);
+
+            // Buttons at the bottom
+            ui.add_space(32.0);
+
+            if ui.add(egui::Button::new(
+                    RichText::new("Continue")
+                    .color(Color32::WHITE)
+                    .size(16.0))
+                .min_size(egui::vec2(328.0, 48.0))
+                .fill(Color32::BLACK)
+                .rounding(16.0)
+            ).clicked() {
+                if let Ok(mut state) = self.state.write() {
+                    state.current_view = View::OnboardingThree;
+                }
+            }
+
+            ui.add_space(8.0);
+
+            if ui.add(egui::Button::new(
+                    RichText::new("Back")
+                    .color(Color32::BLACK)
+                    .size(16.0))
+                .min_size(egui::vec2(328.0, 48.0))
+                .frame(false)
+            ).clicked() {
+                if let Ok(mut state) = self.state.write() {
+                    state.current_view = View::OnboardingOne;
+                }
+            }
+
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new("By continuing, I agree to the Terms of Service")
+                .color(Color32::from_rgb(82, 82, 82))
+                .size(12.0)
+            );
+
+            // Navigation hint
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new("Tip: Use Left/Right arrow keys to navigate")
+                .color(Color32::from_rgb(150, 150, 150))
+                .size(10.0)
+            );
+        });
+    }
+
+    fn render_onboarding_three(&self, ui: &mut Ui) {
+        self.render_onboarding_container(ui, |ui| {
+            // Upper panel with illustration
+            ui.add_space(80.0); // Status bar + top spacing
+
+            // Illustration frame - use SVG
+            ui.allocate_ui(egui::vec2(328.0, 249.0), |ui| {
+                ui.vertical_centered(|ui| {
+                    // Load and display the SVG image
+                    static TEXTURE_ID: OnceLock<Option<egui::TextureHandle>> = OnceLock::new();
+
+                    let texture = TEXTURE_ID.get_or_init(|| {
+                        log::debug!("Loading onboarding3.svg - this should only happen once");
+                        assets::load_svg_as_texture(ui.ctx(), "onboarding3", "assets/onboarding3.svg")
+                    });
+
+                    if let Some(texture) = texture {
+                        // Get texture size and available space
+                        let available_size = ui.available_size();
+                        let texture_size = texture.size_vec2();
+
+                        // Scale to fit within the available space while preserving aspect ratio
+                        let scale = (available_size.x / texture_size.x)
+                            .min(available_size.y / texture_size.y)
+                            .min(1.0); // Don't scale up if image is smaller
+
+                        let display_size = texture_size * scale;
+
+                        ui.add_space((available_size.y - display_size.y) / 2.0); // Center vertically
+                        ui.add(egui::Image::new(texture).fit_to_original_size(scale));
+                    } else {
+                        ui.colored_label(Color32::RED, "Failed to load SVG image");
+
+                        // Fallback to the shield rendering if SVG fails
+                        // Center position
+                        let center = ui.min_rect().center();
+
+                        // Draw a shield shape for the notification icon
+                        let shield_size = 100.0;
+                        let shield_radius = shield_size / 2.0;
+
+                        // Draw shield background (light gray)
+                        ui.painter().circle_filled(
+                            center,
+                            shield_radius,
+                            Color32::from_rgb(245, 245, 245),
+                        );
+
+                        // Draw shield outline
+                        ui.painter().circle_stroke(
+                            center,
+                            shield_radius,
+                            egui::Stroke::new(1.0, Color32::from_rgb(200, 200, 200)),
+                        );
+
+                        // Draw lock icon inside the shield
+                        let lock_size = 40.0;
+                        let lock_top = center.y - lock_size * 0.2;
+                        let lock_bottom = center.y + lock_size * 0.5;
+                        let lock_left = center.x - lock_size * 0.3;
+                        let lock_right = center.x + lock_size * 0.3;
+
+                        // Lock body
+                        let lock_body = egui::Rect::from_min_max(
+                            egui::pos2(lock_left, lock_top),
+                            egui::pos2(lock_right, lock_bottom),
+                        );
+                        ui.painter().rect_filled(
+                            lock_body,
+                            5.0,
+                            Color32::from_rgb(30, 30, 30),
+                        );
+
+                        // Lock shackle (arc)
+                        let shackle_radius = lock_size * 0.4;
+                        let shackle_center = egui::pos2(center.x, lock_top - shackle_radius * 0.3);
+                        let shackle_stroke = egui::Stroke::new(6.0, Color32::from_rgb(30, 30, 30));
+
+                        // Draw a semi-circle for the shackle
+                        ui.painter().circle_stroke(shackle_center, shackle_radius, shackle_stroke);
+                    }
+                });
+            });
+
+            // Content
+            ui.add_space(32.0);
+            ui.heading(RichText::new("Secret notifications").color(Color32::BLACK).size(28.0));
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new("Stay informed about important wallet events and security updates. Secret notifications are end-to-end encrypted to protect your privacy and security.")
+                .color(Color32::from_rgb(82, 82, 82))
+                .size(14.0)
+            );
+
+            // Indicators
+            ui.add_space(24.0);
+            self.draw_navigation_arrows(ui, 3);
+
+            // Buttons at the bottom
+            ui.add_space(32.0);
+
+            if ui.add(egui::Button::new(
+                    RichText::new("Let's go!")
+                    .color(Color32::WHITE)
+                    .size(16.0))
+                .min_size(egui::vec2(328.0, 48.0))
+                .fill(Color32::BLACK)
+                .rounding(16.0)
+            ).clicked() {
+                if let Ok(mut state) = self.state.write() {
+                    state.current_view = View::Home;
+                    state.onboarding_completed = true;
+                }
+            }
+
+            ui.add_space(8.0);
+
+            if ui.add(egui::Button::new(
+                    RichText::new("Back")
+                    .color(Color32::BLACK)
+                    .size(16.0))
+                .min_size(egui::vec2(328.0, 48.0))
+                .frame(false)
+            ).clicked() {
+                if let Ok(mut state) = self.state.write() {
+                    state.current_view = View::OnboardingTwo;
+                }
+            }
+
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new("By continuing, I agree to the Terms of Service")
+                .color(Color32::from_rgb(82, 82, 82))
+                .size(12.0)
+            );
+
+            // Navigation hint
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new("Tip: Use Left/Right arrow keys to navigate")
+                .color(Color32::from_rgb(150, 150, 150))
+                .size(10.0)
+            );
+        });
+    }
+
+    // Helper function to draw arrow navigation indicators
+    fn draw_navigation_arrows(&self, ui: &mut Ui, screen_number: usize) {
+        // Available width needed for centering calculation
+        let available_width = ui.available_width();
+
+        // Create fixed-width dots
+        let active_width = 15.0;
+        let inactive_width = 5.0;
+        let dot_height = 4.0; // Slightly thicker for better visibility while still bead-like
+        let dot_spacing = 3.0;
+        let click_padding = 12.0; // Larger click area padding for better usability
+
+        // Calculate total width of all dots
+        let total_dot_width = match screen_number {
+            1 => active_width + 2.0 * inactive_width + 2.0 * dot_spacing,
+            2 => inactive_width + active_width + inactive_width + 2.0 * dot_spacing,
+            3 => 2.0 * inactive_width + active_width + 2.0 * dot_spacing,
+            _ => active_width + 2.0 * inactive_width + 2.0 * dot_spacing,
+        };
+
+        // Add space for centering
+        let left_padding = (available_width - total_dot_width) / 2.0;
+
+        ui.horizontal(|ui| {
+            ui.add_space(left_padding);
+
+            // Create a container for our dots with extra height for easier clicking
+            let response = ui.allocate_rect(
+                egui::Rect::from_min_size(
+                    ui.cursor().min,
+                    egui::vec2(total_dot_width, dot_height + click_padding),
+                ),
+                egui::Sense::click(), // Make the entire area clickable
+            );
+
+            // Draw the dots directly using the painter
+            let painter = ui.painter();
+            let mut current_x = response.rect.min.x;
+            let center_y = response.rect.center().y;
+
+            // Store click positions for later processing
+            let mut click_areas = Vec::new();
+
+            // Draw all dots
+            for i in 1..=3 {
+                if i > 1 {
+                    current_x += dot_spacing;
+                }
+
+                // Determine dot properties based on state
+                let (width, color) = if i == screen_number {
+                    (active_width, Color32::from_rgb(17, 165, 238))
+                } else {
+                    (inactive_width, Color32::from_rgb(217, 217, 217))
+                };
+
+                // Calculate the dot rectangle
+                let dot_rect = egui::Rect::from_min_size(
+                    egui::pos2(current_x, center_y - dot_height / 2.0),
+                    egui::vec2(width, dot_height),
+                );
+
+                // Draw the dot
+                painter.rect_filled(dot_rect, dot_height / 2.0, color);
+
+                // Store click area if this is an inactive dot
+                if i != screen_number {
+                    // Create a larger clickable area
+                    let click_rect = egui::Rect::from_min_max(
+                        egui::pos2(current_x - 2.0, center_y - (click_padding / 2.0)),
+                        egui::pos2(current_x + width + 2.0, center_y + (click_padding / 2.0)),
+                    );
+
+                    click_areas.push((click_rect, i));
+                }
+
+                // Move to the next dot position
+                current_x += width;
+            }
+
+            // Handle clicks for navigation
+            if response.clicked() {
+                if let Some(mouse_pos) = ui.ctx().pointer_latest_pos() {
+                    // Handle clicks directly on dots
+                    for (rect, idx) in click_areas {
+                        if rect.contains(mouse_pos) {
+                            if let Ok(mut state) = self.state.write() {
+                                state.current_view = match idx {
+                                    1 => View::OnboardingOne,
+                                    2 => View::OnboardingTwo,
+                                    3 => View::OnboardingThree,
+                                    _ => View::OnboardingOne,
+                                };
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        });
     }
 
     // Helper function to get the wallet file path
@@ -883,11 +1539,57 @@ impl BitVaultApp {
 
 impl eframe::App for BitVaultApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+        // Check for window resize events and save the new size
+        let screen_rect = ctx.input(|i| i.screen_rect);
+        let size = screen_rect.size();
+        if size.x != self.settings.window_width || size.y != self.settings.window_height {
+            self.settings.update_window_size(size.x, size.y);
+        }
+
         // Always request a repaint when in splash screen mode to ensure timer updates
         if let Ok(state) = self.state.read() {
             if state.current_view == View::SplashScreen {
                 // Request continuous repaints during splash screen
                 ctx.request_repaint();
+            }
+        }
+
+        // Check for arrow key navigation in onboarding screens
+        if let Ok(state) = self.state.read() {
+            if matches!(
+                state.current_view,
+                View::OnboardingOne | View::OnboardingTwo | View::OnboardingThree
+            ) {
+                // Check for left/right arrow keys
+                let right_pressed = ctx.input(|i| i.key_pressed(egui::Key::ArrowRight));
+                let left_pressed = ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft));
+
+                // Store current view for use outside of the read lock
+                let current_view = state.current_view.clone();
+
+                // Release the read lock before attempting to acquire a write lock
+                drop(state);
+
+                if right_pressed || left_pressed {
+                    // Now get a write lock to potentially change the view
+                    if let Ok(mut state) = self.state.write() {
+                        match (current_view, right_pressed, left_pressed) {
+                            (View::OnboardingOne, true, _) => {
+                                state.current_view = View::OnboardingTwo
+                            }
+                            (View::OnboardingTwo, true, _) => {
+                                state.current_view = View::OnboardingThree
+                            }
+                            (View::OnboardingTwo, _, true) => {
+                                state.current_view = View::OnboardingOne
+                            }
+                            (View::OnboardingThree, _, true) => {
+                                state.current_view = View::OnboardingTwo
+                            }
+                            _ => {} // No change for other combinations
+                        }
+                    }
+                }
             }
         }
 
@@ -898,8 +1600,15 @@ impl eframe::App for BitVaultApp {
                 if new_timer <= 0.0 {
                     state.splash_timer = None;
 
-                    // Transition to the appropriate view after splash screen
-                    if state.wallet_state == WalletState::Locked {
+                    // When in testing mode, bypass lock screen and go to onboarding
+                    if state.testing_mode {
+                        state.current_view = View::OnboardingOne;
+                        log::info!(
+                            "Testing mode active: Bypassing lock screen and showing onboarding"
+                        );
+                    }
+                    // Normal flow - go to lock screen or home
+                    else if state.wallet_state == WalletState::Locked {
                         state.current_view = View::LockScreen;
                     } else {
                         state.current_view = View::Home;
@@ -941,6 +1650,9 @@ impl eframe::App for BitVaultApp {
                 View::Wallet => self.render_wallet(ui),
                 View::LockScreen => self.render_lock_screen(ui),
                 View::SplashScreen => self.render_splash_screen(ui),
+                View::OnboardingOne => self.render_onboarding_one(ui),
+                View::OnboardingTwo => self.render_onboarding_two(ui),
+                View::OnboardingThree => self.render_onboarding_three(ui),
             }
         });
     }

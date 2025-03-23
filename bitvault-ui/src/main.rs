@@ -1,4 +1,5 @@
 mod app;
+mod config;
 mod icons;
 mod wallet;
 
@@ -12,9 +13,12 @@ fn main() {
         .init()
         .unwrap();
 
+    // Load settings for the initial window size
+    let settings = config::Settings::load();
+
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([800.0, 600.0])
+            .with_inner_size([settings.window_width, settings.window_height])
             .with_min_inner_size([400.0, 300.0]),
         centered: true,
         ..Default::default()
