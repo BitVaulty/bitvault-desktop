@@ -1,4 +1,30 @@
-/dist/
+# Rust build artifacts
 /target/
-/Cargo.lock
+**/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo
+# Note: Cargo.lock should be committed for applications (bitvault-app)
+# but not for libraries. We keep it for the app.
+# **/Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+
+# Build outputs
+/dist/
+/build/

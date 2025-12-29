@@ -1,0 +1,53 @@
+[package]
+name = "bitvault-app"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+# GUI
+eframe = "0.27"
+egui = "0.27"
+egui_extras = { version = "0.27", features = ["svg"] }
+
+# Bitcoin - Use directly, no wrappers
+bdk = { workspace = true, features = ["keys-bip39", "sqlite"] }
+bitcoin = { workspace = true }
+secp256k1 = { workspace = true }
+bip39 = "2.0"
+rand = "0.8"
+
+# UR/QR
+ur = "0.4.1"
+qrcode = "0.14"
+quircs = "0.10"
+ciborium = "0.2"
+image = "0.25"
+rfd = "0.14"  # File dialogs for image selection
+
+# Infrastructure
+reqwest = { version = "0.12", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+keyring = "2.0"
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+notify-rust = "4.11"
+chrono = { version = "0.4", features = ["serde"] }
+bs58 = "0.5"
+
+# Logging
+simple_logger = "5.0"
+log = "0.4"
+
+# File system
+dirs = "5.0.1"
+toml = "0.8"
+
+# Internal - reference shared library at root level
+bitvault-common = { path = "../../bitvault-common" }
+
