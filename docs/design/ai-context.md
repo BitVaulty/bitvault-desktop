@@ -56,7 +56,7 @@
 - **Codebase Structure**: Modular organization with security boundaries
   - **`bitvault-core`**: Security-critical operations (isolated context)
   - **`bitvault-common`**: Shared components and interfaces
-  - **`bitvault-ui`**: User interface and interaction
+  - **`bitvault-app`**: User interface and interaction (egui/eframe)
   - **`bitvault-app`**: Platform integration
 
 > **Related Documents**:

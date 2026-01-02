@@ -32,7 +32,7 @@ BitVault is a Rust workspace project with the following crates:
 - `bitvault-core` - Core wallet functionality and cryptographic operations
 - `bitvault-common` - Shared utilities and types
 - `bitvault-ipc` - Inter-process communication between components
-- `bitvault-ui` - User interface components
+- `bitvault-app` - User interface components (egui/eframe)
 
 ### Prerequisites
 

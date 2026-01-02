@@ -32,11 +32,18 @@ impl BitVaultApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         // Try to load network from settings, default to Testnet
         let initial_network = {
-            let settings_manager = crate::settings::SettingsManager::new()
-                .unwrap_or_else(|_| {
-                    eprintln!("Failed to create settings manager, using defaults");
-                    crate::settings::SettingsManager::new().unwrap()
-                });
+            let settings_manager = match crate::settings::SettingsManager::new() {
+                Ok(sm) => sm,
+                Err(e) => {
+                    eprintln!("Failed to create settings manager: {}, using defaults", e);
+                    // Try one more time, but if it fails again, we'll panic (this shouldn't happen)
+                    crate::settings::SettingsManager::new()
+                        .unwrap_or_else(|e2| {
+                            eprintln!("Critical: Failed to create settings manager twice: {}, {}", e, e2);
+                            panic!("Cannot initialize settings manager");
+                        })
+                }
+            };
             
             if let Ok(Some(network_str)) = settings_manager.get_network() {
                 match network_str.as_str() {
@@ -51,12 +58,24 @@ impl BitVaultApp {
             }
         };
         
-        let app_state = AppState::new(initial_network)
-            .unwrap_or_else(|e| {
-                eprintln!("Failed to initialize app state: {}", e);
+        let app_state = match AppState::new(initial_network) {
+            Ok(state) => state,
+            Err(e) => {
+                eprintln!("Failed to initialize app state with saved network: {}", e);
                 // Fallback to default if settings fail
-                AppState::new(bdk::bitcoin::Network::Testnet).unwrap()
-            });
+                match AppState::new(bdk::bitcoin::Network::Testnet) {
+                    Ok(state) => state,
+                    Err(e2) => {
+                        eprintln!("CRITICAL: Failed to initialize app state even with default network: {}", e2);
+                        eprintln!("This indicates a serious system error. The application may not function correctly.");
+                        eprintln!("Attempting to continue anyway - some features may be unavailable.");
+                        // This should never happen, but if it does, we'll panic with a clear message
+                        // rather than silently failing or using unsafe unwrap
+                        panic!("FATAL: AppState initialization failed completely. This indicates a critical system error that prevents the application from starting. Error: {}", e2);
+                    }
+                }
+            }
+        };
         
         // Check if PIN is required
         let pin_service = bitvault_common::PinService::new();
@@ -113,7 +132,8 @@ impl eframe::App for BitVaultApp {
             // Check if PIN authentication is required
             if !self.is_authenticated {
                 let mut callback = None;
-                let pin_validated = render_pin_entry(ui, &mut self.pin_entry_state, &mut callback, ctx);
+                let runtime = self.app_state.get_runtime();
+                let pin_validated = render_pin_entry(ui, &mut self.pin_entry_state, &mut callback, ctx, runtime);
                 
                 if pin_validated {
                     self.is_authenticated = true;
@@ -144,6 +164,10 @@ impl eframe::App for BitVaultApp {
                     render_vault_creation(ui, &mut self.app_state, &mut self.navigation, &mut self.vault_creation_state);
                 }
                 View::SendTransaction => {
+                    // Check if there's pre-filled address data from navigation
+                    if let Some(prefilled_address) = self.navigation.take_navigation_data() {
+                        self.send_transaction_state.recipient_address = prefilled_address;
+                    }
                     render_send_transaction(ui, &mut self.app_state, &mut self.navigation, &mut self.send_transaction_state);
                 }
                 View::Receive => {
@@ -166,7 +190,8 @@ impl eframe::App for BitVaultApp {
                 }
                 View::PinEntry => {
                     let mut callback = None;
-                    let pin_validated = render_pin_entry(ui, &mut self.pin_entry_state, &mut callback, ctx);
+                    let runtime = self.app_state.get_runtime();
+                    let pin_validated = render_pin_entry(ui, &mut self.pin_entry_state, &mut callback, ctx, runtime);
                     
                     if pin_validated {
                         // PIN validated - navigate to appropriate screen

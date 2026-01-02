@@ -167,7 +167,7 @@ cargo build --workspace
 
 # Build specific crates
 cargo build -p bitvault-core
-cargo build -p bitvault-ui
+cargo build -p bitvault-app
 ```
 
 ## Step 10: Run the Development Environment
@@ -180,7 +180,7 @@ make dev
 cargo test -p bitvault-core
 
 # Run tests for the UI module
-cargo test -p bitvault-ui
+cargo test -p bitvault-app
 
 # Run security boundary tests
 make security-test
@@ -197,7 +197,7 @@ trunk serve
 BitVault consists of multiple crates separated by security boundaries:
 - `bitvault-core`: Security-critical operations within the secure boundary
 - `bitvault-common`: Shared code that crosses boundaries
-- `bitvault-ui`: User interface using egui
+- `bitvault-app`: User interface using egui/eframe
 - `bitvault-app`: Platform integration and process management
 
 When developing, be mindful of the security boundaries:

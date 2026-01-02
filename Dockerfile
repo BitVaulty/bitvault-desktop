@@ -19,26 +19,22 @@ RUN apt-get update && apt-get install -y \
     lld \
     clang
 
-RUN cargo install trunk
-
-RUN rustup target add wasm32-unknown-unknown
-RUN rustup target add x86_64-unknown-linux-gnu
-RUN rustup target list
+# Note: egui/eframe doesn't require trunk or tauri
+# Removed trunk and tauri-cli installation as we use egui/eframe, not Tauri
 
 WORKDIR /app
 
 COPY . .
 
-RUN cargo install tauri-cli
 RUN cargo test
-RUN cargo tauri dev
+RUN cargo build --release -p bitvault-app
 
 # Stage 2: Runtime stage (as before)
 FROM debian:bullseye-slim
 
 # Copy only the necessary artifacts from the build stage
-COPY --from=builder /app/target/x86_64-unknown-linux-gnu/release/bitvaulty /app/bitvaulty
+COPY --from=builder /app/target/release/bitvault-app /app/bitvault-app
 
 WORKDIR /app
 
-CMD ["./bitvaulty"] # Replace "bitvaulty" with your app name
+CMD ["./bitvault-app"]

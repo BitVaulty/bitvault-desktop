@@ -12,13 +12,22 @@ use log::LevelFilter;
 
 fn main() {
     // Initialize logger
-    SimpleLogger::new()
+    if let Err(e) = SimpleLogger::new()
         .with_level(LevelFilter::Info)
-        .init()
-        .unwrap();
+        .init() {
+        eprintln!("Failed to initialize logger: {}", e);
+        // Continue without logger - not critical for app startup
+    }
 
     // Create tokio runtime for async operations
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(e) => {
+            eprintln!("Failed to create tokio runtime: {}", e);
+            eprintln!("This is a critical error - the application cannot function without async support.");
+            std::process::exit(1);
+        }
+    };
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -28,7 +37,7 @@ fn main() {
         ..Default::default()
     };
 
-    eframe::run_native(
+    if let Err(e) = eframe::run_native(
         "BitVault",
         native_options,
         Box::new(move |cc| {
@@ -36,7 +45,9 @@ fn main() {
             app.set_runtime(rt);
             Box::new(app)
         }),
-    )
-    .expect("Failed to start application");
+    ) {
+        eprintln!("Failed to start application: {}", e);
+        std::process::exit(1);
+    }
 }
 

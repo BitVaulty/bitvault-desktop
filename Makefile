@@ -2,7 +2,7 @@
 
 # Primary development targets
 dev:
-	cargo run -p bitvault-ui
+	cargo run -p bitvault-app
 
 build:
 	cargo build --workspace
@@ -15,10 +15,10 @@ test:
 	cargo test --workspace
 
 core-test:
-	cargo test -p bitvault-core
+	cargo test -p bitvault-common
 
 ui-test:
-	cargo test -p bitvault-ui
+	cargo test -p bitvault-app
 
 security-test:
 	cargo test -p bitvault-core --features security_tests
@@ -43,21 +43,22 @@ lint:
 check: lint security-check test
 
 # Build wasm version (for future web interface)
-wasm:
-	cd bitvault-ui && trunk build
+# wasm:
+# 	cd bitvault-app && trunk build
+# Note: egui/eframe doesn't use trunk, this is for future web support
 
 # Run in development mode with security boundary logging
 dev-debug:
-	BITVAULT_LOG=debug cargo run -p bitvault-ui
+	BITVAULT_LOG=debug cargo run -p bitvault-app
 
 # Run with process isolation verification
 dev-secure:
-	BITVAULT_VERIFY_ISOLATION=1 cargo run -p bitvault-ui
+	BITVAULT_VERIFY_ISOLATION=1 cargo run -p bitvault-app
 
 # Generate documentation
 docs:
 	cargo doc --workspace --no-deps
-	@echo "Documentation available at target/doc/bitvault_core/index.html"
+	@echo "Documentation available at target/doc/bitvault_common/index.html"
 
 # Build all variants
 all: clean build release wasm
