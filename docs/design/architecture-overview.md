@@ -37,7 +37,7 @@ This document defines BitVault's codebase architecture, component relationships,
    - Logging infrastructure (security-aware)
    - NO security-critical operations
 
-3. **bitvault-ui**: User interface
+3. **bitvault-app**: User interface (egui/eframe)
    - Transaction construction and display
    - Wallet management interface
    - User workflow implementation
@@ -54,7 +54,7 @@ This document defines BitVault's codebase architecture, component relationships,
 
 ```
 bitvault-app
-    ├── bitvault-ui
+    ├── bitvault-app
     │       ├── bitvault-common
     │       
     ├── bitvault-common
@@ -178,7 +178,7 @@ bitvault-app
 - Minimal external dependencies
 - Comprehensive testing with security focus
 
-## 5. bitvault-ui (User Interface Module)
+## 5. bitvault-app (User Interface Module)
 
 ### Responsibilities
 

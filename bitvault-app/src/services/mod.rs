@@ -1,9 +1,7 @@
-// Service modules - Use BDK directly, no wrappers
+// Service modules - Desktop-specific services
+// Note: VaultService, ConvenienceService, and MempoolService are in bitvault-common
 
-pub mod vault_service;
 pub mod key_service;
-pub mod mempool_service;
-pub mod convenience_client;
 pub mod telegram_service;
 pub mod pcloud_backup;
 pub mod tx_storage;

@@ -122,7 +122,14 @@ fn load_address(_ui: &mut egui::Ui, app_state: &mut AppState, state: &mut Receiv
     state.error = None;
 
     // Try to get address from cached vault data first
-    let vault_data = app_state.vault_data.lock().unwrap();
+    let vault_data = match app_state.vault_data.lock() {
+        Ok(data) => data,
+        Err(_) => {
+            state.error = Some("Error: Mutex poisoned".to_string());
+            state.is_loading = false;
+            return;
+        }
+    };
     if let Some(ref address) = vault_data.receive_address {
         state.address = Some(address.clone());
         state.is_loading = false;
@@ -145,9 +152,10 @@ fn load_address(_ui: &mut egui::Ui, app_state: &mut AppState, state: &mut Receiv
                 state.is_loading = false;
                 
                 // Update cached vault data
-                let mut vault_data = app_state.vault_data.lock().unwrap();
-                if let Some(ref addr) = state.address {
-                    vault_data.update_address(addr.clone());
+                if let Ok(mut vault_data) = app_state.vault_data.lock() {
+                    if let Some(ref addr) = state.address {
+                        vault_data.update_address(addr.clone());
+                    }
                 }
             }
             Err(e) => {

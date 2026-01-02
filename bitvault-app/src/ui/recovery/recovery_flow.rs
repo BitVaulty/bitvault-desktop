@@ -92,17 +92,18 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                         }
                         if ui.button("Sign & Share").clicked() {
                             // Get recipient address (for now, use vault address)
-                            let recipient = app_state
-                                .vault_data
-                                .lock()
-                                .unwrap()
-                                .receive_address
-                                .clone()
-                                .unwrap_or_default();
-                            next_state = Some(RecoveryState::Signing {
-                                psbt_base64: psbt_base64.clone(),
-                                recipient: recipient.clone(),
-                            });
+                            match app_state.vault_data.lock() {
+                                Ok(data) => {
+                                    let recipient = data.receive_address.clone().unwrap_or_default();
+                                    next_state = Some(RecoveryState::Signing {
+                                        psbt_base64: psbt_base64.clone(),
+                                        recipient: recipient.clone(),
+                                    });
+                                }
+                                Err(_) => {
+                                    next_state = Some(RecoveryState::Error("Error: Mutex poisoned".to_string()));
+                                }
+                            }
                         }
                     });
                 }
@@ -195,13 +196,13 @@ fn build_recovery_preview(
         (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
         
         // Get recipient address (use vault address for recovery)
-        let recipient = app_state
-            .vault_data
-            .lock()
-            .unwrap()
-            .receive_address
-            .clone()
-            .unwrap_or_default();
+        let recipient = match app_state.vault_data.lock() {
+            Ok(data) => data.receive_address.clone().unwrap_or_default(),
+            Err(_) => {
+                *state = RecoveryState::Error("Error: Mutex poisoned".to_string());
+                return;
+            }
+        };
 
         if recipient.is_empty() {
             *state = RecoveryState::Error("No recipient address available".to_string());

@@ -6,7 +6,7 @@
 //! - Subscription renewal/upgrade prompts
 
 mod status_display;
-mod validation;
+pub mod validation;
 
 
 use eframe::egui;

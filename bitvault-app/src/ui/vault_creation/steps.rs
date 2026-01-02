@@ -19,15 +19,21 @@ pub fn render_mnemonic_generation(ui: &mut egui::Ui, state: &mut VaultCreationSt
             use rand::RngCore;
             let mut entropy = [0u8; 16]; // 128 bits for 12 words
             rand::thread_rng().fill_bytes(&mut entropy);
-            let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy)
-                .expect("Failed to generate mnemonic");
-            state.mnemonic = Some(mnemonic);
+            match Mnemonic::from_entropy_in(Language::English, &entropy) {
+                Ok(mnemonic) => {
+                    state.mnemonic = Some(mnemonic);
+                }
+                Err(e) => {
+                    state.error = Some(format!("Failed to generate mnemonic: {}", e));
+                    return;
+                }
+            }
             state.current_step = VaultCreationStep::DisplaySeedPhrase;
         }
 
         if ui.button("Import Existing").clicked() {
-            // TODO: Implement import flow
-            state.error = Some("Import not yet implemented".to_string());
+            state.current_step = VaultCreationStep::ImportVault;
+            state.error = None;
         }
     });
 }
@@ -428,3 +434,139 @@ pub fn render_completed(ui: &mut egui::Ui, navigation: &mut Navigation, state: &
     }
 }
 
+/// Import vault flow
+/// Step 1: Enter mnemonic and scan QR descriptors
+pub fn render_import_vault(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navigation, state: &mut VaultCreationState) {
+    ui.label("Import Existing Vault");
+    ui.add_space(10.0);
+    
+    ui.label("Enter your 12 or 24-word mnemonic phrase:");
+    ui.add_space(5.0);
+    ui.text_edit_multiline(&mut state.import_mnemonic_text);
+    ui.add_space(10.0);
+    
+    ui.label("Scan or paste the descriptor QR code (compressed base64):");
+    ui.add_space(5.0);
+    ui.text_edit_multiline(&mut state.import_descriptors_qr);
+    ui.add_space(10.0);
+    
+    ui.label("Vault Name:");
+    ui.text_edit_singleline(&mut state.vault_name);
+    ui.add_space(10.0);
+    
+    ui.checkbox(&mut state.is_coowner, "This is a coowner device");
+    ui.add_space(10.0);
+    
+    if state.is_importing {
+        ui.label("Importing vault...");
+        ui.add_space(10.0);
+        ui.spinner();
+        return;
+    }
+    
+    ui.horizontal(|ui| {
+        if ui.button("Import").clicked() {
+            // Validate inputs
+            if state.import_mnemonic_text.trim().is_empty() {
+                state.error = Some("Please enter your mnemonic phrase".to_string());
+                return;
+            }
+            
+            if state.import_descriptors_qr.trim().is_empty() {
+                state.error = Some("Please enter or scan the descriptor QR code".to_string());
+                return;
+            }
+            
+            if state.vault_name.trim().is_empty() {
+                state.error = Some("Please enter a vault name".to_string());
+                return;
+            }
+            
+            // Parse mnemonic
+            let mnemonic_text = state.import_mnemonic_text.trim();
+            let mnemonic = match Mnemonic::parse_in(Language::English, mnemonic_text) {
+                Ok(m) => m,
+                Err(e) => {
+                    state.error = Some(format!("Invalid mnemonic: {}", e));
+                    return;
+                }
+            };
+            
+            state.is_importing = true;
+            state.error = None;
+            
+            // Import vault using runtime
+            if let Some(ref runtime) = app_state.runtime {
+                let descriptors_qr = state.import_descriptors_qr.clone();
+                let vault_name = state.vault_name.clone();
+                let is_coowner = state.is_coowner;
+                let network = app_state.network;
+                let runtime_handle = runtime.handle().clone();
+                
+                let result: Result<(bitvault_common::wallet::VaultService, String), String> = runtime.block_on(async {
+                    let mut vault_service = bitvault_common::wallet::VaultService::new(network);
+                    
+                    vault_service.import_vault(
+                        &mnemonic,
+                        &descriptors_qr,
+                        &vault_name,
+                        is_coowner,
+                    ).await
+                    .map_err(|e| format!("Import failed: {}", e))?;
+                    
+                    // After import, the vault service has the wallet initialized
+                    // Get the vault address from the service
+                    let vault_address = vault_service.get_address()
+                        .map_err(|e| format!("Failed to get address: {}", e))?;
+                    Ok((vault_service, vault_address))
+                });
+                
+                match result {
+                    Ok((vault_service, vault_address)) => {
+                        // Initialize vault in app_state
+                        if let Err(e) = runtime_handle.block_on(async {
+                            app_state.initialize_vault_from_service(vault_service).await
+                        }) {
+                            state.error = Some(format!("Failed to initialize vault in app: {}", e));
+                            state.is_importing = false;
+                            return;
+                        }
+                        
+                        // Fetch initial data
+                        if let Some(ref mut handler) = app_state.async_handler {
+                            handler.fetch_balance();
+                            handler.fetch_address();
+                        }
+                        
+                        // Navigate to dashboard
+                        navigation.navigate_to(crate::state::View::Dashboard { tab: 0 });
+                        state.vault_address = Some(vault_address);
+                        state.current_step = VaultCreationStep::Completed;
+                        state.is_importing = false;
+                    }
+                    Err(e) => {
+                        state.error = Some(format!("Failed to import vault: {}", e));
+                        state.is_importing = false;
+                    }
+                }
+            } else {
+                state.error = Some("Runtime not available".to_string());
+                state.is_importing = false;
+            }
+        }
+        
+        if ui.button("Cancel").clicked() {
+            state.current_step = VaultCreationStep::MnemonicGeneration;
+            state.import_mnemonic_text.clear();
+            state.import_descriptors_qr.clear();
+            state.vault_name.clear();
+            state.error = None;
+        }
+    });
+    
+    // Show error if any
+    if let Some(ref error) = state.error {
+        ui.add_space(10.0);
+        ui.colored_label(egui::Color32::RED, error);
+    }
+}

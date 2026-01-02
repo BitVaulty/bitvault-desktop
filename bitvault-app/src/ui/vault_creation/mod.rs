@@ -20,6 +20,8 @@ use bip39::Mnemonic;
 pub enum VaultCreationStep {
     /// Step 1: Generate or import mnemonic
     MnemonicGeneration,
+    /// Step 1b: Import vault (mnemonic + QR descriptors)
+    ImportVault,
     /// Step 2: Display seed phrase (with warning)
     DisplaySeedPhrase,
     /// Step 3: Verify seed phrase
@@ -59,6 +61,11 @@ pub struct VaultCreationState {
     pub error: Option<String>,
     pub is_creating: bool,
     pub pin_setup_state: crate::ui::pin::PinSetupState,
+    // Import-specific fields
+    pub import_mnemonic_text: String,
+    pub import_descriptors_qr: String,
+    pub is_coowner: bool,
+    pub is_importing: bool,
 }
 
 impl Default for VaultCreationState {
@@ -81,6 +88,10 @@ impl Default for VaultCreationState {
             error: None,
             is_creating: false,
             pin_setup_state: crate::ui::pin::PinSetupState::new(),
+            import_mnemonic_text: String::new(),
+            import_descriptors_qr: String::new(),
+            is_coowner: false,
+            is_importing: false,
         }
     }
 }
@@ -101,6 +112,9 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
         match state.current_step {
             VaultCreationStep::MnemonicGeneration => {
                 steps::render_mnemonic_generation(ui, state);
+            }
+            VaultCreationStep::ImportVault => {
+                steps::render_import_vault(ui, app_state, navigation, state);
             }
             VaultCreationStep::DisplaySeedPhrase => {
                 steps::render_display_seed_phrase(ui, state);

@@ -65,7 +65,13 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
             
             // Show vault data if available and extract address for switcher
             let current_address = {
-                let vault_data = app_state.vault_data.lock().unwrap();
+                let vault_data = match app_state.vault_data.lock() {
+                    Ok(data) => data,
+                    Err(_) => {
+                        ui.label("Error: Mutex poisoned");
+                        return;
+                    }
+                };
                 let address = vault_data.receive_address.clone();
                 let balance = vault_data.confirmed_balance;
                 

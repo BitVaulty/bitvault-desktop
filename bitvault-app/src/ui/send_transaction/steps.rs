@@ -85,14 +85,13 @@ pub fn sign_and_broadcast(_ui: &mut egui::Ui, app_state: &mut AppState, _navigat
     }
     
     // Validate subscription before sending (mainnet only)
-    // TODO: Check network and only validate on mainnet
-    // if let Err(error_msg) = crate::ui::subscription::validation::check_subscription_before_action(
-    //     app_state,
-    //     "send transactions",
-    // ) {
-    //     state.error = Some(error_msg);
-    //     return;
-    // }
+    if let Err(error_msg) = crate::ui::subscription::validation::check_subscription_before_action(
+        app_state,
+        "send transactions",
+    ) {
+        state.error = Some(error_msg);
+        return;
+    }
     if state.is_signing {
         return;
     }

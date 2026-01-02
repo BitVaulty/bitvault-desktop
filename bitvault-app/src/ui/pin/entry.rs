@@ -37,9 +37,16 @@ impl PinEntryState {
     pub fn new() -> Self {
         let mut state = Self::default();
         // Check biometric availability on initialization
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        state.biometric_available = rt.block_on(state.biometric_service.is_available());
-        state.biometric_type = rt.block_on(state.biometric_service.get_biometric_type());
+        // Note: This creates a temporary runtime since app_state runtime isn't available yet
+        // This is acceptable for initialization, but operations during rendering should use app_state runtime
+        if let Ok(rt) = tokio::runtime::Runtime::new() {
+            state.biometric_available = rt.block_on(state.biometric_service.is_available());
+            state.biometric_type = rt.block_on(state.biometric_service.get_biometric_type());
+        } else {
+            // If runtime creation fails, biometrics are unavailable
+            state.biometric_available = false;
+            state.biometric_type = crate::services::biometric_service::BiometricType::None;
+        }
         state
     }
 
@@ -91,6 +98,7 @@ pub fn render_pin_entry(
     state: &mut PinEntryState,
     _on_pin_validated: &mut Option<Box<dyn FnMut()>>,
     _ctx: &egui::Context,
+    runtime: Option<&tokio::runtime::Runtime>,
 ) -> bool {
     let mut pin_validated = false;
     
@@ -112,9 +120,12 @@ pub fn render_pin_entry(
         if state.biometric_available {
             ui.label(format!("Or use {} to authenticate", state.biometric_type.display_name()));
             if ui.button(format!("Use {}", state.biometric_type.display_name())).clicked() {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                if rt.block_on(state.try_biometric()) {
-                    pin_validated = true;
+                if let Some(rt) = runtime {
+                    if rt.block_on(state.try_biometric()) {
+                        pin_validated = true;
+                    }
+                } else {
+                    state.error = Some("Runtime not available".to_string());
                 }
             }
             ui.add_space(10.0);

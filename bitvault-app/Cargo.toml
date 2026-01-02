@@ -48,6 +48,9 @@ log = "0.4"
 dirs = "5.0.1"
 toml = "0.8"
 
-# Internal - reference shared library at root level
-bitvault-common = { path = "../../bitvault-common" }
+# Shared library dependency
+# For local development (current):
+# bitvault-common = { path = "../../bitvault-common", features = ["keyring-storage"] }
+# For cross-repo use, switch to git dependency:
+bitvault-common = { git = "https://github.com/BitVaulty/bitvault-common.git", branch = "main", features = ["keyring-storage"] }
 

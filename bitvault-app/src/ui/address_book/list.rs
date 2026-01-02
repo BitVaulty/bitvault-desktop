@@ -7,7 +7,6 @@ use crate::state::{AppState, Navigation};
 use crate::services::address_book::{AddressBookService, AddressEntry};
 
 /// State for address book list view
-#[derive(Default)]
 pub struct AddressBookState {
     addresses: Vec<AddressEntry>,
     is_loading: bool,
@@ -16,6 +15,24 @@ pub struct AddressBookState {
     selected_index: Option<usize>,
     edit_dialog: Option<usize>, // Index of address being edited
     edit_label: String,
+    add_dialog_open: bool,
+    add_address_state: crate::ui::address_book::entry::AddressEntryState,
+}
+
+impl Default for AddressBookState {
+    fn default() -> Self {
+        Self {
+            addresses: Vec::new(),
+            is_loading: false,
+            error: None,
+            search_text: String::new(),
+            selected_index: None,
+            edit_dialog: None,
+            edit_label: String::new(),
+            add_dialog_open: false,
+            add_address_state: crate::ui::address_book::entry::AddressEntryState::new(),
+        }
+    }
 }
 
 
@@ -70,11 +87,13 @@ pub fn render_address_book(
         .ok()
         .and_then(|data| data.receive_address.clone());
     
-    if vault_address.is_none() {
-        ui.label("No vault loaded");
-        return;
-    }
-    let vault_address = vault_address.unwrap();
+    let vault_address = match vault_address {
+        Some(addr) => addr,
+        None => {
+            ui.label("No vault loaded");
+            return;
+        }
+    };
     
     // Refresh on first render
     if state.addresses.is_empty() && !state.is_loading {
@@ -149,9 +168,11 @@ pub fn render_address_book(
                             
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 if ui.button("Use").clicked() {
-                                    // Navigate to send transaction with this address
-                                    navigation.navigate_to(crate::state::View::SendTransaction);
-                                    // TODO: Pre-fill address in send transaction
+                                    // Navigate to send transaction with this address pre-filled
+                                    navigation.navigate_to_with_data(
+                                        crate::state::View::SendTransaction,
+                                        Some(entry.address.clone())
+                                    );
                                 }
                                 
                                 if ui.button("Edit").clicked() {
@@ -184,10 +205,26 @@ pub fn render_address_book(
             }
             
             if ui.button("Add Address").clicked() {
-                // TODO: Show add address dialog
+                state.add_dialog_open = true;
+                state.add_address_state = crate::ui::address_book::entry::AddressEntryState::new();
             }
         });
     });
+    
+    // Add address dialog
+    if state.add_dialog_open {
+        use crate::ui::address_book::entry::render_address_entry;
+        let mut should_refresh = false;
+        let saved = render_address_entry(ctx, &mut state.add_address_state, &vault_address, |_address, _label| {
+            // Address saved - mark for refresh
+            should_refresh = true;
+        });
+        if saved || should_refresh {
+            state.refresh(&vault_address);
+            state.add_dialog_open = false;
+            state.add_address_state = crate::ui::address_book::entry::AddressEntryState::new();
+        }
+    }
     
     // Edit dialog
     if let Some(idx) = state.edit_dialog {

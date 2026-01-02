@@ -103,7 +103,7 @@ impl BiometricService {
 
     /// Authenticate using biometrics
     /// Returns BiometricResult indicating success or failure
-    pub async fn authenticate(&self, _reason: &str) -> BiometricResult {
+    pub async fn authenticate(&self, reason: &str) -> BiometricResult {
         if !self.is_enabled().await {
             return BiometricResult::NotAvailable;
         }

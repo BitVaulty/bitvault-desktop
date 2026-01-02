@@ -234,26 +234,27 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
             ui.add_space(5.0);
             
             let biometric_service = crate::services::biometric_service::BiometricService::new();
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let is_available = rt.block_on(biometric_service.is_available());
-            let biometric_type = rt.block_on(biometric_service.get_biometric_type());
-            let is_enabled = rt.block_on(biometric_service.is_enabled());
-            
-            if is_available {
-                let mut enabled = is_enabled;
-                if ui.checkbox(&mut enabled, format!("Enable {}", biometric_type.display_name())).changed() {
-                    let rt = tokio::runtime::Runtime::new().unwrap();
-                    rt.block_on(biometric_service.set_enabled(enabled));
-                    // Also save to settings
-                    if let Err(e) = app_state.settings_manager.set_biometrics_enabled(enabled) {
-                        eprintln!("Failed to save biometrics setting: {}", e);
+            if let Some(runtime) = app_state.get_runtime() {
+                let is_available = runtime.block_on(biometric_service.is_available());
+                let biometric_type = runtime.block_on(biometric_service.get_biometric_type());
+                let is_enabled = runtime.block_on(biometric_service.is_enabled());
+                
+                if is_available {
+                    let mut enabled = is_enabled;
+                    if ui.checkbox(&mut enabled, format!("Enable {}", biometric_type.display_name())).changed() {
+                        runtime.block_on(biometric_service.set_enabled(enabled));
+                        // Also save to settings
+                        if let Err(e) = app_state.settings_manager.set_biometrics_enabled(enabled) {
+                            eprintln!("Failed to save biometrics setting: {}", e);
+                        }
                     }
+                    ui.label(format!("{} is available on this device", biometric_type.display_name()));
+                    ui.label("Use biometric authentication as an alternative to PIN entry");
+                } else {
+                    ui.label(format!("{} is not available on this platform", biometric_type.display_name()));
                 }
-                ui.label(format!("{} is available on this device", biometric_type.display_name()));
-                ui.label("Use biometric authentication as an alternative to PIN entry");
             } else {
-                ui.label(format!("{} is not available on this platform", biometric_type.display_name()));
-                ui.label("Biometric authentication requires Windows Hello (Windows) or Touch ID/Face ID (macOS)");
+                ui.label("Runtime not available - biometric authentication unavailable");
             }
 
             ui.add_space(20.0);
@@ -318,8 +319,32 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                 ui.add_space(5.0);
                 
                 if ui.button("Export Vault").clicked() {
-                    // TODO: Implement vault export
-                    ui.label("Vault export not yet implemented");
+                    // Export vault backup (manual backup ZIP)
+                    if let (Some(ref runtime), Some(ref vault_service)) = (app_state.runtime.as_ref(), app_state.vault_service.as_ref()) {
+                        let vault_service_clone = vault_service.clone();
+                        
+                        // Use block_on to export synchronously (acceptable for one-time operation)
+                        let result = runtime.block_on(async {
+                            let vault_guard = vault_service_clone.read().await;
+                            vault_guard.export_manual_backup().await
+                        });
+                        
+                        match result {
+                            Ok(file_path) => {
+                                // Show success message
+                                ui.colored_label(egui::Color32::GREEN, format!("✓ Backup exported to: {}", file_path));
+                                // Also copy path to clipboard for convenience
+                                ui.output_mut(|o| {
+                                    o.copied_text = file_path.clone();
+                                });
+                            }
+                            Err(e) => {
+                                ui.colored_label(egui::Color32::RED, format!("Failed to export backup: {}", e));
+                            }
+                        }
+                    } else {
+                        ui.colored_label(egui::Color32::RED, "No vault loaded or runtime not available");
+                    }
                 }
             } else {
                 ui.label("No vault loaded");

@@ -68,6 +68,11 @@ impl AppState {
         self.async_handler = Some(handler);
     }
     
+    /// Get a reference to the runtime (for block_on operations)
+    pub fn get_runtime(&self) -> Option<&tokio::runtime::Runtime> {
+        self.runtime.as_ref()
+    }
+    
     /// Restart async processor when vault is loaded
     pub fn on_vault_loaded(&mut self) {
         // Get new handler for the new vault

@@ -5,6 +5,8 @@
 use eframe::egui;
 use crate::state::{AppState, Navigation};
 use super::utxo_selection::{UtxoSelectionState, render_utxo_selection, RecoveryMode};
+use bdk::bitcoin::{OutPoint, Txid};
+use std::str::FromStr;
 
 /// UTXO refresh flow state
 #[derive(Default)]
@@ -41,31 +43,34 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
             return;
         }
 
-        REFRESH_STATE.with(|state| {
-            let mut state = state.borrow_mut();
+        REFRESH_STATE.with(|state_ref| {
+            let mut state = state_ref.borrow_mut();
 
             match &mut *state {
                 UtxoRefreshState::LoadingUtxos => {
                     load_old_utxos(ui, app_state, &mut state, true);
                 }
                 UtxoRefreshState::SelectingUtxos(selection_state) => {
+                    let selection_state_clone = selection_state.clone();
                     render_utxo_selection(ui, selection_state, RecoveryMode::Refresh);
                     ui.add_space(20.0);
                     ui.horizontal(|ui| {
                         if ui.button("Cancel").clicked() {
                             navigation.go_back();
                         }
-                        if ui.button("Continue").clicked() && selection_state.has_selection() {
-                            // For refresh, we need to build preview and sign
-                            // This is similar to recovery but simpler
-                            ui.label("Building transaction...");
-                            // TODO: Implement refresh transaction building
+                        if ui.button("Continue").clicked() && selection_state_clone.has_selection() {
+                            // Build refresh transaction with selected UTXOs
+                            // Use a temporary variable to avoid borrow conflicts
+                            let next_state = build_refresh_transaction_state(app_state, &selection_state_clone);
+                            *state = next_state;
                         }
                     });
                 }
-                UtxoRefreshState::Signing { psbt_base64: _ } => {
-                    ui.label("Signing refresh transaction...");
-                    // TODO: Implement signing
+                UtxoRefreshState::Signing { psbt_base64 } => {
+                    let psbt_clone = psbt_base64.clone();
+                    // Use a temporary variable to avoid borrow conflicts
+                    let next_state = sign_refresh_transaction_state(app_state, &psbt_clone);
+                    *state = next_state;
                 }
                 UtxoRefreshState::Sharing { compressed_psbt } => {
                     render_sharing(ui, app_state, navigation, compressed_psbt);
@@ -109,6 +114,134 @@ fn load_old_utxos(
     } else {
         *state = UtxoRefreshState::Error("Vault not loaded or runtime not available".to_string());
     }
+}
+
+fn build_refresh_transaction_state(
+    app_state: &mut AppState,
+    selection_state: &UtxoSelectionState,
+) -> UtxoRefreshState {
+    if let (Some(vault_service), Some(runtime)) = 
+        (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
+        
+        // Get vault address (destination for refresh - send to self)
+        let vault_address = match app_state.vault_data.lock() {
+            Ok(data) => data.receive_address.clone().unwrap_or_default(),
+            Err(_) => {
+                return UtxoRefreshState::Error("Failed to get vault address".to_string());
+            }
+        };
+        
+        if vault_address.is_empty() {
+            return UtxoRefreshState::Error("Vault address not available".to_string());
+        }
+        
+        // Convert selected outpoints from strings to OutPoint
+        // Note: OutPoint and Txid are already imported at the top
+        let utxos_to_spend: Result<Vec<OutPoint>, _> = selection_state.selected.iter()
+            .map(|outpoint_str| {
+                // Format: "txid:vout"
+                let parts: Vec<&str> = outpoint_str.split(':').collect();
+                if parts.len() != 2 {
+                    return Err(format!("Invalid outpoint format: {}", outpoint_str));
+                }
+                let txid = Txid::from_str(parts[0])
+                    .map_err(|e| format!("Invalid txid: {}", e))?;
+                let vout: u32 = parts[1].parse()
+                    .map_err(|e| format!("Invalid vout: {}", e))?;
+                Ok(OutPoint { txid, vout })
+            })
+            .collect();
+        
+        let utxos_to_spend = match utxos_to_spend {
+            Ok(utxos) => utxos,
+            Err(e) => {
+                return UtxoRefreshState::Error(e);
+            }
+        };
+        
+        // Convert OutPoints to strings for the API
+        let utxo_strings: Vec<String> = utxos_to_spend.iter()
+            .map(|op| format!("{}:{}", op.txid, op.vout))
+            .collect();
+        
+        // Build transaction preview (refresh = send max to self, with selected UTXOs)
+        let result = runtime.block_on(async {
+            let mut vs = vault_service.write().await;
+            vs.build_transaction_preview(
+                &vault_address,
+                0.0, // Amount (ignored when is_sending_max = true)
+                3, // Fee rate (sat/vB) - low fee for refresh
+                None, // Description
+                true, // is_sending_max
+                false, // is_recovery (refresh is not recovery)
+                Some(&utxo_strings), // Selected UTXOs as strings
+            ).await
+        });
+        
+        match result {
+            Ok(preview) => {
+                // Sign and share the refresh transaction
+                let psbt_base64 = preview.psbt.clone();
+                UtxoRefreshState::Signing { psbt_base64 }
+            }
+            Err(e) => {
+                UtxoRefreshState::Error(format!("Failed to build refresh transaction: {}", e))
+            }
+        }
+    } else {
+        UtxoRefreshState::Error("Vault not loaded or runtime not available".to_string())
+    }
+}
+
+fn sign_refresh_transaction_state(
+    app_state: &mut AppState,
+    psbt_base64: &str,
+) -> UtxoRefreshState {
+    if let (Some(vault_service), Some(runtime)) = 
+        (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
+        
+        // Get vault address (recipient for refresh)
+        let vault_address = match app_state.vault_data.lock() {
+            Ok(data) => data.receive_address.clone().unwrap_or_default(),
+            Err(_) => {
+                return UtxoRefreshState::Error("Failed to get vault address".to_string());
+            }
+        };
+        
+        if vault_address.is_empty() {
+            return UtxoRefreshState::Error("Vault address not available".to_string());
+        }
+        
+        // Sign and compress PSBT for sharing
+        let result = runtime.block_on(async {
+            let mut vs = vault_service.write().await;
+            vs.sign_and_share_recovery_tx(psbt_base64, &vault_address).await
+        });
+        
+        match result {
+            Ok(compressed_psbt) => {
+                UtxoRefreshState::Sharing { compressed_psbt }
+            }
+            Err(e) => {
+                UtxoRefreshState::Error(format!("Failed to sign refresh transaction: {}", e))
+            }
+        }
+    } else {
+        UtxoRefreshState::Error("Vault not loaded or runtime not available".to_string())
+    }
+}
+
+fn sign_refresh_transaction(
+    ui: &mut egui::Ui,
+    app_state: &mut AppState,
+    state: &mut UtxoRefreshState,
+    psbt_base64: &str,
+) {
+    ui.label("Signing refresh transaction...");
+    ui.spinner();
+    
+    let next_state = sign_refresh_transaction_state(app_state, psbt_base64);
+    *state = next_state;
 }
 
 fn render_sharing(

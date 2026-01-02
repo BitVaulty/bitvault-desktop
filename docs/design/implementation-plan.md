@@ -267,7 +267,7 @@ bitvault/
 ├── bitvault-common/          # Shared components
 │   ├── Cargo.toml
 │   └── src/
-├── bitvault-ui/              # User interface
+├── bitvault-app/              # User interface (egui/eframe)
 │   ├── Cargo.toml
 │   └── src/
 ├── bitvault-app/             # Platform integration
@@ -492,7 +492,7 @@ bitvault/
    - Secure memory handling
    - Capability-based security enforcement
 
-### bitvault-ui Implementation Focus
+### bitvault-app Implementation Focus
 
 1. **State Management**:
    - Wallet representation

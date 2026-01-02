@@ -51,6 +51,8 @@ pub struct Navigation {
     pub current_view: View,
     /// View history (for back navigation)
     pub history: Vec<View>,
+    /// Optional data to pass when navigating (e.g., pre-filled address for send transaction)
+    pub navigation_data: Option<String>,
 }
 
 impl Navigation {
@@ -59,6 +61,7 @@ impl Navigation {
         Self {
             current_view: View::default(),
             history: Vec::new(),
+            navigation_data: None,
         }
     }
 
@@ -66,6 +69,19 @@ impl Navigation {
     pub fn navigate_to(&mut self, view: View) {
         self.history.push(self.current_view.clone());
         self.current_view = view;
+        self.navigation_data = None;
+    }
+    
+    /// Navigate to a new view with optional data
+    pub fn navigate_to_with_data(&mut self, view: View, data: Option<String>) {
+        self.history.push(self.current_view.clone());
+        self.current_view = view;
+        self.navigation_data = data;
+    }
+    
+    /// Get and clear navigation data (consumes it)
+    pub fn take_navigation_data(&mut self) -> Option<String> {
+        self.navigation_data.take()
     }
 
     /// Navigate back

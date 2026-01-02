@@ -25,7 +25,13 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
         }
 
         // Get vault data (read from shared state)
-        let vault_data = app_state.vault_data.lock().unwrap().clone();
+        let vault_data = match app_state.vault_data.lock() {
+            Ok(data) => data.clone(),
+            Err(_) => {
+                ui.label("Error: Mutex poisoned");
+                return;
+            }
+        };
 
         // Balance display
         ui.heading("Balance");
@@ -177,6 +183,6 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
     });
 }
 
-// TODO: Implement async data fetching
-// The challenge is that tokio::sync::RwLockReadGuard is not Send,
-// so we need to use a different pattern (channels, block_in_place, etc.)
+// Note: Async data fetching is implemented using AsyncCommandHandler
+// which uses block_on for quick operations (balance, address fetching)
+// This is acceptable for egui's immediate mode UI

@@ -6,7 +6,7 @@ use eframe::egui;
 use bitvault_common::types::OldUtxo;
 
 /// State for UTXO selection
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct UtxoSelectionState {
     pub utxos: Vec<OldUtxo>,
     pub selected: std::collections::HashSet<String>, // OutPoint as string

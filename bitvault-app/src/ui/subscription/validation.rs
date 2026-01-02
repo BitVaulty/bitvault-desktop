@@ -15,11 +15,10 @@ pub fn check_subscription_before_action(
     app_state: &mut AppState,
     action_name: &str,
 ) -> Result<(), String> {
-    // For now, skip validation on testnet
-    // TODO: Check network and only validate on mainnet
-    // if app_state.network != bdk::bitcoin::Network::Bitcoin {
-    //     return Ok(());
-    // }
+    // Only validate subscription on mainnet (testnet is free)
+    if app_state.network != bdk::bitcoin::Network::Bitcoin {
+        return Ok(());
+    }
 
     if let (Some(vault_service), Some(runtime)) = 
         (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
