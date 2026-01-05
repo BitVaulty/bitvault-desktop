@@ -3,9 +3,9 @@
 //! Screen for entering PIN to authenticate
 //! Supports biometric authentication as an alternative to PIN entry
 
-use eframe::egui;
+use crate::services::biometric_service::{BiometricResult, BiometricService};
 use bitvault_common::PinService;
-use crate::services::biometric_service::{BiometricService, BiometricResult};
+use eframe::egui;
 
 /// State for PIN entry
 pub struct PinEntryState {
@@ -56,20 +56,20 @@ impl PinEntryState {
         self.is_validating = false;
         self.biometric_attempted = false;
     }
-    
+
     /// Attempt biometric authentication
     pub async fn try_biometric(&mut self) -> bool {
         if !self.biometric_available {
             return false;
         }
-        
+
         if !self.biometric_service.is_enabled().await {
             return false;
         }
-        
+
         self.biometric_attempted = true;
         let reason = format!("Authenticate using {}", self.biometric_type.display_name());
-        
+
         match self.biometric_service.authenticate(&reason).await {
             BiometricResult::Success => {
                 self.error = None;
@@ -84,7 +84,10 @@ impl PinEntryState {
                 false
             }
             BiometricResult::NotAvailable | BiometricResult::NotEnrolled => {
-                self.error = Some(format!("{} is not available or not enrolled", self.biometric_type.display_name()));
+                self.error = Some(format!(
+                    "{} is not available or not enrolled",
+                    self.biometric_type.display_name()
+                ));
                 false
             }
         }
@@ -101,7 +104,7 @@ pub fn render_pin_entry(
     runtime: Option<&tokio::runtime::Runtime>,
 ) -> bool {
     let mut pin_validated = false;
-    
+
     // Try biometric authentication on first render if available and enabled
     // Note: This is commented out for now as it requires platform-specific implementation
     // Uncomment when biometrics crate is available
@@ -111,15 +114,21 @@ pub fn render_pin_entry(
     //         return true; // Biometric authentication succeeded
     //     }
     // }
-    
+
     ui.vertical_centered(|ui| {
         ui.heading("Enter PIN");
         ui.add_space(20.0);
-        
+
         // Show biometric option if available
         if state.biometric_available {
-            ui.label(format!("Or use {} to authenticate", state.biometric_type.display_name()));
-            if ui.button(format!("Use {}", state.biometric_type.display_name())).clicked() {
+            ui.label(format!(
+                "Or use {} to authenticate",
+                state.biometric_type.display_name()
+            ));
+            if ui
+                .button(format!("Use {}", state.biometric_type.display_name()))
+                .clicked()
+            {
                 if let Some(rt) = runtime {
                     if rt.block_on(state.try_biometric()) {
                         pin_validated = true;
@@ -172,7 +181,7 @@ pub fn render_pin_entry(
         if state.pin.len() == 6 && !state.is_validating {
             state.is_validating = true;
             let pin_clone = state.pin.clone();
-            
+
             // Validate PIN asynchronously
             let pin_service = PinService::new();
             match pin_service.validate_pin(&pin_clone) {
@@ -188,7 +197,18 @@ pub fn render_pin_entry(
                     state.is_validating = false;
                 }
                 Err(e) => {
-                    state.error = Some(format!("Error validating PIN: {}", e));
+                    // Handle rate limiting error specifically
+                    let error_msg = match &e {
+                        bitvault_common::PinServiceError::RateLimited(seconds) => {
+                            let minutes = seconds / 60;
+                            format!(
+                                "Too many failed attempts. Please try again in {} minute(s).",
+                                minutes
+                            )
+                        }
+                        _ => format!("Error validating PIN: {}", e),
+                    };
+                    state.error = Some(error_msg);
                     state.pin.clear();
                     state.is_validating = false;
                 }
@@ -199,7 +219,7 @@ pub fn render_pin_entry(
             ui.label("Validating...");
         }
     });
-    
+
     pin_validated
 }
 

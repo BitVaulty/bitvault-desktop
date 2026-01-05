@@ -5,9 +5,9 @@
 //! - Create a new vault
 //! - Import a vault
 
-use eframe::egui;
 use crate::state::{AppState, Navigation};
 use crate::ui::pin::render_pin_verification;
+use eframe::egui;
 use serde_json;
 
 /// Vault selection state
@@ -17,9 +17,9 @@ pub struct VaultSelectionState {
     pub error: Option<String>,
     pub selected_index: Option<usize>,
     pub rename_dialog: Option<usize>, // Index of vault being renamed, None if dialog closed
-    pub rename_text: String, // Text for rename input
-    pub import_dialog_open: bool, // Whether import dialog is open
-    pub import_text: String, // Text for import (JSON metadata)
+    pub rename_text: String,          // Text for rename input
+    pub import_dialog_open: bool,     // Whether import dialog is open
+    pub import_text: String,          // Text for import (JSON metadata)
     pub pin_verification: crate::ui::pin::PinVerificationState,
     pub pending_delete_index: Option<usize>, // Index of vault pending deletion after PIN verification
 }
@@ -42,16 +42,23 @@ impl Default for VaultSelectionState {
 }
 
 /// Render vault selection screen
-pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navigation, state: &mut VaultSelectionState, ctx: &egui::Context) {
+pub fn render(
+    ui: &mut egui::Ui,
+    app_state: &mut AppState,
+    navigation: &mut Navigation,
+    state: &mut VaultSelectionState,
+    ctx: &egui::Context,
+) {
     // Handle PIN verification for delete operation
     if let Some(index) = state.pending_delete_index {
         if render_pin_verification(ctx, &mut state.pin_verification) {
             // PIN verified - proceed with deletion
             if index < state.vaults.len() {
                 let vault_address = state.vaults[index].address.clone();
-                
+
                 // Delete vault completely (metadata and database)
-                match bitvault_common::wallet::VaultMetadata::delete_vault_complete(&vault_address) {
+                match bitvault_common::wallet::VaultMetadata::delete_vault_complete(&vault_address)
+                {
                     Ok(_) => {
                         // Remove from list
                         state.vaults.remove(index);
@@ -70,17 +77,17 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
             state.pin_verification.show();
         }
     }
-    
+
     ui.vertical_centered(|ui| {
         ui.heading("Select Vault");
         ui.add_space(20.0);
-        
+
         // Show error if any
         if let Some(ref error) = state.error {
             ui.colored_label(egui::Color32::RED, error);
             ui.add_space(10.0);
         }
-        
+
         // Load vaults on first render or when refresh is needed
         if state.vaults.is_empty() && !state.loading {
             state.loading = true;
@@ -95,7 +102,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                 }
             }
         }
-        
+
         // Refresh button and validation info
         ui.horizontal(|ui| {
             if ui.button("🔄 Refresh").clicked() {
@@ -112,7 +119,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     }
                 }
             }
-            
+
             // Show vault count and validation summary
             if !state.vaults.is_empty() {
                 let valid_count = state.vaults.iter().filter(|v| v.validate().is_ok()).count();
@@ -127,32 +134,32 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                 }
             }
         });
-        
+
         ui.add_space(10.0);
-        
+
         if state.loading {
             ui.label("Loading vaults...");
             return;
         }
-        
+
         // List of vaults
         if state.vaults.is_empty() {
             ui.label("No vaults found.");
             ui.add_space(20.0);
             ui.label("Create a new vault to get started.");
             ui.add_space(20.0);
-            
+
             if ui.button("Create New Vault").clicked() {
                 navigation.navigate_to(crate::state::View::VaultCreation);
             }
         } else {
             ui.label("Select a vault to load:");
             ui.add_space(10.0);
-            
+
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for (index, vault) in state.vaults.iter().enumerate() {
                     let is_selected = state.selected_index == Some(index);
-                    
+
                     // Validate vault
                     let validation_result = vault.validate();
                     let is_valid = validation_result.is_ok();
@@ -163,7 +170,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     } else {
                         "✗" // Database missing
                     };
-                    
+
                     // Make entire row clickable using a selectable label
                     let vault_text = format!(
                         "{} {} {} - {} ({})",
@@ -173,11 +180,11 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                         vault.network,
                         &vault.address[0..std::cmp::min(20, vault.address.len())]
                     );
-                    
+
                     if ui.selectable_label(is_selected, vault_text).clicked() {
                         state.selected_index = Some(index);
                     }
-                    
+
                     // Show full details in a collapsible section
                     if is_selected {
                         ui.indent("vault_details", |ui| {
@@ -186,7 +193,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                                 ui.label(format!("Created: {}", created));
                             }
                             ui.label(format!("Database: {}", vault.database_path));
-                            
+
                             // Show validation status
                             match validation_result {
                                 Ok(_) => {
@@ -198,20 +205,20 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                             }
                         });
                     }
-                    
+
                     ui.add_space(5.0);
                 }
             });
-            
+
             ui.add_space(20.0);
-            
+
             // Action buttons
             ui.horizontal(|ui| {
                 if ui.button("Load Selected Vault").clicked() {
                     if let Some(index) = state.selected_index {
                         if index < state.vaults.len() {
                             let metadata = state.vaults[index].clone();
-                            
+
                             // Validate vault before loading
                             match metadata.validate() {
                                 Ok(_) => {
@@ -219,7 +226,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                                     if app_state.is_vault_loaded() {
                                         app_state.unload_vault();
                                     }
-                                    
+
                                     // Load vault using runtime
                                     if let Some(ref runtime) = app_state.runtime {
                                         let handle = runtime.handle().clone();
@@ -246,19 +253,19 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                         state.error = Some("Please select a vault".to_string());
                     }
                 }
-                
+
                 if ui.button("Create New Vault").clicked() {
                     navigation.navigate_to(crate::state::View::VaultCreation);
                 }
-                
+
                 if ui.button("Import Vault").clicked() {
                     state.import_dialog_open = true;
                     state.import_text.clear();
                 }
             });
-            
+
             ui.add_space(10.0);
-            
+
             // Vault management buttons (only if a vault is selected)
             if let Some(index) = state.selected_index {
                 if index < state.vaults.len() {
@@ -267,7 +274,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                             state.rename_dialog = Some(index);
                             state.rename_text = state.vaults[index].name.clone();
                         }
-                        
+
                         if ui.button("Export Vault").clicked() {
                             let metadata = &state.vaults[index];
                             match serde_json::to_string_pretty(metadata) {
@@ -285,7 +292,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                                 }
                             }
                         }
-                        
+
                         if ui.button("Delete Vault").clicked() {
                             // Check if PIN is required
                             let pin_service = bitvault_common::PinService::new();
@@ -296,7 +303,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                             } else {
                                 // No PIN set - delete directly
                                 let vault_address = state.vaults[index].address.clone();
-                                
+
                                 // Delete vault completely (metadata and database)
                                 match bitvault_common::wallet::VaultMetadata::delete_vault_complete(&vault_address) {
                                     Ok(_) => {
@@ -314,7 +321,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     });
                 }
             }
-            
+
             // Rename dialog
             if let Some(index) = state.rename_dialog {
                 if index < state.vaults.len() {
@@ -324,15 +331,15 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                         .show(ctx, |ui| {
                             ui.label("Enter new vault name:");
                             ui.text_edit_singleline(&mut state.rename_text);
-                            
+
                             ui.add_space(10.0);
-                            
+
                             ui.horizontal(|ui| {
                                 if ui.button("Cancel").clicked() {
                                     state.rename_dialog = None;
                                     state.rename_text.clear();
                                 }
-                                
+
                                 if ui.button("Save").clicked() {
                                     let mut metadata = state.vaults[index].clone();
                                     match metadata.update_name(state.rename_text.clone()) {
@@ -351,7 +358,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                         });
                 }
             }
-            
+
             // Import dialog
             if state.import_dialog_open {
                 egui::Window::new("Import Vault")
@@ -361,23 +368,23 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     .show(ctx, |ui| {
                         ui.label("Paste vault metadata JSON:");
                         ui.add_space(5.0);
-                        
+
                         // Multi-line text input for JSON
                         ui.text_edit_multiline(&mut state.import_text);
-                        
+
                         ui.add_space(10.0);
-                        
+
                         ui.label("Note: The vault database must be manually copied to the correct location.");
                         ui.label("Database path will be shown after import.");
-                        
+
                         ui.add_space(10.0);
-                        
+
                         ui.horizontal(|ui| {
                             if ui.button("Cancel").clicked() {
                                 state.import_dialog_open = false;
                                 state.import_text.clear();
                             }
-                            
+
                             if ui.button("Import").clicked() {
                                 match serde_json::from_str::<bitvault_common::wallet::VaultMetadata>(&state.import_text) {
                                     Ok(metadata) => {
@@ -418,4 +425,3 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
         }
     });
 }
-

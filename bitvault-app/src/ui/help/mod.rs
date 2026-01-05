@@ -2,8 +2,8 @@
 //!
 //! Provides FAQ and help information for users
 
-mod question_list;
 mod question_detail;
+mod question_list;
 
 pub use question_list::{render_help_and_support, HelpAndSupportState};
 

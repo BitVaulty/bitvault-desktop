@@ -44,7 +44,8 @@ impl NotificationService {
             .body(body)
             .appname("BitVault")
             .timeout(notify_rust::Timeout::Milliseconds(5000)) // 5 seconds
-            .show() {
+            .show()
+        {
             Ok(_) => Ok(()),
             Err(e) => Err(format!("Failed to show notification: {}", e)),
         }
@@ -53,7 +54,11 @@ impl NotificationService {
     /// Show transaction sent notification
     pub async fn notify_transaction_sent(&self, txid: &str, amount_btc: f64) -> Result<(), String> {
         let title = "Transaction Sent";
-        let body = format!("Sent {:.8} BTC\nTXID: {}", amount_btc, &txid[..txid.len().min(16)]);
+        let body = format!(
+            "Sent {:.8} BTC\nTXID: {}",
+            amount_btc,
+            &txid[..txid.len().min(16)]
+        );
         self.notify(title, &body).await
     }
 
@@ -67,14 +72,18 @@ impl NotificationService {
     /// Show transaction confirmed notification
     pub async fn notify_transaction_confirmed(&self, txid: &str) -> Result<(), String> {
         let title = "Transaction Confirmed";
-        let body = format!("Transaction confirmed\nTXID: {}", &txid[..txid.len().min(16)]);
+        let body = format!(
+            "Transaction confirmed\nTXID: {}",
+            &txid[..txid.len().min(16)]
+        );
         self.notify(title, &body).await
     }
 
     /// Show subscription expired notification
     pub async fn notify_subscription_expired(&self) -> Result<(), String> {
         let title = "Subscription Expired";
-        let body = "Your subscription has expired. Please renew to continue using mainnet features.";
+        let body =
+            "Your subscription has expired. Please renew to continue using mainnet features.";
         self.notify(title, body).await
     }
 

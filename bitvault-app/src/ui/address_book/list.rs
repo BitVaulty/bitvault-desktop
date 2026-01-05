@@ -2,9 +2,9 @@
 //!
 //! Displays a list of saved addresses with options to edit, delete, and use them
 
-use eframe::egui;
-use crate::state::{AppState, Navigation};
 use crate::services::address_book::{AddressBookService, AddressEntry};
+use crate::state::{AppState, Navigation};
+use eframe::egui;
 
 /// State for address book list view
 pub struct AddressBookState {
@@ -35,13 +35,12 @@ impl Default for AddressBookState {
     }
 }
 
-
 impl AddressBookState {
     /// Refresh the address list
     pub fn refresh(&mut self, vault_address: &str) {
         self.is_loading = true;
         self.error = None;
-        
+
         let service = AddressBookService::new().unwrap_or_default();
         match service.get_addresses(vault_address) {
             Ok(addresses) => {
@@ -54,21 +53,23 @@ impl AddressBookState {
             }
         }
     }
-    
+
     /// Get filtered addresses based on search text
     fn filtered_addresses(&self) -> Vec<&AddressEntry> {
         if self.search_text.is_empty() {
             return self.addresses.iter().collect();
         }
-        
+
         let search_lower = self.search_text.to_lowercase();
         self.addresses
             .iter()
             .filter(|entry| {
-                entry.address.to_lowercase().contains(&search_lower) ||
-                entry.label.as_ref()
-                    .map(|l| l.to_lowercase().contains(&search_lower))
-                    .unwrap_or(false)
+                entry.address.to_lowercase().contains(&search_lower)
+                    || entry
+                        .label
+                        .as_ref()
+                        .map(|l| l.to_lowercase().contains(&search_lower))
+                        .unwrap_or(false)
             })
             .collect()
     }
@@ -83,10 +84,12 @@ pub fn render_address_book(
     ctx: &egui::Context,
 ) {
     // Get current vault address
-    let vault_address = app_state.vault_data.lock()
+    let vault_address = app_state
+        .vault_data
+        .lock()
         .ok()
         .and_then(|data| data.receive_address.clone());
-    
+
     let vault_address = match vault_address {
         Some(addr) => addr,
         None => {
@@ -94,16 +97,16 @@ pub fn render_address_book(
             return;
         }
     };
-    
+
     // Refresh on first render
     if state.addresses.is_empty() && !state.is_loading {
         state.refresh(&vault_address);
     }
-    
+
     ui.vertical(|ui| {
         ui.heading("Address Book");
         ui.add_space(10.0);
-        
+
         // Search bar
         ui.horizontal(|ui| {
             ui.label("Search:");
@@ -112,24 +115,24 @@ pub fn render_address_book(
                 state.search_text.clear();
             }
         });
-        
+
         ui.add_space(10.0);
-        
+
         // Show error if any
         if let Some(ref error) = state.error {
             ui.colored_label(egui::Color32::RED, error);
             ui.add_space(10.0);
         }
-        
+
         // Show loading state
         if state.is_loading {
             ui.label("Loading addresses...");
             return;
         }
-        
+
         // Address list
         let filtered = state.filtered_addresses();
-        
+
         if filtered.is_empty() {
             ui.vertical_centered(|ui| {
                 ui.add_space(50.0);
@@ -140,19 +143,19 @@ pub fn render_address_book(
         } else {
             // Clone filtered entries to avoid borrow issues
             let filtered_entries: Vec<AddressEntry> = filtered.into_iter().cloned().collect();
-            
+
             egui::ScrollArea::vertical()
                 .max_height(400.0)
                 .show(ui, |ui| {
                     for (idx, entry) in filtered_entries.iter().enumerate() {
                         let is_selected = state.selected_index == Some(idx);
-                        
+
                         // Display address entry
                         ui.horizontal(|ui| {
                             if ui.selectable_label(is_selected, "").clicked() {
                                 state.selected_index = Some(idx);
                             }
-                            
+
                             ui.vertical(|ui| {
                                 // Label or address
                                 if let Some(ref label) = entry.label {
@@ -161,71 +164,84 @@ pub fn render_address_book(
                                 } else {
                                     ui.label(entry.address.clone());
                                 }
-                                
+
                                 // Last used timestamp
-                                ui.label(format!("Last used: {}", entry.last_used.format("%Y-%m-%d %H:%M")));
+                                ui.label(format!(
+                                    "Last used: {}",
+                                    entry.last_used.format("%Y-%m-%d %H:%M")
+                                ));
                             });
-                            
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui.button("Use").clicked() {
-                                    // Navigate to send transaction with this address pre-filled
-                                    navigation.navigate_to_with_data(
-                                        crate::state::View::SendTransaction,
-                                        Some(entry.address.clone())
-                                    );
-                                }
-                                
-                                if ui.button("Edit").clicked() {
-                                    state.edit_dialog = Some(idx);
-                                    state.edit_label = entry.label.clone().unwrap_or_default();
-                                }
-                                
-                                if ui.button("Delete").clicked() {
-                                    let service = AddressBookService::new().unwrap_or_default();
-                                    if let Err(e) = service.delete_address(&vault_address, &entry.address) {
-                                        state.error = Some(format!("Failed to delete: {}", e));
-                                    } else {
-                                        state.refresh(&vault_address);
+
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if ui.button("Use").clicked() {
+                                        // Navigate to send transaction with this address pre-filled
+                                        navigation.navigate_to_with_data(
+                                            crate::state::View::SendTransaction,
+                                            Some(entry.address.clone()),
+                                        );
                                     }
-                                }
-                            });
+
+                                    if ui.button("Edit").clicked() {
+                                        state.edit_dialog = Some(idx);
+                                        state.edit_label = entry.label.clone().unwrap_or_default();
+                                    }
+
+                                    if ui.button("Delete").clicked() {
+                                        let service = AddressBookService::new().unwrap_or_default();
+                                        if let Err(e) =
+                                            service.delete_address(&vault_address, &entry.address)
+                                        {
+                                            state.error = Some(format!("Failed to delete: {}", e));
+                                        } else {
+                                            state.refresh(&vault_address);
+                                        }
+                                    }
+                                },
+                            );
                         });
-                        
+
                         ui.separator();
                     }
                 });
         }
-        
+
         ui.add_space(10.0);
-        
+
         // Action buttons
         ui.horizontal(|ui| {
             if ui.button("Refresh").clicked() {
                 state.refresh(&vault_address);
             }
-            
+
             if ui.button("Add Address").clicked() {
                 state.add_dialog_open = true;
                 state.add_address_state = crate::ui::address_book::entry::AddressEntryState::new();
             }
         });
     });
-    
+
     // Add address dialog
     if state.add_dialog_open {
         use crate::ui::address_book::entry::render_address_entry;
         let mut should_refresh = false;
-        let saved = render_address_entry(ctx, &mut state.add_address_state, &vault_address, |_address, _label| {
-            // Address saved - mark for refresh
-            should_refresh = true;
-        });
+        let saved = render_address_entry(
+            ctx,
+            &mut state.add_address_state,
+            &vault_address,
+            |_address, _label| {
+                // Address saved - mark for refresh
+                should_refresh = true;
+            },
+        );
         if saved || should_refresh {
             state.refresh(&vault_address);
             state.add_dialog_open = false;
             state.add_address_state = crate::ui::address_book::entry::AddressEntryState::new();
         }
     }
-    
+
     // Edit dialog
     if let Some(idx) = state.edit_dialog {
         // Get filtered addresses and clone the entry
@@ -238,18 +254,18 @@ pub fn render_address_book(
                 .show(ctx, |ui| {
                     ui.label(format!("Address: {}", entry_address));
                     ui.add_space(10.0);
-                    
+
                     ui.label("Label:");
                     ui.text_edit_singleline(&mut state.edit_label);
-                    
+
                     ui.add_space(10.0);
-                    
+
                     ui.horizontal(|ui| {
                         if ui.button("Cancel").clicked() {
                             state.edit_dialog = None;
                             state.edit_label.clear();
                         }
-                        
+
                         if ui.button("Save").clicked() {
                             let service = AddressBookService::new().unwrap_or_default();
                             let label = if state.edit_label.trim().is_empty() {
@@ -257,8 +273,10 @@ pub fn render_address_book(
                             } else {
                                 Some(state.edit_label.trim().to_string())
                             };
-                            
-                            if let Err(e) = service.update_label(&vault_address, &entry_address, label) {
+
+                            if let Err(e) =
+                                service.update_label(&vault_address, &entry_address, label)
+                            {
                                 state.error = Some(format!("Failed to update: {}", e));
                             } else {
                                 state.refresh(&vault_address);

@@ -1,20 +1,18 @@
 mod app;
-mod services;
 mod models;
-mod utils;
+mod services;
+mod settings;
 mod state;
 mod ui;
-mod settings;
+mod utils;
 
 use eframe::egui;
-use simple_logger::SimpleLogger;
 use log::LevelFilter;
+use simple_logger::SimpleLogger;
 
 fn main() {
     // Initialize logger
-    if let Err(e) = SimpleLogger::new()
-        .with_level(LevelFilter::Info)
-        .init() {
+    if let Err(e) = SimpleLogger::new().with_level(LevelFilter::Info).init() {
         eprintln!("Failed to initialize logger: {}", e);
         // Continue without logger - not critical for app startup
     }
@@ -24,7 +22,9 @@ fn main() {
         Ok(rt) => rt,
         Err(e) => {
             eprintln!("Failed to create tokio runtime: {}", e);
-            eprintln!("This is a critical error - the application cannot function without async support.");
+            eprintln!(
+                "This is a critical error - the application cannot function without async support."
+            );
             std::process::exit(1);
         }
     };
@@ -50,4 +50,3 @@ fn main() {
         std::process::exit(1);
     }
 }
-

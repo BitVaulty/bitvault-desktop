@@ -11,9 +11,9 @@
 
 mod steps;
 
-use eframe::egui;
 use crate::state::{AppState, Navigation};
 use bip39::Mnemonic;
+use eframe::egui;
 
 /// Vault creation state
 #[derive(Debug, Clone, PartialEq)]
@@ -97,7 +97,12 @@ impl Default for VaultCreationState {
 }
 
 /// Render vault creation flow
-pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navigation, state: &mut VaultCreationState) {
+pub fn render(
+    ui: &mut egui::Ui,
+    app_state: &mut AppState,
+    navigation: &mut Navigation,
+    state: &mut VaultCreationState,
+) {
     ui.vertical_centered(|ui| {
         ui.heading("Create New Vault");
         ui.add_space(20.0);
@@ -155,4 +160,3 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
         });
     });
 }
-

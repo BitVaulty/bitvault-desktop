@@ -2,8 +2,8 @@
 //!
 //! Displays list of old UTXOs for selection in recovery/refresh flows
 
-use eframe::egui;
 use bitvault_common::types::OldUtxo;
+use eframe::egui;
 
 /// State for UTXO selection
 #[derive(Default, Clone)]
@@ -13,7 +13,6 @@ pub struct UtxoSelectionState {
     pub is_loading: bool,
     pub error: Option<String>,
 }
-
 
 impl UtxoSelectionState {
     pub fn total_selected_amount(&self) -> f64 {
@@ -32,8 +31,8 @@ impl UtxoSelectionState {
 /// Recovery mode enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RecoveryMode {
-    Recovery,  // For UTXOs older than 1 year
-    Refresh,    // For UTXOs older than 6 months
+    Recovery, // For UTXOs older than 1 year
+    Refresh,  // For UTXOs older than 6 months
 }
 
 /// Render UTXO selection UI

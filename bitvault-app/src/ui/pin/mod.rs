@@ -10,6 +10,6 @@ mod entry;
 mod setup;
 mod verification;
 
-pub use entry::{PinEntryState, render_pin_entry};
-pub use setup::{PinSetupState, render_pin_setup};
-pub use verification::{PinVerificationState, render_pin_verification};
+pub use entry::{render_pin_entry, PinEntryState};
+pub use setup::{render_pin_setup, PinSetupState};
+pub use verification::{render_pin_verification, PinVerificationState};

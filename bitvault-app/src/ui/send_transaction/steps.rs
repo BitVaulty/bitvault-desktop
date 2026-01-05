@@ -1,11 +1,15 @@
 //! Send transaction step implementations
 
-use eframe::egui;
 use crate::state::{AppState, Navigation};
-use crate::ui::send_transaction::{SendTransactionState, HardwareWalletSigningMode};
+use crate::ui::send_transaction::{HardwareWalletSigningMode, SendTransactionState};
+use eframe::egui;
 
 /// Build transaction preview
-pub fn build_preview(ui: &mut egui::Ui, app_state: &mut AppState, state: &mut SendTransactionState) {
+pub fn build_preview(
+    ui: &mut egui::Ui,
+    app_state: &mut AppState,
+    state: &mut SendTransactionState,
+) {
     if state.is_building {
         return;
     }
@@ -38,10 +42,16 @@ pub fn build_preview(ui: &mut egui::Ui, app_state: &mut AppState, state: &mut Se
     state.error = None;
 
     // Build preview using VaultService
-    if let (Some(vault_service), Some(runtime)) = (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
+    if let (Some(vault_service), Some(runtime)) =
+        (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
+    {
         let recipient = state.recipient_address.clone();
         let fee_rate = state.fee_rate;
-        let description = if state.description.is_empty() { None } else { Some(state.description.clone()) };
+        let description = if state.description.is_empty() {
+            None
+        } else {
+            Some(state.description.clone())
+        };
         let is_sending_max = state.is_sending_max;
         let is_recovery = state.is_recovery;
 
@@ -55,7 +65,8 @@ pub fn build_preview(ui: &mut egui::Ui, app_state: &mut AppState, state: &mut Se
                 is_sending_max,
                 is_recovery,
                 None, // utxos_to_spend - None means BDK selects automatically
-            ).await
+            )
+            .await
         });
 
         match result {
@@ -75,7 +86,12 @@ pub fn build_preview(ui: &mut egui::Ui, app_state: &mut AppState, state: &mut Se
 }
 
 /// Sign and broadcast transaction
-pub fn sign_and_broadcast(_ui: &mut egui::Ui, app_state: &mut AppState, _navigation: &mut Navigation, state: &mut SendTransactionState) {
+pub fn sign_and_broadcast(
+    _ui: &mut egui::Ui,
+    app_state: &mut AppState,
+    _navigation: &mut Navigation,
+    state: &mut SendTransactionState,
+) {
     // Check PIN before signing (if PIN is set)
     let pin_service = bitvault_common::PinService::new();
     if pin_service.has_pin() && !state.pin_verification.is_verified() {
@@ -83,7 +99,7 @@ pub fn sign_and_broadcast(_ui: &mut egui::Ui, app_state: &mut AppState, _navigat
         state.pin_verification.show();
         return;
     }
-    
+
     // Validate subscription before sending (mainnet only)
     if let Err(error_msg) = crate::ui::subscription::validation::check_subscription_before_action(
         app_state,
@@ -116,21 +132,23 @@ pub fn sign_and_broadcast(_ui: &mut egui::Ui, app_state: &mut AppState, _navigat
         // Get runtime handle
         if let Some(ref runtime) = app_state.runtime {
             let handle = runtime.handle().clone();
-            
+
             // Get vault service
             if let Some(vault_service) = app_state.get_vault_service() {
                 // Sign and send transaction using the new method
                 // This builds, signs, and sends in one operation, avoiding type conversion issues
                 let result = handle.block_on(async {
                     let mut service_guard = vault_service.write().await;
-                    service_guard.sign_and_send_transaction(
-                        &destination,
-                        amount_btc,
-                        fee_rate,
-                        description.as_deref(),
-                        is_sending_max,
-                        is_recovery,
-                    ).await
+                    service_guard
+                        .sign_and_send_transaction(
+                            &destination,
+                            amount_btc,
+                            fee_rate,
+                            description.as_deref(),
+                            is_sending_max,
+                            is_recovery,
+                        )
+                        .await
                 });
 
                 match result {
@@ -138,8 +156,9 @@ pub fn sign_and_broadcast(_ui: &mut egui::Ui, app_state: &mut AppState, _navigat
                         // Transaction sent successfully
                         if let Some(txid) = response.txid {
                             state.error = None;
-                            state.success_message = Some(format!("Transaction sent successfully! TXID: {}", txid));
-                            
+                            state.success_message =
+                                Some(format!("Transaction sent successfully! TXID: {}", txid));
+
                             // Show desktop notification
                             let notification_service = app_state.notification_service.clone();
                             let txid_clone = txid.clone();
@@ -147,7 +166,9 @@ pub fn sign_and_broadcast(_ui: &mut egui::Ui, app_state: &mut AppState, _navigat
                             if let Some(ref runtime) = app_state.runtime {
                                 let handle = runtime.handle().clone();
                                 handle.spawn(async move {
-                                    let _ = notification_service.notify_transaction_sent(&txid_clone, amount_btc).await;
+                                    let _ = notification_service
+                                        .notify_transaction_sent(&txid_clone, amount_btc)
+                                        .await;
                                 });
                             }
                         } else if let Some(message) = response.message {
@@ -155,7 +176,8 @@ pub fn sign_and_broadcast(_ui: &mut egui::Ui, app_state: &mut AppState, _navigat
                             state.success_message = Some(message);
                         } else {
                             state.error = None;
-                            state.success_message = Some("Transaction sent successfully!".to_string());
+                            state.success_message =
+                                Some("Transaction sent successfully!".to_string());
                         }
                         state.is_signing = false;
                         // Reset PIN verification after successful transaction
@@ -191,16 +213,16 @@ pub fn start_hardware_wallet_signing(
     state: &mut SendTransactionState,
 ) {
     if let Some(ref preview) = state.preview {
-        if let (Some(vault_service), Some(runtime)) = 
-            (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
-            
+        if let (Some(vault_service), Some(runtime)) =
+            (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
+        {
             let psbt_base64 = preview.psbt.clone();
-            
+
             let result = runtime.block_on(async {
                 let vs = vault_service.read().await;
                 vs.encode_psbt_to_ur_parts(&psbt_base64, Some(200))
             });
-            
+
             match result {
                 Ok(ur_parts) => {
                     state.hw_qr_display_state.ur_parts = ur_parts;
@@ -216,7 +238,8 @@ pub fn start_hardware_wallet_signing(
             state.error = Some("Vault not loaded or runtime not available".to_string());
         }
     } else {
-        state.error = Some("No transaction preview available. Please build preview first.".to_string());
+        state.error =
+            Some("No transaction preview available. Please build preview first.".to_string());
     }
 }
 
@@ -231,21 +254,21 @@ pub fn send_hardware_wallet_signed_psbt(
     if state.is_signing {
         return;
     }
-    
+
     state.is_signing = true;
     state.error = None;
-    
-    if let (Some(vault_service), Some(runtime)) = 
-        (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
-        
+
+    if let (Some(vault_service), Some(runtime)) =
+        (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
+    {
         let psbt_base64 = signed_psbt_base64.to_string();
         // Get vault address from vault service
         let vault_address = runtime.block_on(async {
             let vs = vault_service.read().await;
-            vs.get_address().unwrap_or_default()
+            vs.get_address().unwrap_or_else(|_| String::new())
         });
         let network = app_state.network;
-        
+
         let result = runtime.block_on(async {
             let convenience_service = bitvault_common::ConvenienceService::new(None);
             let network_id = match network {
@@ -255,9 +278,11 @@ pub fn send_hardware_wallet_signed_psbt(
                 bdk::bitcoin::Network::Regtest => 1,
                 _ => 1,
             };
-            convenience_service.send_signed_psbt(&vault_address, &psbt_base64, network_id).await
+            convenience_service
+                .send_signed_psbt(&vault_address, &psbt_base64, network_id)
+                .await
         });
-        
+
         match result {
             Ok(response) => {
                 state.error = None;
@@ -266,7 +291,7 @@ pub fn send_hardware_wallet_signed_psbt(
                 } else {
                     state.success_message = Some("Transaction sent successfully!".to_string());
                 }
-                
+
                 // Show desktop notification for hardware wallet signed transaction
                 let notification_service = app_state.notification_service.clone();
                 if let Some(ref runtime) = app_state.runtime {
@@ -278,10 +303,12 @@ pub fn send_hardware_wallet_signed_psbt(
                         0.0
                     };
                     handle.spawn(async move {
-                        let _ = notification_service.notify_transaction_sent("HW Signed", amount_btc).await;
+                        let _ = notification_service
+                            .notify_transaction_sent("HW Signed", amount_btc)
+                            .await;
                     });
                 }
-                
+
                 state.is_signing = false;
                 state.hw_signing_mode = HardwareWalletSigningMode::None;
                 state.pin_verification.reset();
@@ -299,5 +326,3 @@ pub fn send_hardware_wallet_signed_psbt(
         state.hw_signing_mode = HardwareWalletSigningMode::None;
     }
 }
-
-

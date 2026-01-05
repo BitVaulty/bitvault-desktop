@@ -2,9 +2,9 @@
 //!
 //! Standalone view for selecting and managing UTXOs
 
-use eframe::egui;
 use crate::state::{AppState, Navigation};
 use bitvault_common::types::OldUtxo;
+use eframe::egui;
 
 /// State for UTXO selection view
 #[derive(Default)]
@@ -15,7 +15,6 @@ pub struct UtxoSelectionViewState {
     pub error: Option<String>,
     pub show_recovery: bool, // true for recovery (>1 year), false for refresh (>6 months)
 }
-
 
 impl UtxoSelectionViewState {
     pub fn total_selected_amount(&self) -> f64 {
@@ -29,21 +28,21 @@ impl UtxoSelectionViewState {
     pub fn has_selection(&self) -> bool {
         !self.selected.is_empty()
     }
-    
+
     pub fn refresh(&mut self, app_state: &mut AppState, is_recovery: bool) {
         self.is_loading = true;
         self.error = None;
         self.selected.clear();
-        
-        if let (Some(vault_service), Some(runtime)) = 
-            (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
-            
+
+        if let (Some(vault_service), Some(runtime)) =
+            (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
+        {
             let result = runtime.block_on(async {
                 let mut vs = vault_service.write().await;
                 // get_old_utxos takes a boolean: true for refresh (>6 months), false for recovery (>1 year)
                 vs.get_old_utxos(!is_recovery).await
             });
-            
+
             match result {
                 Ok(utxos) => {
                     self.utxos = utxos;
@@ -72,47 +71,53 @@ pub fn render_utxo_selection_view(
         ui.label("No vault loaded");
         return;
     }
-    
+
     ui.vertical(|ui| {
         ui.label(egui::RichText::new("UTXO Selection").heading());
         ui.add_space(10.0);
-        
+
         // Mode selection
         ui.horizontal(|ui| {
             ui.label("Mode:");
-            if ui.selectable_label(!state.show_recovery, "Refresh (>6 months)").clicked() {
+            if ui
+                .selectable_label(!state.show_recovery, "Refresh (>6 months)")
+                .clicked()
+            {
                 state.show_recovery = false;
                 state.refresh(app_state, false);
             }
-            if ui.selectable_label(state.show_recovery, "Recovery (>1 year)").clicked() {
+            if ui
+                .selectable_label(state.show_recovery, "Recovery (>1 year)")
+                .clicked()
+            {
                 state.show_recovery = true;
                 state.refresh(app_state, true);
             }
         });
-        
+
         ui.add_space(10.0);
-        
+
         // Refresh button
         if ui.button("🔄 Refresh UTXO List").clicked() {
             state.refresh(app_state, state.show_recovery);
         }
-        
+
         ui.add_space(10.0);
         ui.separator();
         ui.add_space(10.0);
-        
+
         // Show error if any
         if let Some(ref error) = state.error {
             ui.colored_label(egui::Color32::RED, error);
             ui.add_space(10.0);
         }
-        
+
         // Show loading state
         if state.is_loading {
             ui.label("Loading UTXOs...");
             return;
         }
-        
+
         // Show UTXO list
         if state.utxos.is_empty() {
             ui.vertical_centered(|ui| {
@@ -126,7 +131,7 @@ pub fn render_utxo_selection_view(
             });
             return;
         }
-        
+
         // Total selected amount
         let total = state.total_selected_amount();
         ui.horizontal(|ui| {
@@ -135,7 +140,7 @@ pub fn render_utxo_selection_view(
             ui.label(format!("({} UTXO(s))", state.selected.len()));
         });
         ui.add_space(10.0);
-        
+
         // Select all / Deselect all
         ui.horizontal(|ui| {
             if ui.button("Select All").clicked() {
@@ -147,16 +152,16 @@ pub fn render_utxo_selection_view(
                 state.selected.clear();
             }
         });
-        
+
         ui.add_space(10.0);
-        
+
         // UTXO list with checkboxes
         egui::ScrollArea::vertical()
             .max_height(400.0)
             .show(ui, |ui| {
                 for utxo in &state.utxos {
                     let is_selected = state.selected.contains(&utxo.outpoint);
-                    
+
                     ui.horizontal(|ui| {
                         let mut checkbox_value = is_selected;
                         if ui.checkbox(&mut checkbox_value, "").changed() {
@@ -166,19 +171,19 @@ pub fn render_utxo_selection_view(
                                 state.selected.remove(&utxo.outpoint);
                             }
                         }
-                        
+
                         ui.vertical(|ui| {
                             ui.label(format!("OutPoint: {}", utxo.outpoint));
                             ui.label(format!("Amount: {:.8} BTC", utxo.amount));
                         });
                     });
-                    
+
                     ui.separator();
                 }
             });
-        
+
         ui.add_space(10.0);
-        
+
         // Action buttons
         if state.has_selection() {
             ui.horizontal(|ui| {

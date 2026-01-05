@@ -6,9 +6,9 @@
 //! - Status (pending/confirmed)
 //! - Click to view details
 
-use eframe::egui;
 use crate::state::{AppState, Navigation, View};
 use chrono::{Local, TimeZone};
+use eframe::egui;
 
 /// Transaction filter
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,7 +22,7 @@ impl TransactionFilter {
     fn all() -> Vec<Self> {
         vec![Self::Pending, Self::Sent, Self::Received]
     }
-    
+
     fn title(&self) -> &'static str {
         match self {
             Self::Pending => "Pending",
@@ -30,7 +30,7 @@ impl TransactionFilter {
             Self::Received => "Received",
         }
     }
-    
+
     fn matches(&self, tx: &bitvault_common::types::TransactionInfo) -> bool {
         match self {
             Self::Pending => tx.status == bitvault_common::types::TransactionStatus::Pending,
@@ -65,7 +65,8 @@ impl Default for TransactionHistoryState {
 
 impl TransactionHistoryState {
     fn apply_filter(&mut self) {
-        self.filtered_transactions = self.transactions
+        self.filtered_transactions = self
+            .transactions
             .iter()
             .filter(|tx| self.current_filter.matches(tx))
             .cloned()
@@ -75,7 +76,7 @@ impl TransactionHistoryState {
 
 // Thread-local state for transaction history
 thread_local! {
-    static TX_HISTORY_STATE: std::cell::RefCell<TransactionHistoryState> = 
+    static TX_HISTORY_STATE: std::cell::RefCell<TransactionHistoryState> =
         std::cell::RefCell::new(TransactionHistoryState::default());
 }
 
@@ -93,7 +94,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
         // Filter buttons and refresh button
         TX_HISTORY_STATE.with(|state| {
             let mut state = state.borrow_mut();
-            
+
             ui.horizontal(|ui| {
                 // Filter buttons
                 for filter in TransactionFilter::all() {
@@ -103,13 +104,13 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     } else {
                         ui.selectable_label(false, filter.title())
                     };
-                    
+
                     if button.clicked() {
                         state.current_filter = filter;
                         state.apply_filter();
                     }
                 }
-                
+
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("Refresh").clicked() {
                         refresh_transactions(ui, app_state);
@@ -138,7 +139,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
 
             // Apply filter
             state.apply_filter();
-            
+
             // Show transaction list
             if state.filtered_transactions.is_empty() {
                 ui.vertical_centered(|ui| {
@@ -146,7 +147,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     ui.label("No transactions yet");
                     ui.label("When you make transactions, they will appear here");
                     ui.add_space(20.0);
-                    
+
                     ui.horizontal(|ui| {
                         if ui.button("Send BTC").clicked() {
                             navigation.navigate_to(View::SendTransaction);
@@ -184,7 +185,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
 fn refresh_transactions(ui: &mut egui::Ui, app_state: &mut AppState) {
     TX_HISTORY_STATE.with(|state| {
         let mut state = state.borrow_mut();
-        
+
         if state.is_loading {
             return; // Already loading
         }
@@ -193,9 +194,9 @@ fn refresh_transactions(ui: &mut egui::Ui, app_state: &mut AppState) {
         state.error = None;
 
         // Get vault service and runtime
-        if let (Some(vault_service), Some(runtime)) = 
-            (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
-            
+        if let (Some(vault_service), Some(runtime)) =
+            (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
+        {
             let result = runtime.block_on(async {
                 let vs = vault_service.read().await;
                 vs.list_transactions().await
@@ -233,9 +234,9 @@ fn render_transaction_row(
             bitvault_common::types::TransactionStatus::Received => egui::Color32::GREEN,
         };
         ui.colored_label(status_color, tx.status.as_str());
-        
+
         ui.separator();
-        
+
         // Date/time
         let date_str = if tx.timestamp > 0 {
             if let Some(dt) = Local.timestamp_opt(tx.timestamp, 0).single() {
@@ -247,9 +248,9 @@ fn render_transaction_row(
             "Pending".to_string()
         };
         ui.label(date_str);
-        
+
         ui.separator();
-        
+
         // Amount
         let amount = tx.total_amount_btc();
         let amount_str = if amount >= 0.0 {
@@ -263,17 +264,21 @@ fn render_transaction_row(
             egui::Color32::RED
         };
         ui.colored_label(amount_color, amount_str);
-        
+
         ui.separator();
-        
+
         // Address (truncated)
         let address_display = if tx.address.len() > 20 {
-            format!("{}...{}", &tx.address[..10], &tx.address[tx.address.len()-10..])
+            format!(
+                "{}...{}",
+                &tx.address[..10],
+                &tx.address[tx.address.len() - 10..]
+            )
         } else {
             tx.address.clone()
         };
         ui.label(address_display);
-        
+
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui.button("Details").clicked() {
                 navigation.navigate_to(View::TransactionDetail {
@@ -283,5 +288,3 @@ fn render_transaction_row(
         });
     });
 }
-
-

@@ -2,8 +2,8 @@
 //!
 //! Shows current subscription status and information
 
-use eframe::egui;
 use crate::state::{AppState, Navigation};
+use eframe::egui;
 
 /// Get the subscription renewal URL
 /// For now, uses the hardcoded annual payment link
@@ -23,10 +23,9 @@ struct SubscriptionStatusState {
     last_refresh: Option<std::time::Instant>,
 }
 
-
 // Thread-local state for subscription status
 thread_local! {
-    static SUBSCRIPTION_STATE: std::cell::RefCell<SubscriptionStatusState> = 
+    static SUBSCRIPTION_STATE: std::cell::RefCell<SubscriptionStatusState> =
         std::cell::RefCell::new(SubscriptionStatusState::default());
 }
 
@@ -92,9 +91,9 @@ fn load_subscription_data(
     state.is_loading = true;
     state.error = None;
 
-    if let (Some(vault_service), Some(runtime)) = 
-        (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
-        
+    if let (Some(vault_service), Some(runtime)) =
+        (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
+    {
         let result = runtime.block_on(async {
             let vs = vault_service.read().await;
             vs.get_subscription_info().await
@@ -117,7 +116,11 @@ fn load_subscription_data(
     }
 }
 
-fn render_subscription_info(ui: &mut egui::Ui, subscription: &bitvault_common::types::SubscriptionData, ctx: &egui::Context) {
+fn render_subscription_info(
+    ui: &mut egui::Ui,
+    subscription: &bitvault_common::types::SubscriptionData,
+    ctx: &egui::Context,
+) {
     ui.separator();
     ui.add_space(10.0);
 
@@ -147,7 +150,10 @@ fn render_subscription_info(ui: &mut egui::Ui, subscription: &bitvault_common::t
 
     // Grace period indicator
     if subscription.is_in_grace_period() {
-        ui.colored_label(egui::Color32::YELLOW, "⚠ Subscription in grace period (7 days)");
+        ui.colored_label(
+            egui::Color32::YELLOW,
+            "⚠ Subscription in grace period (7 days)",
+        );
         ui.add_space(10.0);
     }
 
@@ -164,7 +170,10 @@ fn render_subscription_info(ui: &mut egui::Ui, subscription: &bitvault_common::t
     // Paid until date
     if let Some(paid_until) = subscription.paid_until {
         if let Some(dt) = chrono::DateTime::from_timestamp(paid_until as i64, 0) {
-            ui.label(format!("Paid until: {}", dt.format("%Y-%m-%d %H:%M:%S UTC")));
+            ui.label(format!(
+                "Paid until: {}",
+                dt.format("%Y-%m-%d %H:%M:%S UTC")
+            ));
         }
     }
 
@@ -172,31 +181,42 @@ fn render_subscription_info(ui: &mut egui::Ui, subscription: &bitvault_common::t
 
     // Show renewal button for expired subscriptions or those in grace period
     if !subscription.is_valid() {
-        ui.colored_label(egui::Color32::RED, "⚠ Subscription expired. Please renew to continue using the service.");
+        ui.colored_label(
+            egui::Color32::RED,
+            "⚠ Subscription expired. Please renew to continue using the service.",
+        );
         ui.add_space(10.0);
     } else if subscription.is_in_grace_period() {
-        ui.colored_label(egui::Color32::YELLOW, "⚠ Subscription in grace period. Consider renewing to avoid service interruption.");
+        ui.colored_label(
+            egui::Color32::YELLOW,
+            "⚠ Subscription in grace period. Consider renewing to avoid service interruption.",
+        );
         ui.add_space(10.0);
     } else if let Some(days) = subscription.days_remaining {
         if days <= 7 && days > 0 {
-            ui.colored_label(egui::Color32::YELLOW, format!("⚠ Subscription expires in {} days. Consider renewing soon.", days));
+            ui.colored_label(
+                egui::Color32::YELLOW,
+                format!(
+                    "⚠ Subscription expires in {} days. Consider renewing soon.",
+                    days
+                ),
+            );
             ui.add_space(10.0);
         }
     }
 
     // Show renewal button if subscription is expired, in grace period, or expiring soon (within 7 days)
-    let should_show_renewal = !subscription.is_valid() 
-        || subscription.is_in_grace_period() 
+    let should_show_renewal = !subscription.is_valid()
+        || subscription.is_in_grace_period()
         || subscription.days_remaining.is_some_and(|days| days <= 7);
-    
-    if should_show_renewal
-        && ui.button("Renew Subscription").clicked() {
-            let url = get_subscription_renewal_url();
-            ctx.output_mut(|o| {
-                o.open_url = Some(egui::OpenUrl {
-                    url: url.clone(),
-                    new_tab: true,
-                });
+
+    if should_show_renewal && ui.button("Renew Subscription").clicked() {
+        let url = get_subscription_renewal_url();
+        ctx.output_mut(|o| {
+            o.open_url = Some(egui::OpenUrl {
+                url: url.clone(),
+                new_tab: true,
             });
-        }
+        });
+    }
 }

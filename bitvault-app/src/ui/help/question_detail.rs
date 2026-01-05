@@ -2,9 +2,9 @@
 //!
 //! Displays the full answer to a selected question
 
-use eframe::egui;
 use crate::state::{AppState, Navigation};
 use crate::ui::help::QuestionAndAnswer;
+use eframe::egui;
 
 /// Question detail state
 pub struct QuestionDetailState {
@@ -45,7 +45,7 @@ pub fn render_question_detail(
         // Answer
         ui.label(egui::RichText::new("Answer:").size(16.0).strong());
         ui.add_space(10.0);
-        
+
         // Display answer with proper formatting (handle newlines)
         let answer_lines: Vec<&str> = state.question.answer.split('\n').collect();
         for line in answer_lines {

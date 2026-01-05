@@ -3,8 +3,7 @@
 //! Manages navigation state and current view
 
 /// Current view/screen in the application
-#[derive(Debug, Clone, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum View {
     /// Vault selection screen (shown on startup if no vault loaded)
     #[default]
@@ -21,9 +20,7 @@ pub enum View {
     /// Receive address view
     Receive,
     /// Transaction details
-    TransactionDetail {
-        txid: String,
-    },
+    TransactionDetail { txid: String },
     /// Settings (full screen)
     Settings,
     /// Recovery transaction flow
@@ -43,7 +40,6 @@ pub enum View {
     /// Advanced Settings
     AdvancedSettings,
 }
-
 
 /// Navigation state
 pub struct Navigation {
@@ -71,14 +67,14 @@ impl Navigation {
         self.current_view = view;
         self.navigation_data = None;
     }
-    
+
     /// Navigate to a new view with optional data
     pub fn navigate_to_with_data(&mut self, view: View, data: Option<String>) {
         self.history.push(self.current_view.clone());
         self.current_view = view;
         self.navigation_data = data;
     }
-    
+
     /// Get and clear navigation data (consumes it)
     pub fn take_navigation_data(&mut self) -> Option<String> {
         self.navigation_data.take()

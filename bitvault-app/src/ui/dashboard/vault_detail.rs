@@ -6,9 +6,9 @@
 //! - Recent transactions
 //! - Quick actions (Send, Receive buttons)
 
-use eframe::egui;
 use crate::state::{AppState, Navigation};
 use chrono::{Local, TimeZone};
+use eframe::egui;
 
 pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navigation) {
     ui.vertical_centered(|ui| {
@@ -40,7 +40,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
         // Display cached balance or loading
         let balance_text = vault_data.format_balance_btc();
         ui.label(format!("Confirmed: {}", balance_text));
-        
+
         let available_text = vault_data.format_available_btc();
         ui.label(format!("Available: {}", available_text));
 
@@ -52,7 +52,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     handler.fetch_address();
                 }
             }
-            
+
             if ui.button("Switch Vault").clicked() {
                 navigation.navigate_to(crate::state::View::VaultSelection);
             }
@@ -63,7 +63,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
         // Vault address
         ui.heading("Vault Address");
         ui.add_space(10.0);
-        
+
         if let Some(ref address) = vault_data.receive_address {
             ui.label(address);
             if ui.button("Copy").clicked() {
@@ -97,16 +97,16 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
 
         // Recent transactions
         ui.heading("Recent Transactions");
-        
+
         // Fetch and display recent transactions
-        if let (Some(vault_service), Some(runtime)) = 
-            (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
-            
+        if let (Some(vault_service), Some(runtime)) =
+            (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
+        {
             let result = runtime.block_on(async {
                 let vs = vault_service.read().await;
                 vs.list_transactions().await
             });
-            
+
             match result {
                 Ok(transactions) => {
                     if transactions.is_empty() {
@@ -114,10 +114,8 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                         ui.label("When you make transactions, they will appear here");
                     } else {
                         // Show up to 5 most recent transactions
-                        let recent_txs: Vec<_> = transactions.iter()
-                            .take(5)
-                            .collect();
-                        
+                        let recent_txs: Vec<_> = transactions.iter().take(5).collect();
+
                         egui::ScrollArea::vertical()
                             .max_height(200.0)
                             .show(ui, |ui| {
@@ -125,12 +123,16 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                                     ui.horizontal(|ui| {
                                         // Status
                                         let status_icon = match tx.status {
-                                            bitvault_common::types::TransactionStatus::Pending => "⏳",
+                                            bitvault_common::types::TransactionStatus::Pending => {
+                                                "⏳"
+                                            }
                                             bitvault_common::types::TransactionStatus::Sent => "📤",
-                                            bitvault_common::types::TransactionStatus::Received => "📥",
+                                            bitvault_common::types::TransactionStatus::Received => {
+                                                "📥"
+                                            }
                                         };
                                         ui.label(status_icon);
-                                        
+
                                         // Amount
                                         let amount = tx.total_amount_btc();
                                         let amount_str = if amount >= 0.0 {
@@ -144,27 +146,34 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                                             egui::Color32::RED
                                         };
                                         ui.colored_label(amount_color, amount_str);
-                                        
+
                                         // Date
                                         if tx.timestamp > 0 {
-                                            if let Some(dt) = Local.timestamp_opt(tx.timestamp, 0).single() {
+                                            if let Some(dt) =
+                                                Local.timestamp_opt(tx.timestamp, 0).single()
+                                            {
                                                 ui.label(dt.format("%m/%d").to_string());
                                             }
                                         }
-                                        
+
                                         // Click to view details
-                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                            if ui.small_button("→").clicked() {
-                                                navigation.navigate_to(crate::state::View::TransactionDetail {
-                                                    txid: tx.tx_id.clone(),
-                                                });
-                                            }
-                                        });
+                                        ui.with_layout(
+                                            egui::Layout::right_to_left(egui::Align::Center),
+                                            |ui| {
+                                                if ui.small_button("→").clicked() {
+                                                    navigation.navigate_to(
+                                                        crate::state::View::TransactionDetail {
+                                                            txid: tx.tx_id.clone(),
+                                                        },
+                                                    );
+                                                }
+                                            },
+                                        );
                                     });
                                     ui.separator();
                                 }
                             });
-                        
+
                         if transactions.len() > 5 {
                             ui.add_space(5.0);
                             if ui.button("View All Transactions").clicked() {
@@ -174,7 +183,10 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     }
                 }
                 Err(e) => {
-                    ui.colored_label(egui::Color32::RED, format!("Failed to load transactions: {}", e));
+                    ui.colored_label(
+                        egui::Color32::RED,
+                        format!("Failed to load transactions: {}", e),
+                    );
                 }
             }
         } else {

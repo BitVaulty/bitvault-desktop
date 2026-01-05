@@ -1,11 +1,11 @@
 //! Vault creation step implementations
 
-use eframe::egui;
 use crate::state::{AppState, Navigation};
-use crate::ui::vault_creation::{VaultCreationState, VaultCreationStep};
 use crate::ui::pin::render_pin_setup;
+use crate::ui::vault_creation::{VaultCreationState, VaultCreationStep};
+use bip39::{Language, Mnemonic};
 use bitvault_common::utils::TimeDelay;
-use bip39::{Mnemonic, Language};
+use eframe::egui;
 
 /// Step 1: Generate or import mnemonic
 pub fn render_mnemonic_generation(ui: &mut egui::Ui, state: &mut VaultCreationState) {
@@ -43,7 +43,10 @@ pub fn render_display_seed_phrase(ui: &mut egui::Ui, state: &mut VaultCreationSt
     ui.label("Step 2: Write Down Your Seed Phrase");
     ui.add_space(10.0);
 
-    ui.colored_label(egui::Color32::RED, "⚠️ WARNING: Write this down in a safe place!");
+    ui.colored_label(
+        egui::Color32::RED,
+        "⚠️ WARNING: Write this down in a safe place!",
+    );
     ui.label("You will need this to recover your vault.");
     ui.add_space(10.0);
 
@@ -84,7 +87,10 @@ pub fn render_verify_seed_phrase(ui: &mut egui::Ui, state: &mut VaultCreationSta
     ui.label("You will need it to recover your vault.");
     ui.add_space(10.0);
 
-    ui.checkbox(&mut state.verified_seed_phrase, "I have written down my seed phrase");
+    ui.checkbox(
+        &mut state.verified_seed_phrase,
+        "I have written down my seed phrase",
+    );
 
     ui.add_space(20.0);
 
@@ -132,7 +138,12 @@ pub fn render_set_time_delay(ui: &mut egui::Ui, state: &mut VaultCreationState) 
 }
 
 /// Step 5: Set PIN
-pub fn render_set_pin(ui: &mut egui::Ui, _app_state: &mut AppState, _navigation: &mut Navigation, state: &mut VaultCreationState) {
+pub fn render_set_pin(
+    ui: &mut egui::Ui,
+    _app_state: &mut AppState,
+    _navigation: &mut Navigation,
+    state: &mut VaultCreationState,
+) {
     ui.label("Step 5: Set PIN");
     ui.add_space(10.0);
     ui.label("Set a 6-digit PIN to secure your wallet");
@@ -163,7 +174,7 @@ pub fn render_generate_coowner_qr(ui: &mut egui::Ui, state: &mut VaultCreationSt
 
     ui.label("Coowner QR/Keys:");
     ui.text_edit_singleline(&mut state.coowner_pubkeys);
-    
+
     ui.add_space(20.0);
     if ui.button("Next").clicked() {
         if !state.coowner_pubkeys.is_empty() {
@@ -180,16 +191,20 @@ pub fn render_generate_coowner_qr(ui: &mut egui::Ui, state: &mut VaultCreationSt
 }
 
 /// Step 6: Email 2FA
-pub fn render_email_auth(ui: &mut egui::Ui, app_state: &mut AppState, state: &mut VaultCreationState) {
+pub fn render_email_auth(
+    ui: &mut egui::Ui,
+    app_state: &mut AppState,
+    state: &mut VaultCreationState,
+) {
     ui.label("Step 6: Email Authentication");
     ui.add_space(10.0);
-    
+
     ui.label("Enter your email address to receive an authentication code:");
     ui.add_space(5.0);
-    
+
     ui.text_edit_singleline(&mut state.email);
     ui.add_space(10.0);
-    
+
     // Send code button
     if ui.button("Send Authentication Code").clicked() && !state.email.trim().is_empty() {
         if !state.email.contains('@') {
@@ -197,7 +212,7 @@ pub fn render_email_auth(ui: &mut egui::Ui, app_state: &mut AppState, state: &mu
         } else {
             state.is_sending_code = true;
             state.error = None;
-            
+
             // Create a temporary service just for sending the code
             if let Some(ref runtime) = app_state.runtime {
                 let email = state.email.clone();
@@ -206,7 +221,7 @@ pub fn render_email_auth(ui: &mut egui::Ui, app_state: &mut AppState, state: &mu
                     let temp_service = bitvault_common::wallet::VaultService::new(network);
                     temp_service.send_email_auth_code(&email).await
                 });
-                
+
                 match result {
                     Ok(_) => {
                         state.code_sent = true;
@@ -220,20 +235,20 @@ pub fn render_email_auth(ui: &mut egui::Ui, app_state: &mut AppState, state: &mu
             }
         }
     }
-    
+
     if state.is_sending_code {
         ui.label("Sending code...");
     }
-    
+
     if state.code_sent {
         ui.add_space(10.0);
         ui.colored_label(egui::Color32::GREEN, "✓ Code sent! Check your email.");
         ui.add_space(10.0);
-        
+
         ui.label("Enter the authentication code:");
         ui.text_edit_singleline(&mut state.auth_code);
         ui.add_space(10.0);
-        
+
         if ui.button("Verify and Continue").clicked() {
             if !state.auth_code.trim().is_empty() {
                 state.current_step = VaultCreationStep::LinkCoowner;
@@ -243,7 +258,7 @@ pub fn render_email_auth(ui: &mut egui::Ui, app_state: &mut AppState, state: &mu
             }
         }
     }
-    
+
     ui.add_space(20.0);
     if ui.button("Back").clicked() {
         state.current_step = VaultCreationStep::GenerateCoownerQR;
@@ -263,7 +278,7 @@ pub fn render_link_coowner(ui: &mut egui::Ui, state: &mut VaultCreationState) {
 
     ui.label("Vault Name:");
     ui.text_edit_singleline(&mut state.vault_name);
-    
+
     ui.add_space(20.0);
 
     if ui.button("Next").clicked() {
@@ -281,7 +296,12 @@ pub fn render_link_coowner(ui: &mut egui::Ui, state: &mut VaultCreationState) {
 }
 
 /// Step 8: Create vault
-pub fn render_create_vault(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navigation, state: &mut VaultCreationState) {
+pub fn render_create_vault(
+    ui: &mut egui::Ui,
+    app_state: &mut AppState,
+    navigation: &mut Navigation,
+    state: &mut VaultCreationState,
+) {
     ui.label("Step 8: Create Vault");
     ui.add_space(10.0);
 
@@ -294,7 +314,10 @@ pub fn render_create_vault(ui: &mut egui::Ui, app_state: &mut AppState, navigati
 
     ui.label("Ready to create vault:");
     ui.label(format!("Name: {}", state.vault_name));
-    ui.label(format!("Time Delay: {} days, {} hours", state.time_delay_days, state.time_delay_hours));
+    ui.label(format!(
+        "Time Delay: {} days, {} hours",
+        state.time_delay_days, state.time_delay_hours
+    ));
     ui.label(format!("Email: {}", state.email));
     ui.add_space(10.0);
 
@@ -330,7 +353,9 @@ pub fn render_create_vault(ui: &mut egui::Ui, app_state: &mut AppState, navigati
         }
 
         // Create vault synchronously using block_on (acceptable for one-time operation)
-        if let (Some(mnemonic), Some(runtime)) = (state.mnemonic.as_ref(), app_state.runtime.as_ref()) {
+        if let (Some(mnemonic), Some(runtime)) =
+            (state.mnemonic.as_ref(), app_state.runtime.as_ref())
+        {
             let time_delay = TimeDelay {
                 days: state.time_delay_days,
                 hours: state.time_delay_hours,
@@ -344,16 +369,18 @@ pub fn render_create_vault(ui: &mut egui::Ui, app_state: &mut AppState, navigati
 
             let result = runtime.block_on(async {
                 let mut vault_service = bitvault_common::wallet::VaultService::new(network);
-                
-                let qr_result = vault_service.setup_vault(
-                    mnemonic,
-                    &coowner_pubkeys,
-                    time_delay,
-                    &vault_name,
-                    &email_clone,
-                    &auth_code_clone,
-                ).await;
-                
+
+                let qr_result = vault_service
+                    .setup_vault(
+                        mnemonic,
+                        &coowner_pubkeys,
+                        time_delay,
+                        &vault_name,
+                        &email_clone,
+                        &auth_code_clone,
+                    )
+                    .await;
+
                 // If setup succeeded, vault_service now has the wallet initialized
                 // Return both the QR result and the vault service
                 match qr_result {
@@ -365,7 +392,7 @@ pub fn render_create_vault(ui: &mut egui::Ui, app_state: &mut AppState, navigati
             match result {
                 Ok((final_qr, vault_service)) => {
                     state.final_qr = Some(final_qr);
-                    
+
                     // Initialize vault in app_state (use runtime handle to avoid borrow conflict)
                     if let Err(e) = runtime_handle.block_on(async {
                         app_state.initialize_vault_from_service(vault_service).await
@@ -377,11 +404,11 @@ pub fn render_create_vault(ui: &mut egui::Ui, app_state: &mut AppState, navigati
                             handler.fetch_balance();
                             handler.fetch_address();
                         }
-                        
+
                         // Navigate to dashboard
                         navigation.navigate_to(crate::state::View::Dashboard { tab: 0 });
                     }
-                    
+
                     state.current_step = VaultCreationStep::Completed;
                     state.is_creating = false;
                 }
@@ -402,12 +429,16 @@ pub fn render_create_vault(ui: &mut egui::Ui, app_state: &mut AppState, navigati
 }
 
 /// Step 8: Completed
-pub fn render_completed(ui: &mut egui::Ui, navigation: &mut Navigation, state: &mut VaultCreationState) {
+pub fn render_completed(
+    ui: &mut egui::Ui,
+    navigation: &mut Navigation,
+    state: &mut VaultCreationState,
+) {
     ui.heading("Vault Created Successfully!");
     ui.add_space(10.0);
 
     ui.label(format!("Vault Name: {}", state.vault_name));
-    
+
     if let Some(ref address) = state.vault_address {
         ui.label(format!("Vault Address: {}", address));
     }
@@ -417,13 +448,16 @@ pub fn render_completed(ui: &mut egui::Ui, navigation: &mut Navigation, state: &
         ui.label("QR Code for Second Device:");
         // Generate and display QR code
         use crate::utils::qr::generate_qr_image;
-        
+
         if let Some(qr_texture) = generate_qr_image(ui.ctx(), final_qr) {
             ui.image((qr_texture.id(), egui::Vec2::new(300.0, 300.0)));
             ui.add_space(10.0);
         } else {
             ui.colored_label(egui::Color32::YELLOW, "Failed to generate QR code");
-            ui.label(format!("QR Data: {}...", &final_qr[..final_qr.len().min(50)]));
+            ui.label(format!(
+                "QR Data: {}...",
+                &final_qr[..final_qr.len().min(50)]
+            ));
         }
     }
 
@@ -436,34 +470,39 @@ pub fn render_completed(ui: &mut egui::Ui, navigation: &mut Navigation, state: &
 
 /// Import vault flow
 /// Step 1: Enter mnemonic and scan QR descriptors
-pub fn render_import_vault(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navigation, state: &mut VaultCreationState) {
+pub fn render_import_vault(
+    ui: &mut egui::Ui,
+    app_state: &mut AppState,
+    navigation: &mut Navigation,
+    state: &mut VaultCreationState,
+) {
     ui.label("Import Existing Vault");
     ui.add_space(10.0);
-    
+
     ui.label("Enter your 12 or 24-word mnemonic phrase:");
     ui.add_space(5.0);
     ui.text_edit_multiline(&mut state.import_mnemonic_text);
     ui.add_space(10.0);
-    
+
     ui.label("Scan or paste the descriptor QR code (compressed base64):");
     ui.add_space(5.0);
     ui.text_edit_multiline(&mut state.import_descriptors_qr);
     ui.add_space(10.0);
-    
+
     ui.label("Vault Name:");
     ui.text_edit_singleline(&mut state.vault_name);
     ui.add_space(10.0);
-    
+
     ui.checkbox(&mut state.is_coowner, "This is a coowner device");
     ui.add_space(10.0);
-    
+
     if state.is_importing {
         ui.label("Importing vault...");
         ui.add_space(10.0);
         ui.spinner();
         return;
     }
-    
+
     ui.horizontal(|ui| {
         if ui.button("Import").clicked() {
             // Validate inputs
@@ -471,17 +510,17 @@ pub fn render_import_vault(ui: &mut egui::Ui, app_state: &mut AppState, navigati
                 state.error = Some("Please enter your mnemonic phrase".to_string());
                 return;
             }
-            
+
             if state.import_descriptors_qr.trim().is_empty() {
                 state.error = Some("Please enter or scan the descriptor QR code".to_string());
                 return;
             }
-            
+
             if state.vault_name.trim().is_empty() {
                 state.error = Some("Please enter a vault name".to_string());
                 return;
             }
-            
+
             // Parse mnemonic
             let mnemonic_text = state.import_mnemonic_text.trim();
             let mnemonic = match Mnemonic::parse_in(Language::English, mnemonic_text) {
@@ -491,10 +530,10 @@ pub fn render_import_vault(ui: &mut egui::Ui, app_state: &mut AppState, navigati
                     return;
                 }
             };
-            
+
             state.is_importing = true;
             state.error = None;
-            
+
             // Import vault using runtime
             if let Some(ref runtime) = app_state.runtime {
                 let descriptors_qr = state.import_descriptors_qr.clone();
@@ -502,25 +541,24 @@ pub fn render_import_vault(ui: &mut egui::Ui, app_state: &mut AppState, navigati
                 let is_coowner = state.is_coowner;
                 let network = app_state.network;
                 let runtime_handle = runtime.handle().clone();
-                
-                let result: Result<(bitvault_common::wallet::VaultService, String), String> = runtime.block_on(async {
-                    let mut vault_service = bitvault_common::wallet::VaultService::new(network);
-                    
-                    vault_service.import_vault(
-                        &mnemonic,
-                        &descriptors_qr,
-                        &vault_name,
-                        is_coowner,
-                    ).await
-                    .map_err(|e| format!("Import failed: {}", e))?;
-                    
-                    // After import, the vault service has the wallet initialized
-                    // Get the vault address from the service
-                    let vault_address = vault_service.get_address()
-                        .map_err(|e| format!("Failed to get address: {}", e))?;
-                    Ok((vault_service, vault_address))
-                });
-                
+
+                let result: Result<(bitvault_common::wallet::VaultService, String), String> =
+                    runtime.block_on(async {
+                        let mut vault_service = bitvault_common::wallet::VaultService::new(network);
+
+                        vault_service
+                            .import_vault(&mnemonic, &descriptors_qr, &vault_name, is_coowner)
+                            .await
+                            .map_err(|e| format!("Import failed: {}", e))?;
+
+                        // After import, the vault service has the wallet initialized
+                        // Get the vault address from the service
+                        let vault_address = vault_service
+                            .get_address()
+                            .map_err(|e| format!("Failed to get address: {}", e))?;
+                        Ok((vault_service, vault_address))
+                    });
+
                 match result {
                     Ok((vault_service, vault_address)) => {
                         // Initialize vault in app_state
@@ -531,13 +569,13 @@ pub fn render_import_vault(ui: &mut egui::Ui, app_state: &mut AppState, navigati
                             state.is_importing = false;
                             return;
                         }
-                        
+
                         // Fetch initial data
                         if let Some(ref mut handler) = app_state.async_handler {
                             handler.fetch_balance();
                             handler.fetch_address();
                         }
-                        
+
                         // Navigate to dashboard
                         navigation.navigate_to(crate::state::View::Dashboard { tab: 0 });
                         state.vault_address = Some(vault_address);
@@ -554,7 +592,7 @@ pub fn render_import_vault(ui: &mut egui::Ui, app_state: &mut AppState, navigati
                 state.is_importing = false;
             }
         }
-        
+
         if ui.button("Cancel").clicked() {
             state.current_step = VaultCreationStep::MnemonicGeneration;
             state.import_mnemonic_text.clear();
@@ -563,7 +601,7 @@ pub fn render_import_vault(ui: &mut egui::Ui, app_state: &mut AppState, navigati
             state.error = None;
         }
     });
-    
+
     // Show error if any
     if let Some(ref error) = state.error {
         ui.add_space(10.0);

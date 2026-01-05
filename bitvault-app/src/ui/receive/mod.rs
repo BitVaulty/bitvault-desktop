@@ -5,9 +5,9 @@
 //! - Address text
 //! - Copy and share buttons
 
-use eframe::egui;
 use crate::state::{AppState, Navigation};
 use crate::utils::qr::generate_qr_image;
+use eframe::egui;
 
 /// Receive view state
 #[derive(Default)]
@@ -19,14 +19,18 @@ struct ReceiveState {
     copied: bool,
 }
 
-
 // Thread-local state for receive view
 thread_local! {
-    static RECEIVE_STATE: std::cell::RefCell<ReceiveState> = 
+    static RECEIVE_STATE: std::cell::RefCell<ReceiveState> =
         std::cell::RefCell::new(ReceiveState::default());
 }
 
-pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navigation, ctx: &egui::Context) {
+pub fn render(
+    ui: &mut egui::Ui,
+    app_state: &mut AppState,
+    navigation: &mut Navigation,
+    ctx: &egui::Context,
+) {
     ui.vertical_centered(|ui| {
         ui.add_space(20.0);
 
@@ -67,7 +71,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
             let address_opt = state.address.clone();
             let qr_image_opt = state.qr_image.clone();
             let copied = state.copied;
-            
+
             if let Some(ref address) = address_opt {
                 // Generate QR code if not already generated
                 if qr_image_opt.is_none() {
@@ -87,12 +91,12 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                 // Address section
                 ui.label("BTC deposit address");
                 ui.add_space(5.0);
-                
+
                 // Address text (selectable)
                 ui.horizontal(|ui| {
                     ui.label(address);
                 });
-                
+
                 ui.add_space(10.0);
 
                 // Copy button
@@ -138,9 +142,9 @@ fn load_address(_ui: &mut egui::Ui, app_state: &mut AppState, state: &mut Receiv
     drop(vault_data);
 
     // If not cached, fetch from vault service
-    if let (Some(vault_service), Some(runtime)) = 
-        (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
-        
+    if let (Some(vault_service), Some(runtime)) =
+        (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
+    {
         let result = runtime.block_on(async {
             let vs = vault_service.read().await;
             vs.get_new_address().await
@@ -150,7 +154,7 @@ fn load_address(_ui: &mut egui::Ui, app_state: &mut AppState, state: &mut Receiv
             Ok(address) => {
                 state.address = Some(address);
                 state.is_loading = false;
-                
+
                 // Update cached vault data
                 if let Ok(mut vault_data) = app_state.vault_data.lock() {
                     if let Some(ref addr) = state.address {
@@ -174,4 +178,3 @@ fn copy_to_clipboard(ui: &mut egui::Ui, text: &str) {
         o.copied_text = text.to_string();
     });
 }
-

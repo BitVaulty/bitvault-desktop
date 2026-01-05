@@ -10,10 +10,10 @@
 
 mod steps;
 
-use eframe::egui;
 use crate::state::{AppState, Navigation};
-use crate::ui::pin::render_pin_verification;
 use crate::ui::hardware_wallet::{render_qr_display, render_qr_scanner};
+use crate::ui::pin::render_pin_verification;
+use eframe::egui;
 
 /// Send transaction state
 pub struct SendTransactionState {
@@ -65,11 +65,16 @@ impl Default for SendTransactionState {
 }
 
 /// Render send transaction flow
-pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navigation, state: &mut SendTransactionState) {
+pub fn render(
+    ui: &mut egui::Ui,
+    app_state: &mut AppState,
+    navigation: &mut Navigation,
+    state: &mut SendTransactionState,
+) {
     // Check PIN before showing sensitive content if PIN is set
     let pin_service = bitvault_common::PinService::new();
     let requires_pin = pin_service.has_pin();
-    
+
     // Render PIN verification modal if needed
     if requires_pin && !state.pin_verification.is_verified() {
         if render_pin_verification(ui.ctx(), &mut state.pin_verification) {
@@ -94,7 +99,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
         if let Some(ref success) = state.success_message {
             ui.colored_label(egui::Color32::GREEN, success);
             ui.add_space(10.0);
-            
+
             // Add button to go back to dashboard
             if ui.button("Back to Dashboard").clicked() {
                 navigation.go_back();
@@ -149,7 +154,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
             ui.add_space(20.0);
             ui.separator();
             ui.add_space(10.0);
-            
+
             ui.label("Transaction Preview:");
             ui.label(format!("Amount: {:.8} BTC", preview.amount));
             ui.label(format!("Fee: {} sats", preview.fee));
@@ -161,25 +166,25 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
             ui.label(format!("Date: {}", preview.date));
 
             ui.add_space(10.0);
-            
+
             ui.horizontal(|ui| {
                 if ui.button("Sign & Broadcast").clicked() {
                     steps::sign_and_broadcast(ui, app_state, navigation, state);
                 }
-                
+
                 if ui.button("Sign with Hardware Wallet").clicked() {
                     steps::start_hardware_wallet_signing(ui, app_state, state);
                 }
             });
         }
-        
+
         // Handle hardware wallet signing flow
         match state.hw_signing_mode {
             HardwareWalletSigningMode::DisplayingQR => {
                 ui.add_space(20.0);
                 ui.separator();
                 ui.add_space(10.0);
-                
+
                 render_qr_display(
                     ui,
                     app_state,
@@ -188,13 +193,14 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     "Scan with Hardware Wallet",
                     "Scan this QR code with your hardware wallet to sign the transaction",
                 );
-                
+
                 // Check if user clicked "Done" (hardware wallet has scanned)
                 if !state.hw_qr_display_state.ur_parts.is_empty() {
                     // Move to scanning mode
                     if ui.button("Hardware Wallet Signed - Scan QR").clicked() {
                         state.hw_signing_mode = HardwareWalletSigningMode::ScanningQR;
-                        state.hw_qr_scanner_state = crate::ui::hardware_wallet::QrScannerState::default();
+                        state.hw_qr_scanner_state =
+                            crate::ui::hardware_wallet::QrScannerState::default();
                     }
                 }
             }
@@ -202,7 +208,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                 ui.add_space(20.0);
                 ui.separator();
                 ui.add_space(10.0);
-                
+
                 render_qr_scanner(
                     ui,
                     app_state,
@@ -211,12 +217,14 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     "Scan Signed PSBT",
                     "Scan the QR code from your hardware wallet containing the signed PSBT",
                 );
-                
+
                 // If QR scanner succeeded, decode and send to convenience service
                 if state.hw_qr_scanner_state.success {
                     let signed_psbt = state.hw_qr_scanner_state.decoded_psbt.clone();
                     if let Some(ref psbt) = signed_psbt {
-                        steps::send_hardware_wallet_signed_psbt(ui, app_state, navigation, state, psbt);
+                        steps::send_hardware_wallet_signed_psbt(
+                            ui, app_state, navigation, state, psbt,
+                        );
                     }
                 }
             }
@@ -226,5 +234,3 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
         }
     });
 }
-
-

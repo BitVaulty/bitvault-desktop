@@ -50,7 +50,12 @@ toml = "0.8"
 
 # Shared library dependency
 # For local development (current):
-# bitvault-common = { path = "../../bitvault-common", features = ["keyring-storage"] }
+bitvault-common = { path = "../../bitvault-common", features = ["keyring-storage"] }
 # For cross-repo use, switch to git dependency:
-bitvault-common = { git = "https://github.com/BitVaulty/bitvault-common.git", branch = "dev", features = ["keyring-storage"] }
+# bitvault-common = { git = "https://github.com/BitVaulty/bitvault-common.git", branch = "dev", features = ["keyring-storage"] }
+
+[dev-dependencies]
+# Testing
+tempfile = "3.10"
+tokio-test = "0.4"
 

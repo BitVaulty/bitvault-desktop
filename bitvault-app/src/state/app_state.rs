@@ -5,14 +5,14 @@
 //! - Network selection
 //! - UI state (current view, modals, etc.)
 
-use bitvault_common::wallet::VaultService;
+use crate::services::notification_service::NotificationService;
+use crate::settings::{AppTheme, Currency, SettingsManager};
+use crate::state::async_commands::AsyncCommandHandler;
+use crate::state::vault_data::{SharedVaultData, VaultData};
 use bdk::bitcoin::Network;
+use bitvault_common::wallet::VaultService;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::state::vault_data::{VaultData, SharedVaultData};
-use crate::state::async_commands::AsyncCommandHandler;
-use crate::settings::{SettingsManager, Currency, AppTheme};
-use crate::services::notification_service::NotificationService;
 
 /// Application state
 pub struct AppState {
@@ -44,7 +44,7 @@ impl AppState {
         let settings_manager = SettingsManager::new()?;
         let currency = settings_manager.get_currency().unwrap_or(Currency::USD);
         let theme = settings_manager.get_theme().unwrap_or(AppTheme::System);
-        
+
         Ok(Self {
             vault_service: None,
             network,
@@ -62,45 +62,55 @@ impl AppState {
     /// Set the runtime for async operations
     pub fn set_runtime(&mut self, runtime: tokio::runtime::Runtime) {
         self.runtime = Some(runtime);
-        
+
         // Initialize async command handler
         let handler = AsyncCommandHandler::new();
         self.async_handler = Some(handler);
     }
-    
+
     /// Get a reference to the runtime (for block_on operations)
     pub fn get_runtime(&self) -> Option<&tokio::runtime::Runtime> {
         self.runtime.as_ref()
     }
-    
+
     /// Restart async processor when vault is loaded
     pub fn on_vault_loaded(&mut self) {
         // Get new handler for the new vault
         let new_handler = AsyncCommandHandler::new();
         self.async_handler = Some(new_handler);
     }
-    
+
     /// Process async commands and results (call this from UI update loop)
     /// Returns true if repaint should be requested
     pub fn process_async(&mut self, ctx: Option<&eframe::egui::Context>) -> bool {
         let mut needs_repaint = false;
-        
+
         // Process pending commands
         if let (Some(ref mut handler), Some(vault_service), Some(runtime)) = (
             self.async_handler.as_mut(),
             self.vault_service.as_ref(),
             self.runtime.as_ref(),
         ) {
-            handler.process_pending(vault_service, runtime);
+            // vault_service is &Option<Arc<...>> from as_ref(), but process_pending expects &Arc<...>
+            // Since we matched Some, we can safely get the inner Arc reference
+            // The pattern match guarantees it's Some, so unwrap is safe
+            // vault_service is already &Option<Arc<...>>, so we just need to unwrap the Option
+            let vs: &std::sync::Arc<tokio::sync::RwLock<bitvault_common::wallet::VaultService>> =
+                vault_service;
+            let rt: &tokio::runtime::Runtime = runtime;
+            handler.process_pending(vs, rt);
             needs_repaint = true;
         }
-        
+
         // Process results
         if let Some(ref mut handler) = self.async_handler {
             while let Some(result) = handler.try_recv_result() {
                 let vault_data = self.vault_data.clone();
                 match result {
-                    crate::state::async_commands::AsyncResult::Balance { confirmed, available } => {
+                    crate::state::async_commands::AsyncResult::Balance {
+                        confirmed,
+                        available,
+                    } => {
                         if let Ok(mut data) = vault_data.lock() {
                             data.update_balance(confirmed, available);
                         }
@@ -118,62 +128,75 @@ impl AppState {
                 }
             }
         }
-        
+
         if needs_repaint {
             if let Some(ctx) = ctx {
                 ctx.request_repaint();
             }
         }
-        
+
         needs_repaint
     }
-    
+
     /// Initialize a vault service with a descriptor
-    pub async fn initialize_vault(&mut self, descriptor: &str) -> Result<(), bdk::Error> {
+    pub async fn initialize_vault(
+        &mut self,
+        descriptor: &str,
+    ) -> Result<(), bitvault_common::BitVaultError> {
         let mut vault_service = VaultService::new(self.network);
-        vault_service.initialize_wallet(descriptor, None).await?;
-        
+        vault_service
+            .initialize_wallet(descriptor, None, None)
+            .await?;
+
         self.vault_service = Some(Arc::new(RwLock::new(vault_service)));
         self.has_vault = true;
-        
+
         // Restart async processor with new vault service
         self.on_vault_loaded();
-        
+
         Ok(())
     }
-    
+
     /// Load a vault from metadata
-    pub async fn load_vault_from_metadata(&mut self, metadata: &bitvault_common::wallet::VaultMetadata) -> Result<(), bdk::Error> {
+    pub async fn load_vault_from_metadata(
+        &mut self,
+        metadata: &bitvault_common::wallet::VaultMetadata,
+    ) -> Result<(), bitvault_common::BitVaultError> {
         let vault_service = VaultService::load_vault_from_metadata(metadata).await?;
-        
+
         self.vault_service = Some(Arc::new(RwLock::new(vault_service)));
         self.has_vault = true;
         self.network = metadata.network_to_bdk();
-        
+
         // Restart async processor with new vault service
         self.on_vault_loaded();
-        
+
         Ok(())
     }
-    
+
     /// List all available vaults
     pub fn list_vaults() -> Result<Vec<bitvault_common::wallet::VaultMetadata>, String> {
         VaultService::list_vaults()
     }
 
     /// Initialize vault from an existing VaultService (e.g., after setup_vault)
-    pub async fn initialize_vault_from_service(&mut self, vault_service: VaultService) -> Result<(), bdk::Error> {
+    pub async fn initialize_vault_from_service(
+        &mut self,
+        vault_service: VaultService,
+    ) -> Result<(), bitvault_common::BitVaultError> {
         // Check that the vault service has a wallet initialized
         if !vault_service.is_loaded() {
-            return Err(bdk::Error::Generic("VaultService wallet not initialized".into()));
+            return Err(bitvault_common::BitVaultError::Config(
+                "VaultService wallet not initialized".to_string(),
+            ));
         }
-        
+
         self.vault_service = Some(Arc::new(RwLock::new(vault_service)));
         self.has_vault = true;
-        
+
         // Restart async processor with new vault service
         self.on_vault_loaded();
-        
+
         Ok(())
     }
 
@@ -186,13 +209,13 @@ impl AppState {
     pub fn is_vault_loaded(&self) -> bool {
         self.has_vault
     }
-    
+
     /// Get current vault metadata (if loaded)
     pub fn get_current_vault_metadata(&self) -> Option<bitvault_common::wallet::VaultMetadata> {
         if !self.has_vault {
             return None;
         }
-        
+
         // Get vault address from vault data
         if let Ok(vault_data) = self.vault_data.lock() {
             if let Some(ref address) = vault_data.receive_address {
@@ -202,10 +225,10 @@ impl AppState {
                 }
             }
         }
-        
+
         None
     }
-    
+
     /// Unload current vault (for switching)
     pub fn unload_vault(&mut self) {
         self.vault_service = None;
@@ -229,24 +252,23 @@ impl AppState {
             _ => "mainnet",
         };
         self.settings_manager.set_network(network_str.to_string())?;
-        
+
         // Update network
         self.network = new_network;
-        
+
         // Unload current vault (it's for the old network)
         self.unload_vault();
-        
+
         // Try to find and load a vault for the new network
         if let Some(ref runtime) = self.runtime {
             // List all vaults
             let all_vaults = Self::list_vaults()?;
-            
+
             // Find first vault for the new network
-            if let Some(vault_metadata) = all_vaults.iter()
-                .find(|v| v.network == network_str) {
+            if let Some(vault_metadata) = all_vaults.iter().find(|v| v.network == network_str) {
                 // Clone metadata to avoid borrowing issues
                 let metadata_clone = vault_metadata.clone();
-                
+
                 // Load this vault
                 let result = runtime.block_on(async {
                     // Create a temporary AppState-like operation
@@ -254,7 +276,7 @@ impl AppState {
                     // So we'll do it synchronously by creating a new vault service
                     VaultService::load_vault_from_metadata(&metadata_clone).await
                 });
-                
+
                 match result {
                     Ok(vault_service) => {
                         // Initialize vault from the loaded service
@@ -269,7 +291,7 @@ impl AppState {
             }
             // If no vault found for this network, that's okay - user will see vault selection
         }
-        
+
         Ok(())
     }
 }
@@ -277,7 +299,9 @@ impl AppState {
 /// Process async commands in background task
 async fn process_async_commands(
     vault_service: Arc<RwLock<VaultService>>,
-    mut command_rx: tokio::sync::mpsc::UnboundedReceiver<crate::state::async_commands::AsyncCommand>,
+    mut command_rx: tokio::sync::mpsc::UnboundedReceiver<
+        crate::state::async_commands::AsyncCommand,
+    >,
     result_tx: tokio::sync::mpsc::UnboundedSender<crate::state::async_commands::AsyncResult>,
 ) {
     while let Some(cmd) = command_rx.recv().await {
@@ -289,14 +313,15 @@ async fn process_async_commands(
                 };
                 match result {
                     Ok((confirmed, available)) => {
-                        let _ = result_tx.send(crate::state::async_commands::AsyncResult::Balance {
-                            confirmed,
-                            available,
-                        });
+                        let _ =
+                            result_tx.send(crate::state::async_commands::AsyncResult::Balance {
+                                confirmed,
+                                available,
+                            });
                     }
                     Err(e) => {
                         let _ = result_tx.send(crate::state::async_commands::AsyncResult::Error(
-                            format!("Failed to fetch balance: {}", e)
+                            format!("Failed to fetch balance: {}", e),
                         ));
                     }
                 }
@@ -308,11 +333,12 @@ async fn process_async_commands(
                 };
                 match result {
                     Ok(addr) => {
-                        let _ = result_tx.send(crate::state::async_commands::AsyncResult::Address(addr));
+                        let _ = result_tx
+                            .send(crate::state::async_commands::AsyncResult::Address(addr));
                     }
                     Err(e) => {
                         let _ = result_tx.send(crate::state::async_commands::AsyncResult::Error(
-                            format!("Failed to fetch address: {}", e)
+                            format!("Failed to fetch address: {}", e),
                         ));
                     }
                 }

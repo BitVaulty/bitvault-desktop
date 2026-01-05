@@ -2,10 +2,10 @@
 //!
 //! Displays a searchable list of frequently asked questions
 
-use eframe::egui;
+use super::question_detail::{render_question_detail, QuestionDetailState};
 use crate::state::{AppState, Navigation};
 use crate::ui::help::QuestionAndAnswer;
-use super::question_detail::{render_question_detail, QuestionDetailState};
+use eframe::egui;
 
 /// Help and Support state
 pub struct HelpAndSupportState {
@@ -37,10 +37,13 @@ impl HelpAndSupportState {
             self.filtered_questions = self.questions.clone();
         } else {
             let search_lower = self.search_text.to_lowercase();
-            self.filtered_questions = self.questions
+            self.filtered_questions = self
+                .questions
                 .iter()
-                .filter(|q| q.question.to_lowercase().contains(&search_lower) ||
-                           q.answer.to_lowercase().contains(&search_lower))
+                .filter(|q| {
+                    q.question.to_lowercase().contains(&search_lower)
+                        || q.answer.to_lowercase().contains(&search_lower)
+                })
                 .cloned()
                 .collect();
         }
@@ -110,14 +113,17 @@ pub fn render_help_and_support(
                         ui.horizontal(|ui| {
                             // Question text
                             ui.label(egui::RichText::new(&question.question).size(14.0));
-                            
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui.button("→").clicked() {
-                                    state.selected_question = Some(question.clone());
-                                }
-                            });
+
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if ui.button("→").clicked() {
+                                        state.selected_question = Some(question.clone());
+                                    }
+                                },
+                            );
                         });
-                        
+
                         ui.add_space(10.0);
                         ui.separator();
                         ui.add_space(10.0);

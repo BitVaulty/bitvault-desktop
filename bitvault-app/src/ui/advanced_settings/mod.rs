@@ -5,13 +5,13 @@
 //! - Detailed fee rate setting
 //! - Backup management
 
-pub mod utxo_selection;
-pub mod fee_rate_setting;
 pub mod backup_management;
+pub mod fee_rate_setting;
+pub mod utxo_selection;
 
-pub use utxo_selection::{render_utxo_selection_view, UtxoSelectionViewState};
-pub use fee_rate_setting::{render_fee_rate_setting, FeeRateSettingState};
 pub use backup_management::{render_backup_management, BackupManagementState};
+pub use fee_rate_setting::{render_fee_rate_setting, FeeRateSettingState};
+pub use utxo_selection::{render_utxo_selection_view, UtxoSelectionViewState};
 
 /// Advanced settings main view
 pub struct AdvancedSettingsState {
@@ -46,39 +46,44 @@ pub fn render_advanced_settings(
     navigation: &mut crate::state::Navigation,
     state: &mut AdvancedSettingsState,
 ) {
-    
     ui.vertical(|ui| {
         ui.heading("Advanced Settings");
         ui.add_space(10.0);
-        
+
         // Tab selection
         ui.horizontal(|ui| {
-            if ui.selectable_label(
-                state.current_tab == AdvancedSettingsTab::UtxoSelection,
-                "UTXO Selection"
-            ).clicked() {
+            if ui
+                .selectable_label(
+                    state.current_tab == AdvancedSettingsTab::UtxoSelection,
+                    "UTXO Selection",
+                )
+                .clicked()
+            {
                 state.current_tab = AdvancedSettingsTab::UtxoSelection;
             }
-            
-            if ui.selectable_label(
-                state.current_tab == AdvancedSettingsTab::FeeRate,
-                "Fee Rate"
-            ).clicked() {
+
+            if ui
+                .selectable_label(
+                    state.current_tab == AdvancedSettingsTab::FeeRate,
+                    "Fee Rate",
+                )
+                .clicked()
+            {
                 state.current_tab = AdvancedSettingsTab::FeeRate;
             }
-            
-            if ui.selectable_label(
-                state.current_tab == AdvancedSettingsTab::Backup,
-                "Backup"
-            ).clicked() {
+
+            if ui
+                .selectable_label(state.current_tab == AdvancedSettingsTab::Backup, "Backup")
+                .clicked()
+            {
                 state.current_tab = AdvancedSettingsTab::Backup;
             }
         });
-        
+
         ui.add_space(10.0);
         ui.separator();
         ui.add_space(10.0);
-        
+
         // Render current tab
         match state.current_tab {
             AdvancedSettingsTab::UtxoSelection => {
@@ -91,11 +96,11 @@ pub fn render_advanced_settings(
                 render_backup_management(ui, app_state, navigation, &mut state.backup_management);
             }
         }
-        
+
         ui.add_space(10.0);
         ui.separator();
         ui.add_space(10.0);
-        
+
         if ui.button("← Back").clicked() {
             navigation.go_back();
         }

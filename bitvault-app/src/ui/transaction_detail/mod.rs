@@ -2,9 +2,9 @@
 //!
 //! Displays detailed information about a specific transaction
 
-use eframe::egui;
 use crate::state::{AppState, Navigation};
 use chrono::{Local, TimeZone};
+use eframe::egui;
 
 /// Transaction detail state
 struct TransactionDetailState {
@@ -35,11 +35,16 @@ impl Default for TransactionDetailState {
 
 // Thread-local state for transaction detail
 thread_local! {
-    static TX_DETAIL_STATE: std::cell::RefCell<TransactionDetailState> = 
+    static TX_DETAIL_STATE: std::cell::RefCell<TransactionDetailState> =
         std::cell::RefCell::new(TransactionDetailState::default());
 }
 
-pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navigation, txid: &str) {
+pub fn render(
+    ui: &mut egui::Ui,
+    app_state: &mut AppState,
+    navigation: &mut Navigation,
+    txid: &str,
+) {
     ui.vertical_centered(|ui| {
         ui.add_space(20.0);
         ui.heading("Transaction Details");
@@ -60,7 +65,12 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
             let mut state = state.borrow_mut();
 
             // Reset state if txid changed
-            if state.current_txid.as_ref().map(|id| id != txid).unwrap_or(true) {
+            if state
+                .current_txid
+                .as_ref()
+                .map(|id| id != txid)
+                .unwrap_or(true)
+            {
                 state.current_txid = Some(txid.to_string());
                 state.transaction = None;
                 state.error = None;
@@ -92,9 +102,9 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                 let tx_id = tx.tx_id.clone();
                 let is_pending = tx.status == bitvault_common::types::TransactionStatus::Pending;
                 let is_outgoing = tx.is_outgoing();
-                
+
                 render_transaction_details(ui, app_state, navigation, tx);
-                
+
                 // Show cancel button for pending outgoing transactions
                 if is_pending && is_outgoing {
                     ui.add_space(20.0);
@@ -128,9 +138,9 @@ fn load_transaction(
     state.error = None;
 
     // Get vault service and runtime
-    if let (Some(vault_service), Some(runtime)) = 
-        (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
-        
+    if let (Some(vault_service), Some(runtime)) =
+        (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
+    {
         let txid_clone = txid.to_string();
         let result = runtime.block_on(async {
             let vs = vault_service.read().await;
@@ -200,7 +210,11 @@ fn render_transaction_details(
         egui::Color32::RED
     };
     ui.horizontal(|ui| {
-        ui.label(if tx.is_outgoing() { "Sent:" } else { "Received:" });
+        ui.label(if tx.is_outgoing() {
+            "Sent:"
+        } else {
+            "Received:"
+        });
         ui.colored_label(amount_color, &amount_str);
     });
     ui.add_space(10.0);
@@ -259,9 +273,10 @@ fn render_transaction_details(
     }
 
     // Execution date (if different from timestamp and pending)
-    if tx.status == bitvault_common::types::TransactionStatus::Pending 
-        && tx.execution_date > 0 
-        && tx.execution_date != tx.timestamp {
+    if tx.status == bitvault_common::types::TransactionStatus::Pending
+        && tx.execution_date > 0
+        && tx.execution_date != tx.timestamp
+    {
         if let Some(dt) = Local.timestamp_opt(tx.execution_date, 0).single() {
             ui.horizontal(|ui| {
                 ui.label("Execution Date:");
@@ -282,7 +297,10 @@ fn render_cancel_section(
 
     // Show cancel success message
     if state.cancel_success {
-        ui.colored_label(egui::Color32::GREEN, "✓ Transaction cancellation sent successfully!");
+        ui.colored_label(
+            egui::Color32::GREEN,
+            "✓ Transaction cancellation sent successfully!",
+        );
         ui.label("The replacement transaction has been broadcast. The original transaction will be replaced once confirmed.");
         ui.add_space(10.0);
     }
@@ -303,7 +321,10 @@ fn render_cancel_section(
 
         let button_enabled = !state.is_cancelling && !state.cancel_success;
 
-        if ui.add_enabled(button_enabled, egui::Button::new(button_text)).clicked() {
+        if ui
+            .add_enabled(button_enabled, egui::Button::new(button_text))
+            .clicked()
+        {
             cancel_transaction(ui, app_state, state, tx_id);
         }
 
@@ -337,15 +358,15 @@ fn cancel_transaction(
             return; // Wait for PIN verification
         }
     }
-    
+
     state.is_cancelling = true;
     state.cancel_error = None;
     state.cancel_success = false;
 
     // Get vault service and runtime
-    if let (Some(vault_service), Some(runtime)) = 
-        (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
-        
+    if let (Some(vault_service), Some(runtime)) =
+        (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
+    {
         let tx_id_clone = tx_id.to_string();
         let result = runtime.block_on(async {
             let mut vs = vault_service.write().await;
@@ -374,4 +395,3 @@ fn cancel_transaction(
         state.is_cancelling = false;
     }
 }
-

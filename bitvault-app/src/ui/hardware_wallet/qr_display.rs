@@ -2,9 +2,9 @@
 //!
 //! Displays multi-part UR QR codes for hardware wallets to scan
 
-use eframe::egui;
 use crate::state::{AppState, Navigation};
 use crate::utils::qr::generate_qr_image;
+use eframe::egui;
 
 /// State for QR code display
 #[derive(Default)]
@@ -14,7 +14,6 @@ pub struct QrDisplayState {
     pub is_animating: bool,
     pub error: Option<String>,
 }
-
 
 /// Render QR code display for hardware wallet scanning
 pub fn render_qr_display(
@@ -51,7 +50,7 @@ pub fn render_qr_display(
 
             // Generate and display QR code image
             let current_ur = &state.ur_parts[state.current_part];
-            
+
             // Generate QR code texture
             if let Some(qr_texture) = generate_qr_image(ui.ctx(), current_ur) {
                 // Display QR code image
@@ -61,11 +60,14 @@ pub fn render_qr_display(
             } else {
                 // Fallback if QR generation fails
                 ui.colored_label(egui::Color32::YELLOW, "Failed to generate QR code");
-                ui.label(format!("UR String: {}...", &current_ur[..current_ur.len().min(50)]));
+                ui.label(format!(
+                    "UR String: {}...",
+                    &current_ur[..current_ur.len().min(50)]
+                ));
             }
-            
+
             ui.add_space(10.0);
-            
+
             // Show full UR string in a scrollable area (for manual entry if needed)
             ui.collapsing("Show UR String", |ui| {
                 egui::ScrollArea::vertical()
@@ -80,14 +82,14 @@ pub fn render_qr_display(
             // Navigation buttons for multi-part QR codes
             if state.ur_parts.len() > 1 {
                 ui.horizontal(|ui| {
-                    if ui.button("← Previous").clicked()
-                        && state.current_part > 0 {
-                            state.current_part -= 1;
-                        }
+                    if ui.button("← Previous").clicked() && state.current_part > 0 {
+                        state.current_part -= 1;
+                    }
                     if ui.button("Next →").clicked()
-                        && state.current_part < state.ur_parts.len() - 1 {
-                            state.current_part += 1;
-                        }
+                        && state.current_part < state.ur_parts.len() - 1
+                    {
+                        state.current_part += 1;
+                    }
                 });
 
                 ui.add_space(10.0);

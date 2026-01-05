@@ -2,8 +2,8 @@
 //!
 //! Screen for setting up a new PIN during vault creation
 
-use eframe::egui;
 use bitvault_common::PinService;
+use eframe::egui;
 
 /// State for PIN setup
 pub struct PinSetupState {
@@ -51,7 +51,7 @@ pub fn render_pin_setup(
     _on_pin_set: &mut Option<Box<dyn FnMut()>>,
 ) -> bool {
     let mut pin_set = false;
-    
+
     ui.vertical_centered(|ui| {
         match state.step {
             PinSetupStep::EnterPin => {
@@ -72,7 +72,8 @@ pub fn render_pin_setup(
                 // Validate PIN format when 6 digits entered
                 if state.pin.len() == 6 {
                     if !is_valid_pin(&state.pin) {
-                        state.error = Some("PIN must contain at least 4 different digits".to_string());
+                        state.error =
+                            Some("PIN must contain at least 4 different digits".to_string());
                         state.pin.clear();
                     } else {
                         // Move to confirmation step
@@ -128,7 +129,7 @@ pub fn render_pin_setup(
             }
         }
     });
-    
+
     pin_set
 }
 
@@ -166,7 +167,7 @@ fn is_valid_pin(pin: &str) -> bool {
     if pin.len() != 6 {
         return false;
     }
-    
+
     let unique_digits: std::collections::HashSet<char> = pin.chars().collect();
     unique_digits.len() >= 4
 }

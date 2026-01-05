@@ -3,8 +3,8 @@
 //! Handles persistent storage of user preferences
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Currency {
@@ -116,19 +116,19 @@ impl SettingsManager {
     pub fn new() -> Result<Self, String> {
         let settings_dir = Self::get_settings_directory()?;
         let settings_path = settings_dir.join("settings.json");
-        
+
         Ok(Self { settings_path })
     }
 
     fn get_settings_directory() -> Result<PathBuf, String> {
-        let config_dir = dirs::config_dir()
-            .ok_or_else(|| "Failed to get config directory".to_string())?;
+        let config_dir =
+            dirs::config_dir().ok_or_else(|| "Failed to get config directory".to_string())?;
         let app_dir = config_dir.join("bitvault");
-        
+
         // Create directory if it doesn't exist
         fs::create_dir_all(&app_dir)
             .map_err(|e| format!("Failed to create settings directory: {}", e))?;
-        
+
         Ok(app_dir)
     }
 
@@ -139,20 +139,20 @@ impl SettingsManager {
 
         let content = fs::read_to_string(&self.settings_path)
             .map_err(|e| format!("Failed to read settings: {}", e))?;
-        
+
         let settings: AppSettings = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse settings: {}", e))?;
-        
+
         Ok(settings)
     }
 
     pub fn save(&self, settings: &AppSettings) -> Result<(), String> {
         let content = serde_json::to_string_pretty(settings)
             .map_err(|e| format!("Failed to serialize settings: {}", e))?;
-        
+
         fs::write(&self.settings_path, content)
             .map_err(|e| format!("Failed to write settings: {}", e))?;
-        
+
         Ok(())
     }
 

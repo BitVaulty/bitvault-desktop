@@ -58,13 +58,13 @@ impl BiometricService {
             // Windows Hello is available if robius-authentication works
             true // Will be checked during actual authentication
         }
-        
+
         #[cfg(target_os = "macos")]
         {
             // Touch ID/Face ID availability
             true // Will be checked during actual authentication
         }
-        
+
         #[cfg(not(any(target_os = "windows", target_os = "macos")))]
         {
             false // Not supported on Linux
@@ -77,14 +77,14 @@ impl BiometricService {
         {
             BiometricType::WindowsHello
         }
-        
+
         #[cfg(target_os = "macos")]
         {
             // Try to detect Touch ID vs Face ID
             // For now, return TouchID as default (macOS desktop typically uses Touch ID)
             BiometricType::TouchID
         }
-        
+
         #[cfg(not(any(target_os = "windows", target_os = "macos")))]
         {
             BiometricType::None
@@ -116,12 +116,12 @@ impl BiometricService {
         {
             self.authenticate_windows(reason).await
         }
-        
+
         #[cfg(target_os = "macos")]
         {
             self.authenticate_macos(reason).await
         }
-        
+
         #[cfg(not(any(target_os = "windows", target_os = "macos")))]
         {
             BiometricResult::NotAvailable

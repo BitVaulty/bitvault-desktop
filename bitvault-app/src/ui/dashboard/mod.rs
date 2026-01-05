@@ -5,12 +5,12 @@
 //! - Transaction History (all transactions)
 //! - Settings (vault settings, network, etc.)
 
-mod vault_detail;
-mod transaction_history;
 mod settings_tab;
+mod transaction_history;
+mod vault_detail;
 
-use eframe::egui;
 use crate::state::{AppState, Navigation};
+use eframe::egui;
 
 /// Render the dashboard
 pub fn render_dashboard(
@@ -42,4 +42,3 @@ pub fn render_dashboard(
         _ => {}
     }
 }
-

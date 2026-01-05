@@ -2,9 +2,9 @@
 //!
 //! Flow for recovering UTXOs older than 1 year
 
-use eframe::egui;
+use super::utxo_selection::{render_utxo_selection, RecoveryMode, UtxoSelectionState};
 use crate::state::{AppState, Navigation};
-use super::utxo_selection::{UtxoSelectionState, render_utxo_selection, RecoveryMode};
+use eframe::egui;
 
 /// Recovery flow state
 #[derive(Default)]
@@ -29,10 +29,9 @@ enum RecoveryState {
     Error(String),
 }
 
-
 // Thread-local state for recovery flow
 thread_local! {
-    static RECOVERY_STATE: std::cell::RefCell<RecoveryState> = 
+    static RECOVERY_STATE: std::cell::RefCell<RecoveryState> =
         std::cell::RefCell::new(RecoveryState::default());
 }
 
@@ -54,7 +53,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
 
             // Use a flag to defer state mutations
             let mut next_state: Option<RecoveryState> = None;
-            
+
             match &mut *state {
                 RecoveryState::LoadingUtxos => {
                     // Defer the load to avoid borrow conflict
@@ -68,7 +67,8 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                             navigation.go_back();
                         }
                         if ui.button("Continue").clicked() && selection_state.has_selection() {
-                            let selected: Vec<String> = selection_state.selected.iter().cloned().collect();
+                            let selected: Vec<String> =
+                                selection_state.selected.iter().cloned().collect();
                             next_state = Some(RecoveryState::BuildingPreview {
                                 selected_utxos: selected,
                             });
@@ -83,7 +83,10 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                         selected_utxos: selected,
                     });
                 }
-                RecoveryState::PreviewReady { preview, psbt_base64 } => {
+                RecoveryState::PreviewReady {
+                    preview,
+                    psbt_base64,
+                } => {
                     render_preview(ui, preview);
                     ui.add_space(20.0);
                     ui.horizontal(|ui| {
@@ -94,20 +97,26 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                             // Get recipient address (for now, use vault address)
                             match app_state.vault_data.lock() {
                                 Ok(data) => {
-                                    let recipient = data.receive_address.clone().unwrap_or_default();
+                                    let recipient =
+                                        data.receive_address.clone().unwrap_or_default();
                                     next_state = Some(RecoveryState::Signing {
                                         psbt_base64: psbt_base64.clone(),
                                         recipient: recipient.clone(),
                                     });
                                 }
                                 Err(_) => {
-                                    next_state = Some(RecoveryState::Error("Error: Mutex poisoned".to_string()));
+                                    next_state = Some(RecoveryState::Error(
+                                        "Error: Mutex poisoned".to_string(),
+                                    ));
                                 }
                             }
                         }
                     });
                 }
-                RecoveryState::Signing { psbt_base64, recipient } => {
+                RecoveryState::Signing {
+                    psbt_base64,
+                    recipient,
+                } => {
                     ui.label("Signing transaction...");
                     let psbt = psbt_base64.clone();
                     let recip = recipient.clone();
@@ -128,7 +137,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     }
                 }
             }
-            
+
             // Handle deferred state changes and async operations
             if let Some(new_state) = next_state {
                 match new_state {
@@ -141,7 +150,10 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                         };
                         build_recovery_preview(ui, app_state, &mut state, selected_utxos);
                     }
-                    RecoveryState::Signing { psbt_base64, recipient } => {
+                    RecoveryState::Signing {
+                        psbt_base64,
+                        recipient,
+                    } => {
                         *state = RecoveryState::Signing {
                             psbt_base64: psbt_base64.clone(),
                             recipient: recipient.clone(),
@@ -163,9 +175,9 @@ fn load_old_utxos(
     state: &mut RecoveryState,
     is_refresh: bool,
 ) {
-    if let (Some(vault_service), Some(runtime)) = 
-        (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
-        
+    if let (Some(vault_service), Some(runtime)) =
+        (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
+    {
         let result = runtime.block_on(async {
             let mut vs = vault_service.write().await;
             vs.get_old_utxos(is_refresh).await
@@ -192,9 +204,9 @@ fn build_recovery_preview(
     state: &mut RecoveryState,
     selected_utxos: Vec<String>,
 ) {
-    if let (Some(vault_service), Some(runtime)) = 
-        (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
-        
+    if let (Some(vault_service), Some(runtime)) =
+        (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
+    {
         // Get recipient address (use vault address for recovery)
         let recipient = match app_state.vault_data.lock() {
             Ok(data) => data.receive_address.clone().unwrap_or_default(),
@@ -221,13 +233,14 @@ fn build_recovery_preview(
             let mut vs = vault_service.write().await;
             vs.build_transaction_preview(
                 &recipient,
-                0.0, // Amount will be determined by selected UTXOs
-                1, // Fee rate
+                0.0,  // Amount will be determined by selected UTXOs
+                1,    // Fee rate
                 None, // No description
                 true, // Send max (drain selected UTXOs)
                 true, // is_recovery
                 utxos_to_spend,
-            ).await
+            )
+            .await
         });
 
         match result {
@@ -267,19 +280,18 @@ fn sign_and_share(
     psbt_base64: String,
     recipient: String,
 ) {
-    if let (Some(vault_service), Some(runtime)) = 
-        (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
-        
+    if let (Some(vault_service), Some(runtime)) =
+        (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
+    {
         let result = runtime.block_on(async {
             let mut vs = vault_service.write().await;
-            vs.sign_and_share_recovery_tx(&psbt_base64, &recipient).await
+            vs.sign_and_share_recovery_tx(&psbt_base64, &recipient)
+                .await
         });
 
         match result {
             Ok(compressed_psbt) => {
-                *state = RecoveryState::Sharing {
-                    compressed_psbt,
-                };
+                *state = RecoveryState::Sharing { compressed_psbt };
             }
             Err(e) => {
                 *state = RecoveryState::Error(format!("Failed to sign and share: {}", e));
@@ -303,13 +315,16 @@ fn render_sharing(
 
     // Generate and display QR code from compressed_psbt
     use crate::utils::qr::generate_qr_image;
-    
+
     if let Some(qr_texture) = generate_qr_image(ui.ctx(), compressed_psbt) {
         ui.image((qr_texture.id(), egui::Vec2::new(300.0, 300.0)));
         ui.add_space(10.0);
     } else {
         ui.colored_label(egui::Color32::YELLOW, "Failed to generate QR code");
-        ui.label(format!("PSBT: {}...", &compressed_psbt[..compressed_psbt.len().min(50)]));
+        ui.label(format!(
+            "PSBT: {}...",
+            &compressed_psbt[..compressed_psbt.len().min(50)]
+        ));
     }
 
     ui.add_space(20.0);

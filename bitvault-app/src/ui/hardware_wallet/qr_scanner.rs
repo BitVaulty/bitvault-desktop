@@ -2,9 +2,9 @@
 //!
 //! Scans QR codes from hardware wallets (for signed PSBTs)
 
-use eframe::egui;
 use crate::state::{AppState, Navigation};
 use crate::utils::qr::decode_qr_from_file;
+use eframe::egui;
 use std::path::PathBuf;
 
 /// State for QR code scanner
@@ -70,17 +70,17 @@ pub fn render_qr_scanner(
         if state.is_scanning {
             ui.label("Scan QR code from image file:");
             ui.add_space(10.0);
-            
+
             // File selection button
             if ui.button("Select Image File").clicked() {
                 state.pending_file_selection = true;
             }
-            
+
             // Show selected file
             if let Some(ref file_path) = state.selected_file {
                 ui.label(format!("Selected: {}", file_path.display()));
                 ui.add_space(5.0);
-                
+
                 if ui.button("Scan QR Code from File").clicked() {
                     match decode_qr_from_file(file_path) {
                         Ok(decoded) => {
@@ -93,32 +93,33 @@ pub fn render_qr_scanner(
                     }
                 }
             }
-            
+
             ui.add_space(20.0);
             ui.separator();
             ui.add_space(10.0);
-            
+
             // Manual input option (for testing/debugging)
             ui.label("Or enter UR string manually:");
             ui.add_space(5.0);
-            
+
             let mut manual_input = String::new();
             ui.text_edit_singleline(&mut manual_input);
-            
+
             if ui.button("Submit UR String").clicked() && !manual_input.is_empty() {
                 state.scanned_parts.push(manual_input.clone());
                 // Try to decode
                 decode_ur_parts(ui, app_state, state);
             }
         }
-        
+
         // Handle file selection (non-blocking)
         if state.pending_file_selection {
             state.pending_file_selection = false;
             // Use rfd for file dialog
             if let Some(path) = rfd::FileDialog::new()
                 .add_filter("Image files", &["png", "jpg", "jpeg", "gif", "bmp"])
-                .pick_file() {
+                .pick_file()
+            {
                 state.selected_file = Some(path);
             }
         }
@@ -140,17 +141,13 @@ pub fn render_qr_scanner(
     });
 }
 
-fn decode_ur_parts(
-    _ui: &mut egui::Ui,
-    app_state: &mut AppState,
-    state: &mut QrScannerState,
-) {
-    if let (Some(vault_service), Some(runtime)) = 
-        (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
-        
+fn decode_ur_parts(_ui: &mut egui::Ui, app_state: &mut AppState, state: &mut QrScannerState) {
+    if let (Some(vault_service), Some(runtime)) =
+        (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
+    {
         // Use all scanned parts (for multi-part UR)
         let ur_parts = state.scanned_parts.clone();
-        
+
         let result = runtime.block_on(async {
             let vs = vault_service.read().await;
             vs.decode_ur_psbt_to_psbt_base64(&ur_parts)

@@ -3,9 +3,9 @@
 //! Provides a modal/overlay for PIN verification before performing
 //! sensitive operations like sending transactions or deleting vaults
 
-use eframe::egui;
-use bitvault_common::PinService;
 use crate::ui::pin::PinEntryState;
+use bitvault_common::PinService;
+use eframe::egui;
 
 /// State for PIN verification modal
 pub struct PinVerificationState {
@@ -67,10 +67,7 @@ impl PinVerificationState {
 
 /// Render PIN verification modal
 /// Returns true if PIN is verified, false otherwise
-pub fn render_pin_verification(
-    ctx: &egui::Context,
-    state: &mut PinVerificationState,
-) -> bool {
+pub fn render_pin_verification(ctx: &egui::Context, state: &mut PinVerificationState) -> bool {
     if !state.is_visible {
         return false;
     }
@@ -124,7 +121,7 @@ pub fn render_pin_verification(
                 if state.pin_entry.pin.len() == 6 && !state.pin_entry.is_validating {
                     state.pin_entry.is_validating = true;
                     let pin_clone = state.pin_entry.pin.clone();
-                    
+
                     // Validate PIN
                     let pin_service = PinService::new();
                     match pin_service.validate_pin(&pin_clone) {
@@ -140,7 +137,15 @@ pub fn render_pin_verification(
                             state.pin_entry.is_validating = false;
                         }
                         Err(e) => {
-                            state.error = Some(format!("Error validating PIN: {}", e));
+                            // Handle rate limiting error specifically
+                            let error_msg = match &e {
+                                bitvault_common::PinServiceError::RateLimited(seconds) => {
+                                    let minutes = seconds / 60;
+                                    format!("Too many failed attempts. Please try again in {} minute(s).", minutes)
+                                }
+                                _ => format!("Error validating PIN: {}", e),
+                            };
+                            state.error = Some(error_msg);
                             state.pin_entry.pin.clear();
                             state.pin_entry.is_validating = false;
                         }

@@ -6,7 +6,7 @@ use crate::state::AppState;
 
 /// Check subscription before performing a critical action
 /// Returns Ok(()) if subscription is valid, Err(message) if expired
-/// 
+///
 /// This should be called before:
 /// - Creating a new vault (mainnet only)
 /// - Sending a transaction (mainnet only)
@@ -20,9 +20,9 @@ pub fn check_subscription_before_action(
         return Ok(());
     }
 
-    if let (Some(vault_service), Some(runtime)) = 
-        (app_state.vault_service.as_ref(), app_state.runtime.as_ref()) {
-        
+    if let (Some(vault_service), Some(runtime)) =
+        (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
+    {
         let result = runtime.block_on(async {
             let vs = vault_service.read().await;
             vs.validate_subscription().await

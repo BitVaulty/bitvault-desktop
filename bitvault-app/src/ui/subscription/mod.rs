@@ -8,9 +8,8 @@
 mod status_display;
 pub mod validation;
 
-
-use eframe::egui;
 use crate::state::{AppState, Navigation};
+use eframe::egui;
 
 /// Render subscription management UI
 pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navigation) {
