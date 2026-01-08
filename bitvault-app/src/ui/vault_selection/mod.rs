@@ -9,6 +9,57 @@ use crate::state::{AppState, Navigation};
 use crate::ui::pin::render_pin_verification;
 use eframe::egui;
 use serde_json;
+use std::path::PathBuf;
+
+/// Load the BitVault logo for display
+fn load_bitvault_logo(ctx: &egui::Context) -> Option<egui::TextureHandle> {
+    let mut possible_paths = vec![
+        // Relative to workspace root
+        PathBuf::from("bitvault-desktop/bitvault-app/resources/bitvault_logo.png"),
+        PathBuf::from("bitvault-desktop/bitvault-app/resources/bitvault_logo.svg"),
+        // Relative to current working directory
+        PathBuf::from("resources/bitvault_logo.png"),
+        PathBuf::from("resources/bitvault_logo.svg"),
+        PathBuf::from("bitvault-app/resources/bitvault_logo.png"),
+        PathBuf::from("bitvault-app/resources/bitvault_logo.svg"),
+    ];
+    
+    // Add executable-relative paths
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            // Try resources next to executable
+            possible_paths.push(exe_dir.join("resources/bitvault_logo.png"));
+            possible_paths.push(exe_dir.join("resources/bitvault_logo.svg"));
+            
+            // If we're in target/release, go up to find bitvault-app/resources
+            let mut current = exe_dir;
+            while let Some(parent) = current.parent() {
+                // Check if we're in the bitvault-desktop directory structure
+                let bitvault_app_resources = parent.join("bitvault-app/resources/bitvault_logo.png");
+                if bitvault_app_resources.exists() {
+                    possible_paths.push(bitvault_app_resources.clone());
+                    possible_paths.push(parent.join("bitvault-app/resources/bitvault_logo.svg"));
+                    break;
+                }
+                // Stop if we've gone too far up (reached root or workspace)
+                if parent == current || !parent.exists() {
+                    break;
+                }
+                current = parent;
+            }
+        }
+    }
+    
+    for path in possible_paths.iter() {
+        if path.exists() {
+            if let Some(texture) = crate::utils::images::load_image_texture(ctx, path) {
+                return Some(texture);
+            }
+        }
+    }
+    
+    None
+}
 
 /// Vault selection state
 pub struct VaultSelectionState {
@@ -79,6 +130,19 @@ pub fn render(
     }
 
     ui.vertical_centered(|ui| {
+        // Display BitVault logo
+        if let Some(logo_texture) = load_bitvault_logo(ctx) {
+            let logo_size = 200.0; // Size for the bigger logo
+            let texture_size = logo_texture.size_vec2();
+            let aspect_ratio = texture_size.y / texture_size.x;
+            // Use Image widget with transparent background fill to preserve transparency
+            ui.add(
+                egui::Image::from_texture((logo_texture.id(), egui::Vec2::new(logo_size, logo_size * aspect_ratio)))
+                    .bg_fill(egui::Color32::TRANSPARENT)
+            );
+            ui.add_space(20.0);
+        }
+        
         ui.heading("Select Vault");
         ui.add_space(20.0);
 
@@ -92,7 +156,23 @@ pub fn render(
         if state.vaults.is_empty() && !state.loading {
             state.loading = true;
             match AppState::list_vaults() {
-                Ok(vaults) => {
+                Ok(mut vaults) => {
+                    // Filter out vaults with missing databases (orphaned metadata)
+                    let initial_count = vaults.len();
+                    vaults.retain(|v| {
+                        let db_exists = std::path::Path::new(&v.database_path).exists();
+                        if !db_exists {
+                            eprintln!("Removing orphaned vault metadata: {} (database not found: {})", v.name, v.database_path);
+                            // Optionally delete the orphaned metadata file
+                            if let Err(e) = bitvault_common::wallet::VaultMetadata::delete(&v.address) {
+                                eprintln!("Failed to delete orphaned metadata: {}", e);
+                            }
+                        }
+                        db_exists
+                    });
+                    if initial_count != vaults.len() {
+                        eprintln!("Removed {} orphaned vault metadata file(s)", initial_count - vaults.len());
+                    }
                     state.vaults = vaults;
                     state.loading = false;
                 }
@@ -103,37 +183,58 @@ pub fn render(
             }
         }
 
-        // Refresh button and validation info
-        ui.horizontal(|ui| {
-            if ui.button("🔄 Refresh").clicked() {
-                state.loading = true;
-                state.error = None;
-                match AppState::list_vaults() {
-                    Ok(vaults) => {
-                        state.vaults = vaults;
-                        state.loading = false;
+        // Refresh button and validation info - centered
+        let button_width = 120.0;
+        let (rect, _) = ui.allocate_exact_size(
+            egui::Vec2::new(button_width + 200.0, 30.0),
+            egui::Sense::click()
+        );
+        let mut refresh_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+        if refresh_ui.button("🔄 Refresh").clicked() {
+            state.loading = true;
+            state.error = None;
+            match AppState::list_vaults() {
+                Ok(mut vaults) => {
+                    // Filter out vaults with missing databases (orphaned metadata)
+                    let initial_count = vaults.len();
+                    vaults.retain(|v| {
+                        let db_exists = std::path::Path::new(&v.database_path).exists();
+                        if !db_exists {
+                            eprintln!("Removing orphaned vault metadata: {} (database not found: {})", v.name, v.database_path);
+                            // Optionally delete the orphaned metadata file
+                            if let Err(e) = bitvault_common::wallet::VaultMetadata::delete(&v.address) {
+                                eprintln!("Failed to delete orphaned metadata: {}", e);
+                            }
+                        }
+                        db_exists
+                    });
+                    if initial_count != vaults.len() {
+                        eprintln!("Removed {} orphaned vault metadata file(s)", initial_count - vaults.len());
                     }
-                    Err(e) => {
-                        state.error = Some(format!("Failed to load vaults: {}", e));
-                        state.loading = false;
-                    }
+                    state.vaults = vaults;
+                    state.loading = false;
+                }
+                Err(e) => {
+                    state.error = Some(format!("Failed to load vaults: {}", e));
+                    state.loading = false;
                 }
             }
+        }
 
-            // Show vault count and validation summary
-            if !state.vaults.is_empty() {
-                let valid_count = state.vaults.iter().filter(|v| v.validate().is_ok()).count();
-                let total_count = state.vaults.len();
-                if valid_count == total_count {
-                    ui.label(format!("✓ {} vault(s) valid", valid_count));
-                } else {
-                    ui.colored_label(
-                        egui::Color32::YELLOW,
-                        format!("⚠ {} of {} vault(s) valid", valid_count, total_count)
-                    );
-                }
+        // Show vault count and validation summary
+        if !state.vaults.is_empty() {
+            let valid_count = state.vaults.iter().filter(|v| v.validate().is_ok()).count();
+            let total_count = state.vaults.len();
+            refresh_ui.add_space(10.0);
+            if valid_count == total_count {
+                refresh_ui.label(format!("✓ {} vault(s) valid", valid_count));
+            } else {
+                refresh_ui.colored_label(
+                    egui::Color32::YELLOW,
+                    format!("⚠ {} of {} vault(s) valid", valid_count, total_count)
+                );
             }
-        });
+        }
 
         ui.add_space(10.0);
 
@@ -149,9 +250,11 @@ pub fn render(
             ui.label("Create a new vault to get started.");
             ui.add_space(20.0);
 
-            if ui.button("Create New Vault").clicked() {
-                navigation.navigate_to(crate::state::View::VaultCreation);
-            }
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                if ui.button("Create New Vault").clicked() {
+                    navigation.navigate_to(crate::state::View::VaultCreation);
+                }
+            });
         } else {
             ui.label("Select a vault to load:");
             ui.add_space(10.0);
@@ -212,113 +315,122 @@ pub fn render(
 
             ui.add_space(20.0);
 
-            // Action buttons
-            ui.horizontal(|ui| {
-                if ui.button("Load Selected Vault").clicked() {
-                    if let Some(index) = state.selected_index {
-                        if index < state.vaults.len() {
-                            let metadata = state.vaults[index].clone();
+            // Action buttons - centered
+            let button_width = 150.0;
+            let (rect, _) = ui.allocate_exact_size(
+                egui::Vec2::new(button_width * 3.0 + 20.0, 30.0),
+                egui::Sense::click()
+            );
+            let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+            if button_ui.button("Load Selected Vault").clicked() {
+                if let Some(index) = state.selected_index {
+                    if index < state.vaults.len() {
+                        let metadata = state.vaults[index].clone();
 
-                            // Validate vault before loading
-                            match metadata.validate() {
-                                Ok(_) => {
-                                    // Unload current vault if one is loaded
-                                    if app_state.is_vault_loaded() {
-                                        app_state.unload_vault();
-                                    }
-
-                                    // Load vault using runtime
-                                    if let Some(ref runtime) = app_state.runtime {
-                                        let handle = runtime.handle().clone();
-                                        match handle.block_on(app_state.load_vault_from_metadata(&metadata)) {
-                                            Ok(_) => {
-                                                // Navigate to dashboard
-                                                navigation.navigate_to(crate::state::View::Dashboard { tab: 0 });
-                                                // Vault data will be refreshed automatically by async handler
-                                            }
-                                            Err(e) => {
-                                                state.error = Some(format!("Failed to load vault: {}", e));
-                                            }
-                                        }
-                                    } else {
-                                        state.error = Some("Runtime not available".to_string());
-                                    }
+                        // Validate vault before loading
+                        match metadata.validate() {
+                            Ok(_) => {
+                                // Unload current vault if one is loaded
+                                if app_state.is_vault_loaded() {
+                                    app_state.unload_vault();
                                 }
-                                Err(e) => {
-                                    state.error = Some(format!("Cannot load vault: {}", e));
+
+                                // Load vault using runtime
+                                if let Some(ref runtime) = app_state.runtime {
+                                    let handle = runtime.handle().clone();
+                                    match handle.block_on(app_state.load_vault_from_metadata(&metadata)) {
+                                        Ok(_) => {
+                                            // Navigate to dashboard
+                                            navigation.navigate_to(crate::state::View::Dashboard { tab: 0 });
+                                            // Vault data will be refreshed automatically by async handler
+                                        }
+                                        Err(e) => {
+                                            state.error = Some(format!("Failed to load vault: {}", e));
+                                        }
+                                    }
+                                } else {
+                                    state.error = Some("Runtime not available".to_string());
                                 }
                             }
+                            Err(e) => {
+                                state.error = Some(format!("Cannot load vault: {}", e));
+                            }
                         }
-                    } else {
-                        state.error = Some("Please select a vault".to_string());
                     }
+                } else {
+                    state.error = Some("Please select a vault".to_string());
                 }
-
-                if ui.button("Create New Vault").clicked() {
-                    navigation.navigate_to(crate::state::View::VaultCreation);
-                }
-
-                if ui.button("Import Vault").clicked() {
-                    state.import_dialog_open = true;
-                    state.import_text.clear();
-                }
-            });
+            }
+            button_ui.add_space(10.0);
+            if button_ui.button("Create New Vault").clicked() {
+                navigation.navigate_to(crate::state::View::VaultCreation);
+            }
+            button_ui.add_space(10.0);
+            if button_ui.button("Import Vault").clicked() {
+                state.import_dialog_open = true;
+                state.import_text.clear();
+            }
 
             ui.add_space(10.0);
 
-            // Vault management buttons (only if a vault is selected)
+            // Vault management buttons (only if a vault is selected) - centered
             if let Some(index) = state.selected_index {
                 if index < state.vaults.len() {
-                    ui.horizontal(|ui| {
-                        if ui.button("Rename Vault").clicked() {
-                            state.rename_dialog = Some(index);
-                            state.rename_text = state.vaults[index].name.clone();
+                    let button_width = 130.0;
+                    let (rect, _) = ui.allocate_exact_size(
+                        egui::Vec2::new(button_width * 3.0 + 20.0, 30.0),
+                        egui::Sense::click()
+                    );
+                    let mut mgmt_button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                    if mgmt_button_ui.button("Rename Vault").clicked() {
+                        state.rename_dialog = Some(index);
+                        state.rename_text = state.vaults[index].name.clone();
+                    }
+                    mgmt_button_ui.add_space(10.0);
+                    if mgmt_button_ui.button("Export Vault").clicked() {
+                        let metadata = &state.vaults[index];
+                        match serde_json::to_string_pretty(metadata) {
+                            Ok(json) => {
+                                // Copy to clipboard
+                                ui.output_mut(|o| {
+                                    o.copied_text = json.clone();
+                                });
+                                state.error = None;
+                                // Show success message (could use a toast notification in the future)
+                                ui.label("✓ Vault metadata copied to clipboard!");
+                            }
+                            Err(e) => {
+                                state.error = Some(format!("Failed to export vault: {}", e));
+                            }
                         }
+                    }
 
-                        if ui.button("Export Vault").clicked() {
-                            let metadata = &state.vaults[index];
-                            match serde_json::to_string_pretty(metadata) {
-                                Ok(json) => {
-                                    // Copy to clipboard
-                                    ui.output_mut(|o| {
-                                        o.copied_text = json.clone();
-                                    });
+                    mgmt_button_ui.add_space(10.0);
+                    if mgmt_button_ui.button("Delete Vault").clicked() {
+                        // Check if PIN is required
+                        let pin_service = bitvault_common::PinService::new();
+                        if pin_service.has_pin() {
+                            // Require PIN verification before deletion
+                            state.pending_delete_index = Some(index);
+                            state.pin_verification.show();
+                        } else {
+                            // No PIN set - delete directly
+                            let vault_address = state.vaults[index].address.clone();
+
+                            // Delete vault completely (metadata and database)
+                            match bitvault_common::wallet::VaultMetadata::delete_vault_complete(&vault_address) {
+                                Ok(_) => {
+                                    // Remove from list
+                                    state.vaults.remove(index);
+                                    state.selected_index = None;
                                     state.error = None;
-                                    // Show success message (could use a toast notification in the future)
-                                    ui.label("✓ Vault metadata copied to clipboard!");
                                 }
                                 Err(e) => {
-                                    state.error = Some(format!("Failed to export vault: {}", e));
+                                    state.error = Some(format!("Failed to delete vault: {}", e));
                                 }
                             }
                         }
-
-                        if ui.button("Delete Vault").clicked() {
-                            // Check if PIN is required
-                            let pin_service = bitvault_common::PinService::new();
-                            if pin_service.has_pin() {
-                                // Require PIN verification before deletion
-                                state.pending_delete_index = Some(index);
-                                state.pin_verification.show();
-                            } else {
-                                // No PIN set - delete directly
-                                let vault_address = state.vaults[index].address.clone();
-
-                                // Delete vault completely (metadata and database)
-                                match bitvault_common::wallet::VaultMetadata::delete_vault_complete(&vault_address) {
-                                    Ok(_) => {
-                                        // Remove from list
-                                        state.vaults.remove(index);
-                                        state.selected_index = None;
-                                        state.error = None;
-                                    }
-                                    Err(e) => {
-                                        state.error = Some(format!("Failed to delete vault: {}", e));
-                                    }
-                                }
-                            }
-                        }
-                    });
+                    }
                 }
             }
 
@@ -334,13 +446,19 @@ pub fn render(
 
                             ui.add_space(10.0);
 
-                            ui.horizontal(|ui| {
-                                if ui.button("Cancel").clicked() {
-                                    state.rename_dialog = None;
-                                    state.rename_text.clear();
-                                }
-
-                                if ui.button("Save").clicked() {
+                            // Buttons - centered
+                            let button_width = 100.0;
+                            let (rect, _) = ui.allocate_exact_size(
+                                egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
+                                egui::Sense::click()
+                            );
+                            let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                            if button_ui.button("Cancel").clicked() {
+                                state.rename_dialog = None;
+                                state.rename_text.clear();
+                            }
+                            button_ui.add_space(10.0);
+                            if button_ui.button("Save").clicked() {
                                     let mut metadata = state.vaults[index].clone();
                                     match metadata.update_name(state.rename_text.clone()) {
                                         Ok(_) => {
@@ -355,7 +473,6 @@ pub fn render(
                                     }
                                 }
                             });
-                        });
                 }
             }
 
@@ -379,13 +496,19 @@ pub fn render(
 
                         ui.add_space(10.0);
 
-                        ui.horizontal(|ui| {
-                            if ui.button("Cancel").clicked() {
-                                state.import_dialog_open = false;
-                                state.import_text.clear();
-                            }
-
-                            if ui.button("Import").clicked() {
+                        // Buttons - centered
+                        let button_width = 100.0;
+                        let (rect, _) = ui.allocate_exact_size(
+                            egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
+                            egui::Sense::click()
+                        );
+                        let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                        if button_ui.button("Cancel").clicked() {
+                            state.import_dialog_open = false;
+                            state.import_text.clear();
+                        }
+                        button_ui.add_space(10.0);
+                        if button_ui.button("Import").clicked() {
                                 match serde_json::from_str::<bitvault_common::wallet::VaultMetadata>(&state.import_text) {
                                     Ok(metadata) => {
                                         // Validate required fields
@@ -420,7 +543,6 @@ pub fn render(
                                 }
                             }
                         });
-                    });
             }
         }
     });

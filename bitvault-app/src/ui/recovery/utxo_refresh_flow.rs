@@ -36,9 +36,11 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
 
         if !app_state.is_vault_loaded() {
             ui.label("No vault loaded");
-            if ui.button("Back").clicked() {
-                navigation.go_back();
-            }
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                if ui.button("Back").clicked() {
+                    navigation.go_back();
+                }
+            });
             return;
         }
 
@@ -79,9 +81,11 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                 UtxoRefreshState::Error(error) => {
                     ui.colored_label(egui::Color32::RED, error);
                     ui.add_space(10.0);
-                    if ui.button("Back").clicked() {
-                        navigation.go_back();
-                    }
+                    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                        if ui.button("Back").clicked() {
+                            navigation.go_back();
+                        }
+                    });
                 }
             }
         });
@@ -269,14 +273,16 @@ fn render_sharing(
     }
 
     ui.add_space(20.0);
-    if ui.button("Copy PSBT").clicked() {
-        ui.output_mut(|o| {
-            o.copied_text = compressed_psbt.to_string();
-        });
-    }
-
-    ui.add_space(20.0);
-    if ui.button("Done").clicked() {
-        navigation.go_back();
-    }
+    // Buttons - centered
+    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+        if ui.button("Copy PSBT").clicked() {
+            ui.output_mut(|o| {
+                o.copied_text = compressed_psbt.to_string();
+            });
+        }
+        ui.add_space(10.0);
+        if ui.button("Done").clicked() {
+            navigation.go_back();
+        }
+    });
 }

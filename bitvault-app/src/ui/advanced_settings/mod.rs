@@ -101,7 +101,7 @@ pub fn render_advanced_settings(
         ui.separator();
         ui.add_space(10.0);
 
-        if ui.button("← Back").clicked() {
+        if ui.button("Back").clicked() {
             navigation.go_back();
         }
     });

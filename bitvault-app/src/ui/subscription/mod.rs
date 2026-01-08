@@ -19,9 +19,11 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
 
         if !app_state.is_vault_loaded() {
             ui.label("No vault loaded");
-            if ui.button("Back").clicked() {
-                navigation.go_back();
-            }
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                if ui.button("Back").clicked() {
+                    navigation.go_back();
+                }
+            });
             return;
         }
 

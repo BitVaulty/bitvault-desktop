@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=BitVault
+Comment=Bitcoin Wallet Application
+Exec=bitvault-app
+Icon=bitvault-app
+Terminal=false
+Type=Application
+Categories=Finance;Security;
+StartupNotify=true

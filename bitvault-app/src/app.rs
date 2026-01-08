@@ -29,7 +29,34 @@ pub struct BitVaultApp {
 }
 
 impl BitVaultApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        // Configure fonts to support Unicode arrow characters
+        let mut fonts = egui::FontDefinitions::default();
+        
+        // Try to use system fonts that support Unicode arrows
+        // On Linux, try common fonts that support arrows
+        #[cfg(target_os = "linux")]
+        {
+            // Try to find a font with good Unicode support
+            // Common Linux fonts: DejaVu Sans, Liberation Sans, Noto Sans
+            // We'll let egui use its default which should work, but ensure we have fallback
+            if let Some(proportional) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
+                // Ensure we have fonts that support arrows
+                // The default egui fonts should work, but we can add system fonts as fallback
+            }
+        }
+        
+        // Apply font configuration
+        cc.egui_ctx.set_fonts(fonts);
+        
+        // Ensure panel backgrounds use system theme (not gray)
+        // Don't override - let egui use default system theme
+        let mut style = (*cc.egui_ctx.style()).clone();
+        // Only adjust if we need to - for now use defaults
+        cc.egui_ctx.set_style(style);
+        
+        // Install image loaders (including SVG support)
+        egui_extras::install_image_loaders(&cc.egui_ctx);
         // Try to load network from settings, default to Testnet
         let initial_network = {
             let settings_manager = match crate::settings::SettingsManager::new() {
@@ -124,8 +151,12 @@ impl eframe::App for BitVaultApp {
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("← Back").clicked() {
-                        self.navigation.go_back();
+                    // Only show back button if there's history to go back to
+                    if self.navigation.can_go_back() {
+                        // Use "< Back" instead of Unicode arrow to avoid font rendering issues
+                        if ui.button(egui::RichText::new("< Back").size(16.0)).clicked() {
+                            self.navigation.go_back();
+                        }
                     }
                 });
             });
@@ -142,11 +173,11 @@ impl eframe::App for BitVaultApp {
 
                 if pin_validated {
                     self.is_authenticated = true;
-                    // Navigate to appropriate screen after authentication
+                    // Set view without adding to history (PIN entry is not a workflow screen)
                     if self.app_state.is_vault_loaded() {
-                        self.navigation.navigate_to(View::Dashboard { tab: 0 });
+                        self.navigation.set_view(View::Dashboard { tab: 0 });
                     } else {
-                        self.navigation.navigate_to(View::VaultSelection);
+                        self.navigation.set_view(View::VaultSelection);
                     }
                 }
                 return; // Don't show other content until authenticated
@@ -168,12 +199,28 @@ impl eframe::App for BitVaultApp {
                     if !self.app_state.is_vault_loaded() {
                         self.navigation.navigate_to(View::VaultSelection);
                     } else {
-                        dashboard::render_dashboard(
-                            ui,
-                            &mut self.app_state,
-                            &mut self.navigation,
-                            tab,
-                        );
+                        // Verify vault metadata exists and database is valid
+                        if let Some(metadata) = self.app_state.get_current_vault_metadata() {
+                            // Check if database file exists
+                            if !std::path::Path::new(&metadata.database_path).exists() {
+                                // Database doesn't exist - unload vault and show selection
+                                eprintln!("Vault database not found: {}", metadata.database_path);
+                                self.app_state.unload_vault();
+                                self.navigation.navigate_to(View::VaultSelection);
+                            } else {
+                                dashboard::render_dashboard(
+                                    ui,
+                                    &mut self.app_state,
+                                    &mut self.navigation,
+                                    tab,
+                                );
+                            }
+                        } else {
+                            // Can't find metadata - unload vault and show selection
+                            eprintln!("Vault metadata not found - unloading vault");
+                            self.app_state.unload_vault();
+                            self.navigation.navigate_to(View::VaultSelection);
+                        }
                     }
                 }
                 View::VaultCreation => {
@@ -226,11 +273,11 @@ impl eframe::App for BitVaultApp {
                     );
 
                     if pin_validated {
-                        // PIN validated - navigate to appropriate screen
+                        // PIN validated - set view without adding to history
                         if self.app_state.is_vault_loaded() {
-                            self.navigation.navigate_to(View::Dashboard { tab: 0 });
+                            self.navigation.set_view(View::Dashboard { tab: 0 });
                         } else {
-                            self.navigation.navigate_to(View::VaultSelection);
+                            self.navigation.set_view(View::VaultSelection);
                         }
                     }
                 }

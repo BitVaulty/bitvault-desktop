@@ -79,42 +79,53 @@ pub fn render_qr_display(
 
             ui.add_space(10.0);
 
-            // Navigation buttons for multi-part QR codes
+            // Navigation buttons for multi-part QR codes - centered
             if state.ur_parts.len() > 1 {
-                ui.horizontal(|ui| {
-                    if ui.button("← Previous").clicked() && state.current_part > 0 {
-                        state.current_part -= 1;
-                    }
-                    if ui.button("Next →").clicked()
-                        && state.current_part < state.ur_parts.len() - 1
-                    {
-                        state.current_part += 1;
-                    }
-                });
+                let button_width = 100.0;
+                let (rect, _) = ui.allocate_exact_size(
+                    egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
+                    egui::Sense::click()
+                );
+                let mut nav_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                if nav_ui.button("Previous").clicked() && state.current_part > 0 {
+                    state.current_part -= 1;
+                }
+                nav_ui.add_space(10.0);
+                if nav_ui.button("Next →").clicked()
+                    && state.current_part < state.ur_parts.len() - 1
+                {
+                    state.current_part += 1;
+                }
 
                 ui.add_space(10.0);
 
-                // Auto-advance checkbox
-                ui.checkbox(&mut state.is_animating, "Auto-advance through parts");
+                // Auto-advance checkbox - centered
+                ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                    ui.checkbox(&mut state.is_animating, "Auto-advance through parts");
+                });
             }
 
             ui.add_space(20.0);
 
-            // Copy button
-            if ui.button("Copy UR String").clicked() {
-                ui.output_mut(|o| {
-                    o.copied_text = current_ur.clone();
-                });
-            }
+            // Copy button - centered
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                if ui.button("Copy UR String").clicked() {
+                    ui.output_mut(|o| {
+                        o.copied_text = current_ur.clone();
+                    });
+                }
+            });
         }
 
         ui.add_space(20.0);
         ui.separator();
         ui.add_space(10.0);
 
-        // Done button
-        if ui.button("Done").clicked() {
-            navigation.go_back();
-        }
+        // Done button - centered
+        ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+            if ui.button("Done").clicked() {
+                navigation.go_back();
+            }
+        });
     });
 }

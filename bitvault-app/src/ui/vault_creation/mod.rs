@@ -61,6 +61,8 @@ pub struct VaultCreationState {
     pub error: Option<String>,
     pub is_creating: bool,
     pub pin_setup_state: crate::ui::pin::PinSetupState,
+    // QR scanning state for coowner keys
+    pub coowner_qr_scanner_state: CoownerQrScannerState,
     // Import-specific fields
     pub import_mnemonic_text: String,
     pub import_descriptors_qr: String,
@@ -88,10 +90,36 @@ impl Default for VaultCreationState {
             error: None,
             is_creating: false,
             pin_setup_state: crate::ui::pin::PinSetupState::new(),
+            coowner_qr_scanner_state: CoownerQrScannerState::default(),
             import_mnemonic_text: String::new(),
             import_descriptors_qr: String::new(),
             is_coowner: false,
             is_importing: false,
+        }
+    }
+}
+
+/// State for coowner QR code scanner
+pub struct CoownerQrScannerState {
+    pub selected_file: Option<std::path::PathBuf>,
+    pub pending_file_selection: bool,
+    pub use_camera: bool,
+    pub camera_capture: Option<crate::utils::camera::CameraCapture>,
+    pub camera_frame: Option<egui::TextureHandle>,
+    pub camera_error: Option<String>,
+    pub last_scan_attempt: Option<std::time::Instant>,
+}
+
+impl Default for CoownerQrScannerState {
+    fn default() -> Self {
+        Self {
+            selected_file: None,
+            pending_file_selection: false,
+            use_camera: false,
+            camera_capture: None,
+            camera_frame: None,
+            camera_error: None,
+            last_scan_attempt: None,
         }
     }
 }
@@ -134,7 +162,8 @@ pub fn render(
                 steps::render_set_pin(ui, app_state, navigation, state);
             }
             VaultCreationStep::GenerateCoownerQR => {
-                steps::render_generate_coowner_qr(ui, state);
+                let ctx = ui.ctx().clone();
+                steps::render_generate_coowner_qr(ui, &ctx, state);
             }
             VaultCreationStep::EmailAuth => {
                 steps::render_email_auth(ui, app_state, state);
@@ -152,8 +181,8 @@ pub fn render(
 
         ui.add_space(20.0);
 
-        // Navigation buttons
-        ui.horizontal(|ui| {
+        // Navigation buttons - centered
+        ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
             if ui.button("Cancel").clicked() {
                 navigation.go_back();
             }

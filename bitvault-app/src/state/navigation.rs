@@ -68,6 +68,12 @@ impl Navigation {
         self.navigation_data = None;
     }
 
+    /// Set view without adding to history (e.g., after authentication)
+    pub fn set_view(&mut self, view: View) {
+        self.current_view = view;
+        self.navigation_data = None;
+    }
+
     /// Navigate to a new view with optional data
     pub fn navigate_to_with_data(&mut self, view: View, data: Option<String>) {
         self.history.push(self.current_view.clone());
@@ -78,6 +84,11 @@ impl Navigation {
     /// Get and clear navigation data (consumes it)
     pub fn take_navigation_data(&mut self) -> Option<String> {
         self.navigation_data.take()
+    }
+
+    /// Check if there's history to go back to
+    pub fn can_go_back(&self) -> bool {
+        !self.history.is_empty()
     }
 
     /// Navigate back

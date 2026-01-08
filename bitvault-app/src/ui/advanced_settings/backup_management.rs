@@ -132,46 +132,51 @@ pub fn render_backup_management(
                         ui.add_space(10.0);
                     }
 
-                    ui.horizontal(|ui| {
-                        if ui.button("Cancel").clicked() {
-                            pcloud.show_dialog = false;
-                            pcloud.email_input.clear();
-                            pcloud.error = None;
-                            pcloud.success = false;
-                        }
+                    // Buttons - centered
+                    let button_width = 140.0;
+                    let (rect, _) = ui.allocate_exact_size(
+                        egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
+                        egui::Sense::click()
+                    );
+                    let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                    if button_ui.button("Cancel").clicked() {
+                        pcloud.show_dialog = false;
+                        pcloud.email_input.clear();
+                        pcloud.error = None;
+                        pcloud.success = false;
+                    }
+                    button_ui.add_space(10.0);
+                    if button_ui.button("Create Backup").clicked() && !pcloud.email_input.is_empty() {
+                        pcloud.is_uploading = true;
+                        pcloud.error = None;
+                        pcloud.success = false;
 
-                        if ui.button("Create Backup").clicked() && !pcloud.email_input.is_empty() {
-                            pcloud.is_uploading = true;
-                            pcloud.error = None;
-                            pcloud.success = false;
+                        if let (Some(vault_service), Some(runtime)) =
+                            (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
+                        {
+                            let email = pcloud.email_input.clone();
+                            let result = runtime.block_on(async {
+                                let vs = vault_service.read().await;
+                                vs.initialize_pcloud_backup(&email).await
+                            });
 
-                            if let (Some(vault_service), Some(runtime)) =
-                                (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
-                            {
-                                let email = pcloud.email_input.clone();
-                                let result = runtime.block_on(async {
-                                    let vs = vault_service.read().await;
-                                    vs.initialize_pcloud_backup(&email).await
-                                });
-
-                                match result {
-                                    Ok(_) => {
-                                        pcloud.success = true;
-                                        pcloud.is_uploading = false;
-                                    }
-                                    Err(e) => {
-                                        pcloud.error =
-                                            Some(format!("Failed to create pCloud backup: {}", e));
-                                        pcloud.is_uploading = false;
-                                    }
+                            match result {
+                                Ok(_) => {
+                                    pcloud.success = true;
+                                    pcloud.is_uploading = false;
                                 }
-                            } else {
-                                pcloud.error =
-                                    Some("Vault not loaded or runtime not available".to_string());
-                                pcloud.is_uploading = false;
+                                Err(e) => {
+                                    pcloud.error =
+                                        Some(format!("Failed to create pCloud backup: {}", e));
+                                    pcloud.is_uploading = false;
+                                }
                             }
+                        } else {
+                            pcloud.error =
+                                Some("Vault not loaded or runtime not available".to_string());
+                            pcloud.is_uploading = false;
                         }
-                    });
+                    }
 
                     if pcloud.is_uploading {
                         ui.label("Uploading backup to pCloud...");

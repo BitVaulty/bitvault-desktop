@@ -24,6 +24,7 @@ quircs = "0.10"
 ciborium = "0.2"
 image = "0.25"
 rfd = "0.14"  # File dialogs for image selection
+nokhwa = { version = "0.10", features = ["input-native"] }  # Camera capture
 
 # Infrastructure
 reqwest = { version = "0.12", features = ["json"] }

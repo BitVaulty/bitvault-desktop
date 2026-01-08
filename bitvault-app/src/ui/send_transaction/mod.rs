@@ -100,10 +100,12 @@ pub fn render(
             ui.colored_label(egui::Color32::GREEN, success);
             ui.add_space(10.0);
 
-            // Add button to go back to dashboard
-            if ui.button("Back to Dashboard").clicked() {
-                navigation.go_back();
-            }
+            // Add button to go back to dashboard - centered
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                if ui.button("Back to Dashboard").clicked() {
+                    navigation.go_back();
+                }
+            });
             return; // Don't show the form if transaction was successful
         }
 
@@ -138,16 +140,20 @@ pub fn render(
 
         ui.add_space(20.0);
 
-        // Buttons
-        ui.horizontal(|ui| {
-            if ui.button("Preview Transaction").clicked() {
-                steps::build_preview(ui, app_state, state);
-            }
-
-            if ui.button("Cancel").clicked() {
-                navigation.go_back();
-            }
-        });
+        // Buttons - centered
+        let button_width = 180.0;
+        let (rect, _) = ui.allocate_exact_size(
+            egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
+            egui::Sense::click()
+        );
+        let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+        if button_ui.button("Preview Transaction").clicked() {
+            steps::build_preview(ui, app_state, state);
+        }
+        button_ui.add_space(10.0);
+        if button_ui.button("Cancel").clicked() {
+            navigation.go_back();
+        }
 
         // Show preview if available
         if let Some(ref preview) = state.preview {
@@ -167,15 +173,20 @@ pub fn render(
 
             ui.add_space(10.0);
 
-            ui.horizontal(|ui| {
-                if ui.button("Sign & Broadcast").clicked() {
-                    steps::sign_and_broadcast(ui, app_state, navigation, state);
-                }
-
-                if ui.button("Sign with Hardware Wallet").clicked() {
-                    steps::start_hardware_wallet_signing(ui, app_state, state);
-                }
-            });
+            // Buttons - centered
+            let button_width = 200.0;
+            let (rect, _) = ui.allocate_exact_size(
+                egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
+                egui::Sense::click()
+            );
+            let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+            if button_ui.button("Sign & Broadcast").clicked() {
+                steps::sign_and_broadcast(ui, app_state, navigation, state);
+            }
+            button_ui.add_space(10.0);
+            if button_ui.button("Sign with Hardware Wallet").clicked() {
+                steps::start_hardware_wallet_signing(ui, app_state, state);
+            }
         }
 
         // Handle hardware wallet signing flow
@@ -196,12 +207,14 @@ pub fn render(
 
                 // Check if user clicked "Done" (hardware wallet has scanned)
                 if !state.hw_qr_display_state.ur_parts.is_empty() {
-                    // Move to scanning mode
-                    if ui.button("Hardware Wallet Signed - Scan QR").clicked() {
-                        state.hw_signing_mode = HardwareWalletSigningMode::ScanningQR;
-                        state.hw_qr_scanner_state =
-                            crate::ui::hardware_wallet::QrScannerState::default();
-                    }
+                    // Move to scanning mode - centered
+                    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                        if ui.button("Hardware Wallet Signed - Scan QR").clicked() {
+                            state.hw_signing_mode = HardwareWalletSigningMode::ScanningQR;
+                            state.hw_qr_scanner_state =
+                                crate::ui::hardware_wallet::QrScannerState::default();
+                        }
+                    });
                 }
             }
             HardwareWalletSigningMode::ScanningQR => {

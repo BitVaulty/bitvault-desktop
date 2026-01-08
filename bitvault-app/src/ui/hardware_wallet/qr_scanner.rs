@@ -60,9 +60,11 @@ pub fn render_qr_scanner(
                 ui.label(format!("PSBT: {}...", &psbt[..psbt.len().min(50)]));
             }
             ui.add_space(20.0);
-            if ui.button("Continue").clicked() {
-                navigation.go_back();
-            }
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                if ui.button("Continue").clicked() {
+                    navigation.go_back();
+                }
+            });
             return;
         }
 
@@ -71,27 +73,33 @@ pub fn render_qr_scanner(
             ui.label("Scan QR code from image file:");
             ui.add_space(10.0);
 
-            // File selection button
-            if ui.button("Select Image File").clicked() {
-                state.pending_file_selection = true;
-            }
+            // File selection button - centered
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                if ui.button("Select Image File").clicked() {
+                    state.pending_file_selection = true;
+                }
+            });
 
             // Show selected file
             if let Some(ref file_path) = state.selected_file {
                 ui.label(format!("Selected: {}", file_path.display()));
                 ui.add_space(5.0);
 
-                if ui.button("Scan QR Code from File").clicked() {
-                    match decode_qr_from_file(file_path) {
-                        Ok(decoded) => {
-                            state.scanned_parts.push(decoded);
-                            decode_ur_parts(ui, app_state, state);
-                        }
-                        Err(e) => {
-                            state.error = Some(e);
+                // Scan button - centered (clone file_path to avoid borrow issues)
+                let file_path_clone = file_path.clone();
+                ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                    if ui.button("Scan QR Code from File").clicked() {
+                        match decode_qr_from_file(&file_path_clone) {
+                            Ok(decoded) => {
+                                state.scanned_parts.push(decoded);
+                                decode_ur_parts(ui, app_state, state);
+                            }
+                            Err(e) => {
+                                state.error = Some(e);
+                            }
                         }
                     }
-                }
+                });
             }
 
             ui.add_space(20.0);
@@ -134,10 +142,12 @@ pub fn render_qr_scanner(
         ui.separator();
         ui.add_space(10.0);
 
-        // Cancel button
-        if ui.button("Cancel").clicked() {
-            navigation.go_back();
-        }
+        // Cancel button - centered
+        ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+            if ui.button("Cancel").clicked() {
+                navigation.go_back();
+            }
+        });
     });
 }
 

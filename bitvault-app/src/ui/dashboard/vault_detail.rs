@@ -18,9 +18,11 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
             ui.heading("No Vault Loaded");
             ui.label("Create or import a vault to get started");
             ui.add_space(10.0);
-            if ui.button("Create Vault").clicked() {
-                navigation.navigate_to(crate::state::View::VaultCreation);
-            }
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                if ui.button("Create Vault").clicked() {
+                    navigation.navigate_to(crate::state::View::VaultCreation);
+                }
+            });
             return;
         }
 
@@ -44,19 +46,23 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
         let available_text = vault_data.format_available_btc();
         ui.label(format!("Available: {}", available_text));
 
-        // Action buttons
-        ui.horizontal(|ui| {
-            if ui.button("Refresh").clicked() || vault_data.needs_refresh() {
-                if let Some(ref mut handler) = app_state.async_handler {
-                    handler.fetch_balance();
-                    handler.fetch_address();
-                }
+        // Action buttons - centered
+        let button_width = 120.0;
+        let (rect, _) = ui.allocate_exact_size(
+            egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
+            egui::Sense::click()
+        );
+        let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+        if button_ui.button("Refresh").clicked() || vault_data.needs_refresh() {
+            if let Some(ref mut handler) = app_state.async_handler {
+                handler.fetch_balance();
+                handler.fetch_address();
             }
-
-            if ui.button("Switch Vault").clicked() {
-                navigation.navigate_to(crate::state::View::VaultSelection);
-            }
-        });
+        }
+        button_ui.add_space(10.0);
+        if button_ui.button("Switch Vault").clicked() {
+            navigation.navigate_to(crate::state::View::VaultSelection);
+        }
 
         ui.add_space(20.0);
 
@@ -66,11 +72,13 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
 
         if let Some(ref address) = vault_data.receive_address {
             ui.label(address);
-            if ui.button("Copy").clicked() {
-                ui.output_mut(|o| {
-                    o.copied_text = address.clone();
-                });
-            }
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                if ui.button("Copy").clicked() {
+                    ui.output_mut(|o| {
+                        o.copied_text = address.clone();
+                    });
+                }
+            });
         } else {
             ui.label("Loading address...");
             // Trigger async address fetch on first render
@@ -83,15 +91,20 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
 
         ui.add_space(30.0);
 
-        // Quick actions
-        ui.horizontal(|ui| {
-            if ui.button("Send").clicked() {
-                navigation.navigate_to(crate::state::View::SendTransaction);
-            }
-            if ui.button("Receive").clicked() {
-                navigation.navigate_to(crate::state::View::Receive);
-            }
-        });
+        // Quick actions - centered
+        let button_width = 100.0;
+        let (rect, _) = ui.allocate_exact_size(
+            egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
+            egui::Sense::click()
+        );
+        let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+        if button_ui.button("Send").clicked() {
+            navigation.navigate_to(crate::state::View::SendTransaction);
+        }
+        button_ui.add_space(10.0);
+        if button_ui.button("Receive").clicked() {
+            navigation.navigate_to(crate::state::View::Receive);
+        }
 
         ui.add_space(20.0);
 
@@ -176,9 +189,11 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
 
                         if transactions.len() > 5 {
                             ui.add_space(5.0);
-                            if ui.button("View All Transactions").clicked() {
-                                navigation.set_dashboard_tab(1); // Switch to transaction history tab
-                            }
+                            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                                if ui.button("View All Transactions").clicked() {
+                                    navigation.set_dashboard_tab(1); // Switch to transaction history tab
+                                }
+                            });
                         }
                     }
                 }

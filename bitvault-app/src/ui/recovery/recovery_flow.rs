@@ -42,9 +42,11 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
 
         if !app_state.is_vault_loaded() {
             ui.label("No vault loaded");
-            if ui.button("Back").clicked() {
-                navigation.go_back();
-            }
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                if ui.button("Back").clicked() {
+                    navigation.go_back();
+                }
+            });
             return;
         }
 
@@ -62,18 +64,24 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                 RecoveryState::SelectingUtxos(selection_state) => {
                     render_utxo_selection(ui, selection_state, RecoveryMode::Recovery);
                     ui.add_space(20.0);
-                    ui.horizontal(|ui| {
-                        if ui.button("Cancel").clicked() {
-                            navigation.go_back();
-                        }
-                        if ui.button("Continue").clicked() && selection_state.has_selection() {
-                            let selected: Vec<String> =
-                                selection_state.selected.iter().cloned().collect();
-                            next_state = Some(RecoveryState::BuildingPreview {
-                                selected_utxos: selected,
-                            });
-                        }
-                    });
+                    // Buttons - centered
+                    let button_width = 120.0;
+                    let (rect, _) = ui.allocate_exact_size(
+                        egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
+                        egui::Sense::click()
+                    );
+                    let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                    if button_ui.button("Cancel").clicked() {
+                        navigation.go_back();
+                    }
+                    button_ui.add_space(10.0);
+                    if button_ui.button("Continue").clicked() && selection_state.has_selection() {
+                        let selected: Vec<String> =
+                            selection_state.selected.iter().cloned().collect();
+                        next_state = Some(RecoveryState::BuildingPreview {
+                            selected_utxos: selected,
+                        });
+                    }
                 }
                 RecoveryState::BuildingPreview { selected_utxos } => {
                     ui.label("Building transaction preview...");

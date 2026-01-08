@@ -209,17 +209,21 @@ pub fn render_address_book(
 
         ui.add_space(10.0);
 
-        // Action buttons
-        ui.horizontal(|ui| {
-            if ui.button("Refresh").clicked() {
-                state.refresh(&vault_address);
-            }
-
-            if ui.button("Add Address").clicked() {
-                state.add_dialog_open = true;
-                state.add_address_state = crate::ui::address_book::entry::AddressEntryState::new();
-            }
-        });
+        // Action buttons - centered
+        let button_width = 120.0;
+        let (rect, _) = ui.allocate_exact_size(
+            egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
+            egui::Sense::click()
+        );
+        let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+        if button_ui.button("Refresh").clicked() {
+            state.refresh(&vault_address);
+        }
+        button_ui.add_space(10.0);
+        if button_ui.button("Add Address").clicked() {
+            state.add_dialog_open = true;
+            state.add_address_state = crate::ui::address_book::entry::AddressEntryState::new();
+        }
     });
 
     // Add address dialog

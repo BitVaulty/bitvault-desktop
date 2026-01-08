@@ -51,9 +51,11 @@ pub fn render(
 
         if !app_state.is_vault_loaded() {
             ui.label("No vault loaded");
-            if ui.button("Back").clicked() {
-                navigation.go_back();
-            }
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                if ui.button("Back").clicked() {
+                    navigation.go_back();
+                }
+            });
             return;
         }
 
@@ -120,10 +122,12 @@ pub fn render(
             ui.separator();
             ui.add_space(10.0);
 
-            // Back button
-            if ui.button("← Back").clicked() {
-                navigation.go_back();
-            }
+            // Back button - centered
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                if ui.button("Back").clicked() {
+                    navigation.go_back();
+                }
+            });
         });
     });
 }
@@ -336,7 +340,7 @@ fn render_cancel_section(
     });
 
     ui.add_space(10.0);
-    ui.label("⚠️ Canceling will create a replacement transaction with a higher fee. The original transaction will be replaced once the replacement is confirmed.");
+    ui.label("⚠ Canceling will create a replacement transaction with a higher fee. The original transaction will be replaced once the replacement is confirmed.");
 }
 
 fn cancel_transaction(

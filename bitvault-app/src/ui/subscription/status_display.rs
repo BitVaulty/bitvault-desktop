@@ -57,10 +57,12 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, _navigation: &mut Nav
         if let Some(ref error) = state.error {
             ui.colored_label(egui::Color32::RED, format!("Error: {}", error));
             ui.add_space(10.0);
-            if ui.button("Retry").clicked() {
-                state.error = None;
-                state.subscription_data = None;
-            }
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                if ui.button("Retry").clicked() {
+                    state.error = None;
+                    state.subscription_data = None;
+                }
+            });
             return;
         }
 
@@ -75,11 +77,13 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, _navigation: &mut Nav
         ui.separator();
         ui.add_space(10.0);
 
-        // Refresh button
-        if ui.button("Refresh Status").clicked() {
-            state.subscription_data = None;
-            state.last_refresh = None;
-        }
+        // Refresh button - centered
+        ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+            if ui.button("Refresh Status").clicked() {
+                state.subscription_data = None;
+                state.last_refresh = None;
+            }
+        });
     });
 }
 
@@ -210,13 +214,17 @@ fn render_subscription_info(
         || subscription.is_in_grace_period()
         || subscription.days_remaining.is_some_and(|days| days <= 7);
 
-    if should_show_renewal && ui.button("Renew Subscription").clicked() {
-        let url = get_subscription_renewal_url();
-        ctx.output_mut(|o| {
-            o.open_url = Some(egui::OpenUrl {
-                url: url.clone(),
-                new_tab: true,
-            });
+    if should_show_renewal {
+        ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+            if ui.button("Renew Subscription").clicked() {
+                let url = get_subscription_renewal_url();
+                ui.output_mut(|o| {
+                    o.open_url = Some(egui::OpenUrl {
+                        url: url.clone(),
+                        new_tab: true,
+                    });
+                });
+            }
         });
     }
 }

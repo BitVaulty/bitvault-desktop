@@ -36,9 +36,11 @@ pub fn render(
 
         if !app_state.is_vault_loaded() {
             ui.label("No vault loaded");
-            if ui.button("Back").clicked() {
-                navigation.go_back();
-            }
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                if ui.button("Back").clicked() {
+                    navigation.go_back();
+                }
+            });
             return;
         }
 
@@ -99,24 +101,28 @@ pub fn render(
 
                 ui.add_space(10.0);
 
-                // Copy button
-                if copied {
-                    ui.label("✓ Copied to clipboard!");
-                } else if ui.button("Copy Address").clicked() {
-                    copy_to_clipboard(ui, address);
-                    state.copied = true;
-                }
+                // Copy button - centered
+                ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                    if copied {
+                        ui.label("✓ Copied to clipboard!");
+                    } else if ui.button("Copy Address").clicked() {
+                        copy_to_clipboard(ui, address);
+                        state.copied = true;
+                    }
+                });
 
                 ui.add_space(10.0);
             } else {
                 ui.label("Failed to load address");
             }
 
-            // Back button
+            // Back button - centered
             ui.add_space(20.0);
-            if ui.button("Back").clicked() {
-                navigation.go_back();
-            }
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                if ui.button("Back").clicked() {
+                    navigation.go_back();
+                }
+            });
         });
     });
 }

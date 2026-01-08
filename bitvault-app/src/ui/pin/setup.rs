@@ -52,113 +52,198 @@ pub fn render_pin_setup(
 ) -> bool {
     let mut pin_set = false;
 
-    ui.vertical_centered(|ui| {
-        match state.step {
-            PinSetupStep::EnterPin => {
-                ui.heading("Set PIN");
-                ui.add_space(10.0);
-                ui.label("Enter a 6-digit PIN to secure your wallet");
-                ui.add_space(20.0);
+    // Use ScrollArea to prevent content from flowing off screen
+    egui::ScrollArea::vertical()
+        .auto_shrink([false; 2])
+        .show(ui, |ui| {
+            ui.vertical_centered(|ui| {
+                match state.step {
+                    PinSetupStep::EnterPin => {
+                        ui.heading("Set PIN");
+                        ui.add_space(5.0);
+                        ui.label("Enter a 6-digit PIN to secure your wallet");
+                        ui.add_space(15.0);
 
-                // PIN input display
-                let pin_display = "•".repeat(state.pin.len());
-                ui.label(egui::RichText::new(pin_display).size(24.0).monospace());
+                        // PIN input display
+                        let pin_display = "•".repeat(state.pin.len());
+                        ui.label(egui::RichText::new(pin_display).size(24.0).monospace());
 
-                ui.add_space(20.0);
+                        ui.add_space(15.0);
 
-                // Number pad
-                render_number_pad(ui, &mut state.pin);
+                        // Number pad - centered
+                        let row_width = 190.0;
+                        let (rect, _) = ui.allocate_exact_size(
+                            egui::Vec2::new(row_width, 60.0),
+                            egui::Sense::click()
+                        );
+                        let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                        render_number_button(&mut row_ui, "1", &mut state.pin);
+                        row_ui.add_space(5.0);
+                        render_number_button(&mut row_ui, "2", &mut state.pin);
+                        row_ui.add_space(5.0);
+                        render_number_button(&mut row_ui, "3", &mut state.pin);
+                        
+                        ui.add_space(5.0);
+                        let (rect, _) = ui.allocate_exact_size(
+                            egui::Vec2::new(row_width, 60.0),
+                            egui::Sense::click()
+                        );
+                        let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                        render_number_button(&mut row_ui, "4", &mut state.pin);
+                        row_ui.add_space(5.0);
+                        render_number_button(&mut row_ui, "5", &mut state.pin);
+                        row_ui.add_space(5.0);
+                        render_number_button(&mut row_ui, "6", &mut state.pin);
+                        
+                        ui.add_space(5.0);
+                        let (rect, _) = ui.allocate_exact_size(
+                            egui::Vec2::new(row_width, 60.0),
+                            egui::Sense::click()
+                        );
+                        let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                        render_number_button(&mut row_ui, "7", &mut state.pin);
+                        row_ui.add_space(5.0);
+                        render_number_button(&mut row_ui, "8", &mut state.pin);
+                        row_ui.add_space(5.0);
+                        render_number_button(&mut row_ui, "9", &mut state.pin);
+                        
+                        ui.add_space(5.0);
+                        let last_row_width = 125.0;
+                        let (rect, _) = ui.allocate_exact_size(
+                            egui::Vec2::new(last_row_width, 60.0),
+                            egui::Sense::click()
+                        );
+                        let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                        render_number_button(&mut row_ui, "0", &mut state.pin);
+                        row_ui.add_space(5.0);
+                        render_del_button(&mut row_ui, &mut state.pin);
 
-                // Validate PIN format when 6 digits entered
-                if state.pin.len() == 6 {
-                    if !is_valid_pin(&state.pin) {
-                        state.error =
-                            Some("PIN must contain at least 4 different digits".to_string());
-                        state.pin.clear();
-                    } else {
-                        // Move to confirmation step
-                        state.step = PinSetupStep::ConfirmPin;
-                        state.error = None;
-                    }
-                }
-            }
-            PinSetupStep::ConfirmPin => {
-                ui.heading("Confirm PIN");
-                ui.add_space(10.0);
-                ui.label("Re-enter your PIN to confirm");
-                ui.add_space(20.0);
-
-                // Show error if any
-                if let Some(ref error) = state.error {
-                    ui.colored_label(egui::Color32::RED, error);
-                    ui.add_space(10.0);
-                }
-
-                // PIN input display
-                let pin_display = "•".repeat(state.confirm_pin.len());
-                ui.label(egui::RichText::new(pin_display).size(24.0).monospace());
-
-                ui.add_space(20.0);
-
-                // Number pad
-                render_number_pad(ui, &mut state.confirm_pin);
-
-                // Validate when confirm PIN is 6 digits
-                if state.confirm_pin.len() == 6 {
-                    if state.confirm_pin == state.pin {
-                        // PINs match - save it
-                        let pin_service = PinService::new();
-                        match pin_service.save_pin(&state.pin) {
-                            Ok(()) => {
-                                state.clear();
-                                pin_set = true;
-                            }
-                            Err(e) => {
-                                state.error = Some(format!("Failed to save PIN: {}", e));
-                                state.confirm_pin.clear();
+                        // Validate PIN format when 6 digits entered
+                        if state.pin.len() == 6 {
+                            if !is_valid_pin(&state.pin) {
+                                state.error =
+                                    Some("PIN must contain at least 4 different digits".to_string());
+                                state.pin.clear();
+                            } else {
+                                // Move to confirmation step
+                                state.step = PinSetupStep::ConfirmPin;
+                                state.error = None;
                             }
                         }
-                    } else {
-                        // PINs don't match
-                        state.error = Some("PINs do not match. Please try again.".to_string());
-                        state.pin.clear();
-                        state.confirm_pin.clear();
-                        state.step = PinSetupStep::EnterPin;
+                    }
+                    PinSetupStep::ConfirmPin => {
+                        ui.heading("Confirm PIN");
+                        ui.add_space(5.0);
+                        ui.label("Re-enter your PIN to confirm");
+                        ui.add_space(15.0);
+
+                        // Show error if any
+                        if let Some(ref error) = state.error {
+                            ui.colored_label(egui::Color32::RED, error);
+                            ui.add_space(10.0);
+                        }
+
+                        // PIN input display
+                        let pin_display = "•".repeat(state.confirm_pin.len());
+                        ui.label(egui::RichText::new(pin_display).size(24.0).monospace());
+
+                        ui.add_space(15.0);
+
+                        // Number pad - centered
+                        let row_width = 190.0;
+                        let (rect, _) = ui.allocate_exact_size(
+                            egui::Vec2::new(row_width, 60.0),
+                            egui::Sense::click()
+                        );
+                        let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                        render_number_button(&mut row_ui, "1", &mut state.confirm_pin);
+                        row_ui.add_space(5.0);
+                        render_number_button(&mut row_ui, "2", &mut state.confirm_pin);
+                        row_ui.add_space(5.0);
+                        render_number_button(&mut row_ui, "3", &mut state.confirm_pin);
+                        
+                        ui.add_space(5.0);
+                        let (rect, _) = ui.allocate_exact_size(
+                            egui::Vec2::new(row_width, 60.0),
+                            egui::Sense::click()
+                        );
+                        let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                        render_number_button(&mut row_ui, "4", &mut state.confirm_pin);
+                        row_ui.add_space(5.0);
+                        render_number_button(&mut row_ui, "5", &mut state.confirm_pin);
+                        row_ui.add_space(5.0);
+                        render_number_button(&mut row_ui, "6", &mut state.confirm_pin);
+                        
+                        ui.add_space(5.0);
+                        let (rect, _) = ui.allocate_exact_size(
+                            egui::Vec2::new(row_width, 60.0),
+                            egui::Sense::click()
+                        );
+                        let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                        render_number_button(&mut row_ui, "7", &mut state.confirm_pin);
+                        row_ui.add_space(5.0);
+                        render_number_button(&mut row_ui, "8", &mut state.confirm_pin);
+                        row_ui.add_space(5.0);
+                        render_number_button(&mut row_ui, "9", &mut state.confirm_pin);
+                        
+                        ui.add_space(5.0);
+                        let last_row_width = 125.0;
+                        let (rect, _) = ui.allocate_exact_size(
+                            egui::Vec2::new(last_row_width, 60.0),
+                            egui::Sense::click()
+                        );
+                        let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                        render_number_button(&mut row_ui, "0", &mut state.confirm_pin);
+                        row_ui.add_space(5.0);
+                        render_del_button(&mut row_ui, &mut state.confirm_pin);
+
+                        // Validate when confirm PIN is 6 digits
+                        if state.confirm_pin.len() == 6 {
+                            if state.confirm_pin == state.pin {
+                                // PINs match - save it
+                                let pin_service = PinService::new();
+                                match pin_service.save_pin(&state.pin) {
+                                    Ok(()) => {
+                                        state.clear();
+                                        pin_set = true;
+                                    }
+                                    Err(e) => {
+                                        state.error = Some(format!("Failed to save PIN: {}", e));
+                                        state.confirm_pin.clear();
+                                    }
+                                }
+                            } else {
+                                // PINs don't match
+                                state.error = Some("PINs do not match. Please try again.".to_string());
+                                state.pin.clear();
+                                state.confirm_pin.clear();
+                                state.step = PinSetupStep::EnterPin;
+                            }
+                        }
                     }
                 }
-            }
-        }
-    });
+            });
+        });
 
     pin_set
 }
 
-fn render_number_pad(ui: &mut egui::Ui, pin: &mut String) {
-    ui.horizontal(|ui| {
-        ui.vertical(|ui| {
-            render_number_row(ui, &["1", "2", "3"], pin);
-            render_number_row(ui, &["4", "5", "6"], pin);
-            render_number_row(ui, &["7", "8", "9"], pin);
-            ui.horizontal(|ui| {
-                if ui.button("0").clicked() && pin.len() < 6 {
-                    pin.push('0');
-                }
-                if ui.button("⌫").clicked() {
-                    pin.pop();
-                }
-            });
-        });
-    });
+fn render_number_button(ui: &mut egui::Ui, num: &str, pin: &mut String) {
+    let button = ui.add_sized([60.0, 60.0], egui::Button::new(
+        egui::RichText::new(num).size(24.0)
+    ));
+    if button.clicked() && pin.len() < 6 {
+        pin.push_str(num);
+    }
 }
 
-fn render_number_row(ui: &mut egui::Ui, numbers: &[&str], pin: &mut String) {
-    ui.horizontal(|ui| {
-        for num in numbers {
-            if ui.button(*num).clicked() && pin.len() < 6 {
-                pin.push_str(num);
-            }
-        }
-    });
+fn render_del_button(ui: &mut egui::Ui, pin: &mut String) {
+    let button = ui.add_sized([60.0, 60.0], egui::Button::new(
+        egui::RichText::new("Del").size(20.0)
+    ));
+    if button.clicked() {
+        pin.pop();
+    }
 }
 
 /// Check if PIN is valid (security requirements)

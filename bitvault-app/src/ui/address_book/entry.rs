@@ -58,48 +58,53 @@ pub fn render_address_entry(
 
             ui.add_space(10.0);
 
-            ui.horizontal(|ui| {
-                if ui.button("Cancel").clicked() {
-                    // Dialog will close automatically
-                }
-
-                if ui.button("Save").clicked() {
-                    let address_trimmed = address.trim().to_string();
-                    if address_trimmed.is_empty() {
-                        state.error = Some("Address cannot be empty".to_string());
+            // Buttons - centered
+            let button_width = 100.0;
+            let (rect, _) = ui.allocate_exact_size(
+                egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
+                egui::Sense::click()
+            );
+            let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+            if button_ui.button("Cancel").clicked() {
+                // Dialog will close automatically
+            }
+            button_ui.add_space(10.0);
+            if button_ui.button("Save").clicked() {
+                let address_trimmed = address.trim().to_string();
+                if address_trimmed.is_empty() {
+                    state.error = Some("Address cannot be empty".to_string());
+                } else {
+                    // Basic address validation (starts with bc1, 1, or 3)
+                    if !address_trimmed.starts_with("bc1")
+                        && !address_trimmed.starts_with("1")
+                        && !address_trimmed.starts_with("3")
+                        && !address_trimmed.starts_with("tb1")
+                        && !address_trimmed.starts_with("bcrt1")
+                    {
+                        state.error = Some("Invalid Bitcoin address format".to_string());
                     } else {
-                        // Basic address validation (starts with bc1, 1, or 3)
-                        if !address_trimmed.starts_with("bc1")
-                            && !address_trimmed.starts_with("1")
-                            && !address_trimmed.starts_with("3")
-                            && !address_trimmed.starts_with("tb1")
-                            && !address_trimmed.starts_with("bcrt1")
-                        {
-                            state.error = Some("Invalid Bitcoin address format".to_string());
+                        let label_opt = if label.trim().is_empty() {
+                            None
                         } else {
-                            let label_opt = if label.trim().is_empty() {
-                                None
-                            } else {
-                                Some(label.trim().to_string())
-                            };
+                            Some(label.trim().to_string())
+                        };
 
-                            let service = AddressBookService::new().unwrap_or_default();
-                            if let Err(e) = service.add_address(
-                                vault_address,
-                                address_trimmed.clone(),
-                                label_opt.clone(),
-                            ) {
-                                state.error = Some(format!("Failed to save: {}", e));
-                            } else {
-                                state.address = address_trimmed.clone();
-                                state.label = label.clone();
-                                should_save = true;
-                                on_save(address_trimmed, label_opt);
-                            }
+                        let service = AddressBookService::new().unwrap_or_default();
+                        if let Err(e) = service.add_address(
+                            vault_address,
+                            address_trimmed.clone(),
+                            label_opt.clone(),
+                        ) {
+                            state.error = Some(format!("Failed to save: {}", e));
+                        } else {
+                            state.address = address_trimmed.clone();
+                            state.label = label.clone();
+                            should_save = true;
+                            on_save(address_trimmed, label_opt);
                         }
                     }
                 }
-            });
+            }
         });
 
     should_save

@@ -96,24 +96,75 @@ pub fn render_pin_verification(ctx: &egui::Context, state: &mut PinVerificationS
 
                 ui.add_space(20.0);
 
-                // Number pad
-                ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        render_number_row(ui, &["1", "2", "3"], &mut state.pin_entry.pin);
-                        render_number_row(ui, &["4", "5", "6"], &mut state.pin_entry.pin);
-                        render_number_row(ui, &["7", "8", "9"], &mut state.pin_entry.pin);
-                        ui.horizontal(|ui| {
-                            if ui.button("0").clicked() && state.pin_entry.pin.len() < 6 {
-                                state.pin_entry.pin.push('0');
-                                state.error = None;
-                            }
-                            if ui.button("⌫").clicked() {
-                                state.pin_entry.pin.pop();
-                                state.error = None;
-                            }
-                        });
-                    });
-                });
+                // Number pad - centered (same container as text above)
+                let row_width = 190.0;
+                let (rect, _) = ui.allocate_exact_size(
+                    egui::Vec2::new(row_width, 60.0),
+                    egui::Sense::click()
+                );
+                let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                if render_number_button(&mut row_ui, "1", &mut state.pin_entry.pin) {
+                    state.error = None;
+                }
+                row_ui.add_space(5.0);
+                if render_number_button(&mut row_ui, "2", &mut state.pin_entry.pin) {
+                    state.error = None;
+                }
+                row_ui.add_space(5.0);
+                if render_number_button(&mut row_ui, "3", &mut state.pin_entry.pin) {
+                    state.error = None;
+                }
+                
+                ui.add_space(5.0);
+                let (rect, _) = ui.allocate_exact_size(
+                    egui::Vec2::new(row_width, 60.0),
+                    egui::Sense::click()
+                );
+                let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                if render_number_button(&mut row_ui, "4", &mut state.pin_entry.pin) {
+                    state.error = None;
+                }
+                row_ui.add_space(5.0);
+                if render_number_button(&mut row_ui, "5", &mut state.pin_entry.pin) {
+                    state.error = None;
+                }
+                row_ui.add_space(5.0);
+                if render_number_button(&mut row_ui, "6", &mut state.pin_entry.pin) {
+                    state.error = None;
+                }
+                
+                ui.add_space(5.0);
+                let (rect, _) = ui.allocate_exact_size(
+                    egui::Vec2::new(row_width, 60.0),
+                    egui::Sense::click()
+                );
+                let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                if render_number_button(&mut row_ui, "7", &mut state.pin_entry.pin) {
+                    state.error = None;
+                }
+                row_ui.add_space(5.0);
+                if render_number_button(&mut row_ui, "8", &mut state.pin_entry.pin) {
+                    state.error = None;
+                }
+                row_ui.add_space(5.0);
+                if render_number_button(&mut row_ui, "9", &mut state.pin_entry.pin) {
+                    state.error = None;
+                }
+                
+                ui.add_space(5.0);
+                let last_row_width = 125.0;
+                let (rect, _) = ui.allocate_exact_size(
+                    egui::Vec2::new(last_row_width, 60.0),
+                    egui::Sense::click()
+                );
+                let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                if render_number_button(&mut row_ui, "0", &mut state.pin_entry.pin) {
+                    state.error = None;
+                }
+                row_ui.add_space(5.0);
+                if render_del_button(&mut row_ui, &mut state.pin_entry.pin) {
+                    state.error = None;
+                }
 
                 ui.add_space(20.0);
 
@@ -174,12 +225,26 @@ pub fn render_pin_verification(ctx: &egui::Context, state: &mut PinVerificationS
     }
 }
 
-fn render_number_row(ui: &mut egui::Ui, numbers: &[&str], pin: &mut String) {
-    ui.horizontal(|ui| {
-        for num in numbers {
-            if ui.button(*num).clicked() && pin.len() < 6 {
-                pin.push_str(num);
-            }
-        }
-    });
+fn render_number_button(ui: &mut egui::Ui, num: &str, pin: &mut String) -> bool {
+    let button = ui.add_sized([60.0, 60.0], egui::Button::new(
+        egui::RichText::new(num).size(24.0)
+    ));
+    if button.clicked() && pin.len() < 6 {
+        pin.push_str(num);
+        true
+    } else {
+        false
+    }
+}
+
+fn render_del_button(ui: &mut egui::Ui, pin: &mut String) -> bool {
+    let button = ui.add_sized([60.0, 60.0], egui::Button::new(
+        egui::RichText::new("Del").size(20.0)
+    ));
+    if button.clicked() {
+        pin.pop();
+        true
+    } else {
+        false
+    }
 }

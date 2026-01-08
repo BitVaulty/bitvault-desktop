@@ -148,14 +148,20 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     ui.label("When you make transactions, they will appear here");
                     ui.add_space(20.0);
 
-                    ui.horizontal(|ui| {
-                        if ui.button("Send BTC").clicked() {
-                            navigation.navigate_to(View::SendTransaction);
-                        }
-                        if ui.button("Receive BTC").clicked() {
-                            navigation.navigate_to(View::Receive);
-                        }
-                    });
+                    // Buttons - centered
+                    let button_width = 120.0;
+                    let (rect, _) = ui.allocate_exact_size(
+                        egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
+                        egui::Sense::click()
+                    );
+                    let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                    if button_ui.button("Send BTC").clicked() {
+                        navigation.navigate_to(View::SendTransaction);
+                    }
+                    button_ui.add_space(10.0);
+                    if button_ui.button("Receive BTC").clicked() {
+                        navigation.navigate_to(View::Receive);
+                    }
                 });
             } else {
                 // Transaction list

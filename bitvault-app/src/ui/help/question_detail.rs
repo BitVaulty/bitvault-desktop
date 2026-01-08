@@ -21,7 +21,7 @@ pub fn render_question_detail(
     ui.vertical(|ui| {
         // Header with back button
         ui.horizontal(|ui| {
-            if ui.button("← Back").clicked() {
+            if ui.button("Back").clicked() {
                 // Go back to question list
                 // This will be handled by the parent component
                 navigation.go_back();
@@ -60,9 +60,11 @@ pub fn render_question_detail(
         ui.separator();
         ui.add_space(20.0);
 
-        // Back button at bottom
-        if ui.button("← Back to Questions").clicked() {
-            navigation.go_back();
-        }
+        // Back button at bottom - centered for consistency
+        ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+            if ui.button("Back to Questions").clicked() {
+                navigation.go_back();
+            }
+        });
     });
 }

@@ -212,7 +212,8 @@ impl AppState {
 
     /// Get current vault metadata (if loaded)
     pub fn get_current_vault_metadata(&self) -> Option<bitvault_common::wallet::VaultMetadata> {
-        if !self.has_vault {
+        // Only return metadata if vault is actually loaded (has vault_service)
+        if !self.has_vault || self.vault_service.is_none() {
             return None;
         }
 
@@ -221,7 +222,12 @@ impl AppState {
             if let Some(ref address) = vault_data.receive_address {
                 // Find vault metadata by address
                 if let Ok(vaults) = Self::list_vaults() {
-                    return vaults.into_iter().find(|v| v.address == *address);
+                    if let Some(metadata) = vaults.into_iter().find(|v| v.address == *address) {
+                        // Verify the database file actually exists
+                        if std::path::Path::new(&metadata.database_path).exists() {
+                            return Some(metadata);
+                        }
+                    }
                 }
             }
         }
