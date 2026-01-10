@@ -286,42 +286,52 @@ impl eframe::App for BitVaultApp {
             }
             
             ui.horizontal(|ui| {
-                // Left side: Branding and vault info
-                ui.add_space(Spacing::MD);
-
-                // Show current vault info if loaded
-                if let Some(metadata) = self.app_state.get_current_vault_metadata() {
-                    ui.add_space(Spacing::MD);
-                    ui.separator();
-                    ui.add_space(Spacing::MD);
-                    
-                    // Vault name badge
-                    use crate::ui::components::badge;
-                    use crate::ui::components::BadgeStyle;
-                    badge(ui, &metadata.name, BadgeStyle::Info);
-                    
+                // Left side: Back button first (more to the left, vertically centered)
+                if self.navigation.can_go_back() {
                     ui.add_space(Spacing::SM);
-                    
-                    // Network badge
-                    let network_badge = match metadata.network.as_str() {
-                        "mainnet" => BadgeStyle::Success,
-                        "testnet" => BadgeStyle::Warning,
-                        "signet" => BadgeStyle::Info,
-                        _ => BadgeStyle::Neutral,
+                    // Back button - narrower width for top bar (110px instead of 140px)
+                    // Use allocate_exact_size to ensure fixed size and prevent hover size changes
+                    // Add small top margin to push it down for proper vertical centering
+                    let is_dark = ui.ctx().style().visuals.dark_mode;
+                    let (bg_color, hover_color, text_color) = if is_dark {
+                        (egui::Color32::TRANSPARENT, Colors::GRAY_800, Colors::text_primary(ui.ctx()))
+                    } else {
+                        (egui::Color32::TRANSPARENT, Colors::GRAY_200, Colors::GRAY_900)
                     };
-                    badge(ui, &metadata.network, network_badge);
-                }
-
-                // Push back button to the right using available space
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.add_space(Spacing::MD);
                     
-                    // Right side: Back button
-                    if self.navigation.can_go_back() {
-                        // Back button - using Unicode arrow
-                        if button(ui, "← Back", ButtonStyle::Text).clicked() {
-                            // Check if we're in a workflow that has step tracking
-                            match self.navigation.current_view {
+                    // Pre-allocate exact size to prevent any size changes on hover
+                    let desired_size = egui::Vec2::new(110.0, 38.0); // Narrower: 110px instead of 140px
+                    let (mut rect, response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
+                    
+                    // Move button down by adjusting rect position for proper vertical centering
+                    rect = rect.translate(egui::vec2(0.0, 5.0));
+                    
+                    // Draw button background and text
+                    if ui.is_rect_visible(rect) {
+                        let painter = ui.painter();
+                        
+                        // Draw background (transparent normally, hover color on hover)
+                        let current_bg = if response.hovered() {
+                            hover_color
+                        } else {
+                            bg_color
+                        };
+                        painter.rect_filled(rect, 4.0, current_bg);
+                        
+                        // Draw text
+                        painter.text(
+                            rect.center(),
+                            egui::Align2::CENTER_CENTER,
+                            "← Back",
+                            egui::FontId::proportional(14.0),
+                            text_color,
+                        );
+                    }
+                    
+                    // Handle click
+                    if response.clicked() {
+                        // Check if we're in a workflow that has step tracking
+                        match self.navigation.current_view {
                                 View::VaultCreation => {
                                     // Handle vault creation workflow step navigation
                                     if !self.vault_creation_state.go_to_previous_step() {
@@ -350,9 +360,34 @@ impl eframe::App for BitVaultApp {
                                     self.navigation.go_back();
                                 }
                             }
-                        }
                     }
-                });
+                }
+                
+                ui.add_space(Spacing::MD);
+
+                // Right side: Branding and vault info
+                // Show current vault info if loaded
+                if let Some(metadata) = self.app_state.get_current_vault_metadata() {
+                    ui.add_space(Spacing::MD);
+                    ui.separator();
+                    ui.add_space(Spacing::MD);
+                    
+                    // Vault name badge
+                    use crate::ui::components::badge;
+                    use crate::ui::components::BadgeStyle;
+                    badge(ui, &metadata.name, BadgeStyle::Info);
+                    
+                    ui.add_space(Spacing::SM);
+                    
+                    // Network badge
+                    let network_badge = match metadata.network.as_str() {
+                        "mainnet" => BadgeStyle::Success,
+                        "testnet" => BadgeStyle::Warning,
+                        "signet" => BadgeStyle::Info,
+                        _ => BadgeStyle::Neutral,
+                    };
+                    badge(ui, &metadata.network, network_badge);
+                }
             });
             
             ui.add_space(Spacing::SM);

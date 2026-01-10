@@ -85,6 +85,8 @@ pub enum VaultCreationStep {
 /// Vault creation state
 pub struct VaultCreationState {
     pub current_step: VaultCreationStep,
+    /// Previous step (for detecting step changes and auto-focus)
+    pub previous_step: Option<VaultCreationStep>,
     /// History of steps for back button navigation
     pub step_history: Vec<VaultCreationStep>,
     /// This device's role (main or co-owner)
@@ -115,12 +117,24 @@ pub struct VaultCreationState {
     pub import_mnemonic_text: String,
     pub import_descriptors_qr: String,
     pub is_importing: bool,
+    // Camera for QR scanning
+    pub camera_capture: Option<crate::utils::camera::CameraCapture>,
+    pub is_scanning_qr: bool,
+    // Track saved file paths for secure deletion
+    pub saved_key_file: Option<std::path::PathBuf>,
+    pub saved_exchange_file: Option<std::path::PathBuf>,
+    // Encryption keys for file exchange
+    // Co-owner: stores signing key pair (private key for File 2 decryption)
+    // Main: stores co-owner's public key from File 1 (for File 2 encryption)
+    pub signing_secret_key: Option<secp256k1::SecretKey>,
+    pub recipient_public_key: Option<secp256k1::PublicKey>,
 }
 
 impl Default for VaultCreationState {
     fn default() -> Self {
         Self {
             current_step: VaultCreationStep::RoleSelection,
+            previous_step: None,
             step_history: Vec::new(),
             device_role: DeviceRole::default(),
             mnemonic: None,
@@ -144,6 +158,12 @@ impl Default for VaultCreationState {
             import_mnemonic_text: String::new(),
             import_descriptors_qr: String::new(),
             is_importing: false,
+            camera_capture: None,
+            is_scanning_qr: false,
+            saved_key_file: None,
+            saved_exchange_file: None,
+            signing_secret_key: None,
+            recipient_public_key: None,
         }
     }
 }
@@ -155,6 +175,8 @@ impl VaultCreationState {
         // Don't track history if we're going back (handled by go_to_previous_step)
         // Only track when advancing forward
         if step != self.current_step {
+            // Update previous_step for auto-focus detection
+            self.previous_step = Some(self.current_step.clone());
             self.step_history.push(self.current_step.clone());
             self.current_step = step;
         }
@@ -164,6 +186,7 @@ impl VaultCreationState {
     /// Returns true if there was a previous step, false if at first step
     pub fn go_to_previous_step(&mut self) -> bool {
         if let Some(previous) = self.step_history.pop() {
+            self.previous_step = Some(self.current_step.clone());
             self.current_step = previous;
             true
         } else {
@@ -175,6 +198,20 @@ impl VaultCreationState {
     pub fn can_go_back_in_workflow(&self) -> bool {
         !self.step_history.is_empty()
     }
+    
+    /// Check if the step just changed (for auto-focus)
+    /// Returns true only on the first frame after a step change.
+    /// Updates previous_step immediately to prevent it from returning true again.
+    pub fn step_just_changed(&mut self, current: VaultCreationStep) -> bool {
+        // Check if step changed (previous_step is different from current)
+        let changed = self.previous_step.as_ref() != Some(&current);
+        if changed {
+            // Immediately update previous_step to prevent this from returning true again
+            // This ensures request_focus() is only called once per step change
+            self.previous_step = Some(current.clone());
+        }
+        changed
+    }
 
     /// Reset workflow state (called when exiting workflow)
     pub fn reset(&mut self) {
@@ -182,6 +219,71 @@ impl VaultCreationState {
         self.step_history.clear();
         self.device_role = DeviceRole::default();
         // Don't clear other state - user might want to resume
+    }
+    
+    /// Full reset for starting a new vault creation flow
+    /// Call this when user selects a role from role selection
+    pub fn reset_for_new_flow(&mut self) {
+        // Clear step history
+        self.step_history.clear();
+        
+        // Clear all input state
+        self.mnemonic = None;
+        self.verified_seed_phrase = false;
+        self.time_delay_days = 0;
+        self.time_delay_hours = 24;
+        self.coowner_pubkeys.clear();
+        self.coowner_keys = None;
+        self.my_keys_text = None;
+        self.exchange_data_input.clear();
+        self.vault_name.clear();
+        self.vault_address = None;
+        self.exchange_data_output = None;
+        self.email.clear();
+        self.auth_code.clear();
+        self.code_sent = false;
+        self.is_sending_code = false;
+        self.error = None;
+        self.is_creating = false;
+        self.pin_setup_state = crate::ui::pin::PinSetupState::new();
+        self.import_mnemonic_text.clear();
+        self.import_descriptors_qr.clear();
+        self.is_importing = false;
+        
+        // Stop camera if running
+        if let Some(ref mut camera) = self.camera_capture {
+            camera.stop_capture();
+        }
+        self.camera_capture = None;
+        self.is_scanning_qr = false;
+        self.saved_key_file = None;
+        self.saved_exchange_file = None;
+        self.signing_secret_key = None;
+        self.recipient_public_key = None;
+        
+        log::info!("Reset vault creation state for new flow");
+    }
+    
+    /// Clear sensitive data from memory (seed phrases, mnemonics)
+    /// Call this after vault creation/import succeeds
+    pub fn clear_sensitive_data(&mut self) {
+        // Clear the generated mnemonic
+        self.mnemonic = None;
+        
+        // Clear any imported seed phrase text by overwriting with zeros first
+        // This helps ensure the data is actually cleared from memory
+        let len = self.import_mnemonic_text.len();
+        self.import_mnemonic_text.clear();
+        self.import_mnemonic_text.reserve(len);
+        for _ in 0..len {
+            self.import_mnemonic_text.push('\0');
+        }
+        self.import_mnemonic_text.clear();
+        
+        // Clear PIN setup state
+        self.pin_setup_state = crate::ui::pin::PinSetupState::new();
+        
+        log::info!("Cleared sensitive vault creation data from memory");
     }
     
     /// Get the next step based on role and current step
@@ -283,13 +385,13 @@ pub fn render(
                 steps::render_set_pin(ui, app_state, navigation, state);
             }
             VaultCreationStep::ScanCoownerKeys => {
-                steps::render_scan_coowner_keys(ui, state);
+                steps::render_scan_coowner_keys(ui, &ctx, state);
             }
             VaultCreationStep::DisplayOwnKeys => {
                 steps::render_display_own_keys(ui, &ctx, state);
             }
             VaultCreationStep::EnterExchangeData => {
-                steps::render_enter_exchange_data(ui, state);
+                steps::render_enter_exchange_data(ui, &ctx, state);
             }
             VaultCreationStep::EmailAuth => {
                 steps::render_email_auth(ui, app_state, state);

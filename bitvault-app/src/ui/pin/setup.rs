@@ -11,6 +11,8 @@ pub struct PinSetupState {
     confirm_pin: String,
     step: PinSetupStep,
     error: Option<String>,
+    /// Track if we've auto-focused the first button (to avoid doing it every frame)
+    has_auto_focused: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -26,6 +28,7 @@ impl Default for PinSetupState {
             confirm_pin: String::new(),
             step: PinSetupStep::EnterPin,
             error: None,
+            has_auto_focused: false,
         }
     }
 }
@@ -40,6 +43,7 @@ impl PinSetupState {
         self.confirm_pin.clear();
         self.step = PinSetupStep::EnterPin;
         self.error = None;
+        self.has_auto_focused = false;
     }
 }
 
@@ -59,7 +63,7 @@ pub fn render_pin_setup(
             ui.vertical_centered(|ui| {
                 match state.step {
                     PinSetupStep::EnterPin => {
-                        ui.heading("Set PIN");
+                        // Heading removed - already shown in render_set_pin
                         ui.add_space(5.0);
                         ui.label("Enter a 6-digit PIN to secure your wallet");
                         ui.add_space(15.0);
@@ -70,53 +74,60 @@ pub fn render_pin_setup(
 
                         ui.add_space(15.0);
 
-                        // Number pad - centered
+                        // Number pad - centered, all buttons in same UI context for proper tab order
                         let row_width = 190.0;
-                        let (rect, _) = ui.allocate_exact_size(
-                            egui::Vec2::new(row_width, 60.0),
-                            egui::Sense::click()
-                        );
-                        let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
-                        render_number_button(&mut row_ui, "1", &mut state.pin);
-                        row_ui.add_space(5.0);
-                        render_number_button(&mut row_ui, "2", &mut state.pin);
-                        row_ui.add_space(5.0);
-                        render_number_button(&mut row_ui, "3", &mut state.pin);
+                        let available_width = ui.available_width();
+                        let left_margin = ((available_width - row_width) / 2.0).max(0.0);
+                        
+                        // Row 1: 1, 2, 3
+                        ui.horizontal(|ui| {
+                            ui.add_space(left_margin);
+                            let button1_response = render_number_button(ui, "1", &mut state.pin);
+                            
+                            // Auto-focus first button when entering step (only once)
+                            if !state.has_auto_focused && state.pin.is_empty() {
+                                button1_response.request_focus();
+                                state.has_auto_focused = true;
+                            }
+                            
+                            ui.add_space(5.0);
+                            render_number_button(ui, "2", &mut state.pin);
+                            ui.add_space(5.0);
+                            render_number_button(ui, "3", &mut state.pin);
+                        });
                         
                         ui.add_space(5.0);
-                        let (rect, _) = ui.allocate_exact_size(
-                            egui::Vec2::new(row_width, 60.0),
-                            egui::Sense::click()
-                        );
-                        let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
-                        render_number_button(&mut row_ui, "4", &mut state.pin);
-                        row_ui.add_space(5.0);
-                        render_number_button(&mut row_ui, "5", &mut state.pin);
-                        row_ui.add_space(5.0);
-                        render_number_button(&mut row_ui, "6", &mut state.pin);
+                        // Row 2: 4, 5, 6
+                        ui.horizontal(|ui| {
+                            ui.add_space(left_margin);
+                            render_number_button(ui, "4", &mut state.pin);
+                            ui.add_space(5.0);
+                            render_number_button(ui, "5", &mut state.pin);
+                            ui.add_space(5.0);
+                            render_number_button(ui, "6", &mut state.pin);
+                        });
                         
                         ui.add_space(5.0);
-                        let (rect, _) = ui.allocate_exact_size(
-                            egui::Vec2::new(row_width, 60.0),
-                            egui::Sense::click()
-                        );
-                        let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
-                        render_number_button(&mut row_ui, "7", &mut state.pin);
-                        row_ui.add_space(5.0);
-                        render_number_button(&mut row_ui, "8", &mut state.pin);
-                        row_ui.add_space(5.0);
-                        render_number_button(&mut row_ui, "9", &mut state.pin);
+                        // Row 3: 7, 8, 9
+                        ui.horizontal(|ui| {
+                            ui.add_space(left_margin);
+                            render_number_button(ui, "7", &mut state.pin);
+                            ui.add_space(5.0);
+                            render_number_button(ui, "8", &mut state.pin);
+                            ui.add_space(5.0);
+                            render_number_button(ui, "9", &mut state.pin);
+                        });
                         
                         ui.add_space(5.0);
+                        // Last row: 0, DEL
                         let last_row_width = 125.0;
-                        let (rect, _) = ui.allocate_exact_size(
-                            egui::Vec2::new(last_row_width, 60.0),
-                            egui::Sense::click()
-                        );
-                        let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
-                        render_number_button(&mut row_ui, "0", &mut state.pin);
-                        row_ui.add_space(5.0);
-                        render_del_button(&mut row_ui, &mut state.pin);
+                        let last_left_margin = ((available_width - last_row_width) / 2.0).max(0.0);
+                        ui.horizontal(|ui| {
+                            ui.add_space(last_left_margin);
+                            render_number_button(ui, "0", &mut state.pin);
+                            ui.add_space(5.0);
+                            render_del_button(ui, &mut state.pin);
+                        });
 
                         // Validate PIN format when 6 digits entered
                         if state.pin.len() == 6 {
@@ -128,6 +139,7 @@ pub fn render_pin_setup(
                                 // Move to confirmation step
                                 state.step = PinSetupStep::ConfirmPin;
                                 state.error = None;
+                                state.has_auto_focused = false; // Reset for confirm step
                             }
                         }
                     }
@@ -149,53 +161,60 @@ pub fn render_pin_setup(
 
                         ui.add_space(15.0);
 
-                        // Number pad - centered
+                        // Number pad - centered, all buttons in same UI context for proper tab order
                         let row_width = 190.0;
-                        let (rect, _) = ui.allocate_exact_size(
-                            egui::Vec2::new(row_width, 60.0),
-                            egui::Sense::click()
-                        );
-                        let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
-                        render_number_button(&mut row_ui, "1", &mut state.confirm_pin);
-                        row_ui.add_space(5.0);
-                        render_number_button(&mut row_ui, "2", &mut state.confirm_pin);
-                        row_ui.add_space(5.0);
-                        render_number_button(&mut row_ui, "3", &mut state.confirm_pin);
+                        let available_width = ui.available_width();
+                        let left_margin = ((available_width - row_width) / 2.0).max(0.0);
+                        
+                        // Row 1: 1, 2, 3
+                        ui.horizontal(|ui| {
+                            ui.add_space(left_margin);
+                            let button1_response = render_number_button(ui, "1", &mut state.confirm_pin);
+                            
+                            // Auto-focus first button when entering confirm step (only once)
+                            if !state.has_auto_focused && state.confirm_pin.is_empty() {
+                                button1_response.request_focus();
+                                state.has_auto_focused = true;
+                            }
+                            
+                            ui.add_space(5.0);
+                            render_number_button(ui, "2", &mut state.confirm_pin);
+                            ui.add_space(5.0);
+                            render_number_button(ui, "3", &mut state.confirm_pin);
+                        });
                         
                         ui.add_space(5.0);
-                        let (rect, _) = ui.allocate_exact_size(
-                            egui::Vec2::new(row_width, 60.0),
-                            egui::Sense::click()
-                        );
-                        let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
-                        render_number_button(&mut row_ui, "4", &mut state.confirm_pin);
-                        row_ui.add_space(5.0);
-                        render_number_button(&mut row_ui, "5", &mut state.confirm_pin);
-                        row_ui.add_space(5.0);
-                        render_number_button(&mut row_ui, "6", &mut state.confirm_pin);
+                        // Row 2: 4, 5, 6
+                        ui.horizontal(|ui| {
+                            ui.add_space(left_margin);
+                            render_number_button(ui, "4", &mut state.confirm_pin);
+                            ui.add_space(5.0);
+                            render_number_button(ui, "5", &mut state.confirm_pin);
+                            ui.add_space(5.0);
+                            render_number_button(ui, "6", &mut state.confirm_pin);
+                        });
                         
                         ui.add_space(5.0);
-                        let (rect, _) = ui.allocate_exact_size(
-                            egui::Vec2::new(row_width, 60.0),
-                            egui::Sense::click()
-                        );
-                        let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
-                        render_number_button(&mut row_ui, "7", &mut state.confirm_pin);
-                        row_ui.add_space(5.0);
-                        render_number_button(&mut row_ui, "8", &mut state.confirm_pin);
-                        row_ui.add_space(5.0);
-                        render_number_button(&mut row_ui, "9", &mut state.confirm_pin);
+                        // Row 3: 7, 8, 9
+                        ui.horizontal(|ui| {
+                            ui.add_space(left_margin);
+                            render_number_button(ui, "7", &mut state.confirm_pin);
+                            ui.add_space(5.0);
+                            render_number_button(ui, "8", &mut state.confirm_pin);
+                            ui.add_space(5.0);
+                            render_number_button(ui, "9", &mut state.confirm_pin);
+                        });
                         
                         ui.add_space(5.0);
+                        // Last row: 0, DEL
                         let last_row_width = 125.0;
-                        let (rect, _) = ui.allocate_exact_size(
-                            egui::Vec2::new(last_row_width, 60.0),
-                            egui::Sense::click()
-                        );
-                        let mut row_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
-                        render_number_button(&mut row_ui, "0", &mut state.confirm_pin);
-                        row_ui.add_space(5.0);
-                        render_del_button(&mut row_ui, &mut state.confirm_pin);
+                        let last_left_margin = ((available_width - last_row_width) / 2.0).max(0.0);
+                        ui.horizontal(|ui| {
+                            ui.add_space(last_left_margin);
+                            render_number_button(ui, "0", &mut state.confirm_pin);
+                            ui.add_space(5.0);
+                            render_del_button(ui, &mut state.confirm_pin);
+                        });
 
                         // Validate when confirm PIN is 6 digits
                         if state.confirm_pin.len() == 6 {
@@ -228,13 +247,14 @@ pub fn render_pin_setup(
     pin_set
 }
 
-fn render_number_button(ui: &mut egui::Ui, num: &str, pin: &mut String) {
+fn render_number_button(ui: &mut egui::Ui, num: &str, pin: &mut String) -> egui::Response {
     let button = ui.add_sized([60.0, 60.0], egui::Button::new(
         egui::RichText::new(num).size(24.0)
     ));
     if button.clicked() && pin.len() < 6 {
         pin.push_str(num);
     }
+    button
 }
 
 fn render_del_button(ui: &mut egui::Ui, pin: &mut String) {

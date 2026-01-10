@@ -897,6 +897,7 @@ name = "bitvault-app"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "bdk",
  "bip39",
  "bitcoin 0.32.8",
@@ -954,6 +955,7 @@ dependencies = [
  "flate2",
  "fluent",
  "hex",
+ "hkdf",
  "keyring",
  "log",
  "pbkdf2",

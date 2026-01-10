@@ -1,13 +1,64 @@
 //! Vault creation step implementations
 
 use crate::state::{AppState, Navigation, View};
-use crate::ui::components::{button_large, Spacing};
+use crate::ui::components::{button, button_large, ButtonStyle, Spacing};
 use crate::ui::pin::render_pin_setup;
 use crate::ui::vault_creation::{DeviceRole, VaultCreationState, VaultCreationStep};
 use crate::utils::icons::{Icon, icon_image};
 use bip39::{Language, Mnemonic};
 use bitvault_common::utils::TimeDelay;
+use bitvault_common::key_exchange;
 use eframe::egui;
+use secp256k1::{Secp256k1, PublicKey, SecretKey};
+use base64::{engine::general_purpose, Engine};
+use std::fs;
+use std::io::{Seek, Write};
+use std::path::Path;
+
+/// Securely delete a file by overwriting with zeros before deletion
+/// Note: On modern SSDs with wear leveling, this may not be fully effective,
+/// but it's better than simple deletion for traditional hard drives
+fn secure_delete_file(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Ok(()); // Already deleted
+    }
+    
+    // Get file size
+    let metadata = fs::metadata(path)
+        .map_err(|e| format!("Failed to read file metadata: {}", e))?;
+    let file_size = metadata.len() as usize;
+    
+    // Open file for writing
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(path)
+        .map_err(|e| format!("Failed to open file for overwrite: {}", e))?;
+    
+    // Overwrite with zeros (3 passes for basic security)
+    let zeros = vec![0u8; file_size.min(1024 * 1024)]; // 1MB chunks max
+    for _ in 0..3 {
+        file.seek(std::io::SeekFrom::Start(0))
+            .map_err(|e| format!("Failed to seek: {}", e))?;
+        let mut remaining = file_size;
+        while remaining > 0 {
+            let chunk_size = zeros.len().min(remaining);
+            file.write_all(&zeros[..chunk_size])
+                .map_err(|e| format!("Failed to write zeros: {}", e))?;
+            remaining -= chunk_size;
+        }
+        file.sync_all()
+            .map_err(|e| format!("Failed to sync: {}", e))?;
+    }
+    
+    drop(file); // Close file before deletion
+    
+    // Delete the file
+    fs::remove_file(path)
+        .map_err(|e| format!("Failed to delete file: {}", e))?;
+    
+    Ok(())
+}
 
 /// Role selection step - first step in vault creation
 pub fn render_role_selection(
@@ -38,46 +89,112 @@ pub fn render_role_selection(
         ui.add_space(left_margin);
         
         // Option 1: View-Only Mode
-        ui.group(|ui| {
-            ui.set_min_size(egui::vec2(card_width, card_height));
-            ui.vertical(|ui| {
-                ui.horizontal(|ui| {
-                    if let Some(img) = icon_image(ui.ctx(), Icon::Import, icon_size, icon_color) {
-                        ui.add(img);
-                    }
-                    ui.strong("View-Only Mode");
-                });
-                ui.add_space(Spacing::SM);
-                ui.label("Monitor without signing.");
-                ui.add_space(Spacing::MD);
-                if ui.button("Set Up View-Only").clicked() {
-                    state.device_role = DeviceRole::ViewOnly;
-                    state.advance_to_step(VaultCreationStep::NameVault);
-                }
-            });
-        });
+        let card1_rect = ui.allocate_ui_with_layout(
+            egui::vec2(card_width, card_height),
+            egui::Layout::top_down(egui::Align::Center),
+            |ui| {
+                egui::Frame::group(ui.style())
+                    .inner_margin(egui::Margin::same(12.0))
+                    .show(ui, |ui| {
+                        ui.set_min_size(egui::vec2(card_width - 24.0, card_height - 24.0));
+                        ui.vertical(|ui| {
+                            ui.horizontal(|ui| {
+                                if let Some(img) = icon_image(ui.ctx(), Icon::Import, icon_size, icon_color) {
+                                    ui.add(img);
+                                }
+                                ui.strong("View-Only Mode");
+                            });
+                            ui.add_space(Spacing::SM);
+                            ui.label("Monitor without signing.");
+                            ui.add_space(Spacing::MD);
+                            ui.label(egui::RichText::new("→ Set Up View-Only").color(ui.style().visuals.hyperlink_color));
+                        });
+                    });
+            }
+        );
+        let card1_response = ui.interact(card1_rect.response.rect, ui.id().with("card1"), egui::Sense::click());
+        
+        // Auto-focus first card only when step first changes (initial entry to this step)
+        // This ensures Tab starts from the first card, not from other UI elements like Back button
+        // step_just_changed() updates previous_step immediately, so this only runs once per step change
+        if state.step_just_changed(VaultCreationStep::RoleSelection) {
+            // Request focus on first card to set initial tab order
+            // This only happens once when entering the step, won't interfere with subsequent tab navigation
+            ui.memory_mut(|mem| mem.request_focus(card1_response.id));
+        }
+        
+        let card1_keyboard = card1_response.has_focus() 
+            && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
+        
+        // Draw focus indicator if focused
+        if card1_response.has_focus() {
+            let painter = ui.painter();
+            let outline_rect = card1_response.rect.expand(2.0);
+            painter.rect_stroke(
+                outline_rect,
+                8.0,
+                egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 149, 237))
+            );
+        }
+        
+        if card1_response.clicked() || card1_keyboard {
+            state.reset_for_new_flow();
+            state.device_role = DeviceRole::ViewOnly;
+            state.advance_to_step(VaultCreationStep::NameVault);
+        }
+        if card1_response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
 
         ui.add_space(Spacing::MD);
 
         // Option 2: Create New Vault
-        ui.group(|ui| {
-            ui.set_min_size(egui::vec2(card_width, card_height));
-            ui.vertical(|ui| {
-                ui.horizontal(|ui| {
-                    if let Some(img) = icon_image(ui.ctx(), Icon::Plus, icon_size, icon_color) {
-                        ui.add(img);
-                    }
-                    ui.strong("Create New Vault");
-                });
-                ui.add_space(Spacing::SM);
-                ui.label("Start a new vault.");
-                ui.add_space(Spacing::MD);
-                if ui.button("Create New Vault").clicked() {
-                    state.device_role = DeviceRole::Main;
-                    state.advance_to_step(VaultCreationStep::NameVault);
-                }
-            });
-        });
+        let card2_rect = ui.allocate_ui_with_layout(
+            egui::vec2(card_width, card_height),
+            egui::Layout::top_down(egui::Align::Center),
+            |ui| {
+                egui::Frame::group(ui.style())
+                    .inner_margin(egui::Margin::same(12.0))
+                    .show(ui, |ui| {
+                        ui.set_min_size(egui::vec2(card_width - 24.0, card_height - 24.0));
+                        ui.vertical(|ui| {
+                            ui.horizontal(|ui| {
+                                if let Some(img) = icon_image(ui.ctx(), Icon::Plus, icon_size, icon_color) {
+                                    ui.add(img);
+                                }
+                                ui.strong("Create New Vault");
+                            });
+                            ui.add_space(Spacing::SM);
+                            ui.label("Start a new vault.");
+                            ui.add_space(Spacing::MD);
+                            ui.label(egui::RichText::new("→ Create New Vault").color(ui.style().visuals.hyperlink_color));
+                        });
+                    });
+            }
+        );
+        let card2_response = ui.interact(card2_rect.response.rect, ui.id().with("card2"), egui::Sense::click());
+        let card2_keyboard = card2_response.has_focus() 
+            && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
+        
+        // Draw focus indicator if focused
+        if card2_response.has_focus() {
+            let painter = ui.painter();
+            let outline_rect = card2_response.rect.expand(2.0);
+            painter.rect_stroke(
+                outline_rect,
+                8.0,
+                egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 149, 237))
+            );
+        }
+        
+        if card2_response.clicked() || card2_keyboard {
+            state.reset_for_new_flow();
+            state.device_role = DeviceRole::Main;
+            state.advance_to_step(VaultCreationStep::NameVault);
+        }
+        if card2_response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
     });
 
     ui.add_space(Spacing::MD);
@@ -87,52 +204,108 @@ pub fn render_role_selection(
         ui.add_space(left_margin);
         
         // Option 3: Join as Co-owner
-        ui.group(|ui| {
-            ui.set_min_size(egui::vec2(card_width, card_height));
-            ui.vertical(|ui| {
-                ui.horizontal(|ui| {
-                    if let Some(img) = icon_image(ui.ctx(), Icon::Users, icon_size, icon_color) {
-                        ui.add(img);
-                    }
-                    ui.strong("Join as Co-owner");
-                });
-                ui.add_space(Spacing::SM);
-                ui.label("Pair with main device.");
-                ui.add_space(Spacing::MD);
-                if ui.button("Join as Co-owner").clicked() {
-                    state.device_role = DeviceRole::Coowner;
-                    state.advance_to_step(VaultCreationStep::NameVault);
-                }
-            });
-        });
+        let card3_rect = ui.allocate_ui_with_layout(
+            egui::vec2(card_width, card_height),
+            egui::Layout::top_down(egui::Align::Center),
+            |ui| {
+                egui::Frame::group(ui.style())
+                    .inner_margin(egui::Margin::same(12.0))
+                    .show(ui, |ui| {
+                        ui.set_min_size(egui::vec2(card_width - 24.0, card_height - 24.0));
+                        ui.vertical(|ui| {
+                            ui.horizontal(|ui| {
+                                if let Some(img) = icon_image(ui.ctx(), Icon::Users, icon_size, icon_color) {
+                                    ui.add(img);
+                                }
+                                ui.strong("Join as Co-owner");
+                            });
+                            ui.add_space(Spacing::SM);
+                            ui.label("Pair with main device.");
+                            ui.add_space(Spacing::MD);
+                            ui.label(egui::RichText::new("→ Join as Co-owner").color(ui.style().visuals.hyperlink_color));
+                        });
+                    });
+            }
+        );
+        let card3_response = ui.interact(card3_rect.response.rect, ui.id().with("card3"), egui::Sense::click());
+        let card3_keyboard = card3_response.has_focus() 
+            && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
+        
+        // Draw focus indicator if focused
+        if card3_response.has_focus() {
+            let painter = ui.painter();
+            let outline_rect = card3_response.rect.expand(2.0);
+            painter.rect_stroke(
+                outline_rect,
+                8.0,
+                egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 149, 237))
+            );
+        }
+        
+        if card3_response.clicked() || card3_keyboard {
+            state.reset_for_new_flow();
+            state.device_role = DeviceRole::Coowner;
+            state.advance_to_step(VaultCreationStep::NameVault);
+        }
+        if card3_response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
 
         ui.add_space(Spacing::MD);
 
         // Option 4: Restore from Backup
-        ui.group(|ui| {
-            ui.set_min_size(egui::vec2(card_width, card_height));
-            ui.vertical(|ui| {
-                ui.horizontal(|ui| {
-                    if let Some(img) = icon_image(ui.ctx(), Icon::Back, icon_size, icon_color) {
-                        ui.add(img);
-                    }
-                    ui.strong("Restore from Backup");
-                });
-                ui.add_space(Spacing::SM);
-                ui.colored_label(egui::Color32::YELLOW, "Requires paper backup.");
-                ui.add_space(Spacing::MD);
-                if ui.button("Restore from Backup").clicked() {
-                    state.device_role = DeviceRole::Restore;
-                    state.advance_to_step(VaultCreationStep::NameVault);
-                }
-            });
-        });
+        let card4_rect = ui.allocate_ui_with_layout(
+            egui::vec2(card_width, card_height),
+            egui::Layout::top_down(egui::Align::Center),
+            |ui| {
+                egui::Frame::group(ui.style())
+                    .inner_margin(egui::Margin::same(12.0))
+                    .show(ui, |ui| {
+                        ui.set_min_size(egui::vec2(card_width - 24.0, card_height - 24.0));
+                        ui.vertical(|ui| {
+                            ui.horizontal(|ui| {
+                                if let Some(img) = icon_image(ui.ctx(), Icon::Back, icon_size, icon_color) {
+                                    ui.add(img);
+                                }
+                                ui.strong("Restore from Backup");
+                            });
+                            ui.add_space(Spacing::SM);
+                            ui.colored_label(egui::Color32::YELLOW, "Requires paper backup.");
+                            ui.add_space(Spacing::MD);
+                            ui.label(egui::RichText::new("→ Restore from Backup").color(ui.style().visuals.hyperlink_color));
+                        });
+                    });
+            }
+        );
+        let card4_response = ui.interact(card4_rect.response.rect, ui.id().with("card4"), egui::Sense::click());
+        let card4_keyboard = card4_response.has_focus() 
+            && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
+        
+        // Draw focus indicator if focused
+        if card4_response.has_focus() {
+            let painter = ui.painter();
+            let outline_rect = card4_response.rect.expand(2.0);
+            painter.rect_stroke(
+                outline_rect,
+                8.0,
+                egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 149, 237))
+            );
+        }
+        
+        if card4_response.clicked() || card4_keyboard {
+            state.reset_for_new_flow();
+            state.device_role = DeviceRole::Restore;
+            state.advance_to_step(VaultCreationStep::NameVault);
+        }
+        if card4_response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
     });
 
     ui.add_space(Spacing::XL);
 
     ui.vertical_centered(|ui| {
-        if ui.button("Cancel").clicked() {
+        if button(ui, "Cancel", ButtonStyle::Text).clicked() {
             navigation.go_back();
         }
     });
@@ -154,12 +327,21 @@ pub fn render_name_vault(ui: &mut egui::Ui, state: &mut VaultCreationState) {
         ui.label("Enter a name for this vault:");
         ui.add_space(Spacing::MD);
 
-        ui.add(
+        let name_response = ui.add(
             egui::TextEdit::singleline(&mut state.vault_name)
                 .hint_text("My Bitcoin Vault")
                 .desired_width(300.0)
                 .margin(egui::vec2(8.0, 6.0))
         );
+        
+        // Auto-focus on step change
+        if state.step_just_changed(VaultCreationStep::NameVault) {
+            name_response.request_focus();
+        }
+        
+        // Handle Enter key to submit
+        let should_submit = name_response.lost_focus() 
+            && ui.input(|i| i.key_pressed(egui::Key::Enter));
 
         if let Some(ref error) = state.error {
             ui.add_space(Spacing::SM);
@@ -168,7 +350,10 @@ pub fn render_name_vault(ui: &mut egui::Ui, state: &mut VaultCreationState) {
 
         ui.add_space(Spacing::XL);
 
-        if button_large(ui, "Continue").clicked() {
+        let continue_response = button_large(ui, "Continue");
+        let keyboard_clicked = continue_response.has_focus() 
+            && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
+        if continue_response.clicked() || should_submit || keyboard_clicked {
             if state.vault_name.trim().is_empty() {
                 state.error = Some("Please enter a vault name".to_string());
             } else {
@@ -180,7 +365,7 @@ pub fn render_name_vault(ui: &mut egui::Ui, state: &mut VaultCreationState) {
         }
 
         ui.add_space(Spacing::MD);
-        if ui.button("← Back").clicked() {
+        if button(ui, "← Back", ButtonStyle::Text).clicked() {
             state.go_to_previous_step();
         }
     });
@@ -225,14 +410,21 @@ pub fn render_set_time_delay(ui: &mut egui::Ui, state: &mut VaultCreationState) 
 
         ui.add_space(Spacing::XL);
 
-        if button_large(ui, "Continue").clicked() {
+        let continue_response = button_large(ui, "Continue");
+        let continue_keyboard = continue_response.has_focus() 
+            && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
+        
+        // Allow Enter key to trigger Continue from anywhere on this step
+        let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
+        
+        if continue_response.clicked() || continue_keyboard || enter_pressed {
             if let Some(next) = state.next_step_for_role() {
                 state.advance_to_step(next);
             }
         }
 
         ui.add_space(Spacing::MD);
-        if ui.button("← Back").clicked() {
+        if button(ui, "← Back", ButtonStyle::Text).clicked() {
             state.go_to_previous_step();
         }
     });
@@ -248,7 +440,14 @@ pub fn render_mnemonic_generation(ui: &mut egui::Ui, state: &mut VaultCreationSt
         ui.label("It will be generated securely on this device.");
         ui.add_space(Spacing::XL);
 
-        if button_large(ui, "Generate Seed Phrase").clicked() {
+        let generate_response = button_large(ui, "Generate Seed Phrase");
+        let generate_keyboard = generate_response.has_focus() 
+            && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
+        
+        // Allow Enter key to trigger Generate from anywhere on this step
+        let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
+        
+        if generate_response.clicked() || generate_keyboard || enter_pressed {
             use rand::RngCore;
             let mut entropy = [0u8; 16]; // 128 bits for 12 words
             rand::thread_rng().fill_bytes(&mut entropy);
@@ -271,7 +470,7 @@ pub fn render_mnemonic_generation(ui: &mut egui::Ui, state: &mut VaultCreationSt
         }
 
         ui.add_space(Spacing::MD);
-        if ui.button("← Back").clicked() {
+        if button(ui, "← Back", ButtonStyle::Text).clicked() {
             state.go_to_previous_step();
         }
     });
@@ -319,12 +518,19 @@ pub fn render_display_seed_phrase(ui: &mut egui::Ui, state: &mut VaultCreationSt
     ui.add_space(Spacing::XL);
 
     ui.vertical_centered(|ui| {
-        if button_large(ui, "I've Written It Down").clicked() {
+        let written_down_response = button_large(ui, "I've Written It Down");
+        let written_down_keyboard = written_down_response.has_focus() 
+            && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
+        
+        // Allow Enter key to trigger from anywhere on this step
+        let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
+        
+        if written_down_response.clicked() || written_down_keyboard || enter_pressed {
             state.advance_to_step(VaultCreationStep::VerifySeedPhrase);
         }
 
         ui.add_space(Spacing::MD);
-        if ui.button("← Back").clicked() {
+        if button(ui, "← Back", ButtonStyle::Text).clicked() {
             state.go_to_previous_step();
         }
     });
@@ -339,7 +545,28 @@ pub fn render_verify_seed_phrase(ui: &mut egui::Ui, state: &mut VaultCreationSta
         ui.label("Please confirm you have written down your seed phrase.");
         ui.add_space(Spacing::MD);
 
-        ui.checkbox(&mut state.verified_seed_phrase, "I have written down my seed phrase and stored it securely");
+        // Store checkbox state before rendering to detect if Enter toggled it
+        let checkbox_state_before = state.verified_seed_phrase;
+        
+        // Use horizontal layout to add spacing between checkbox and label
+        let checkbox_response = ui.horizontal(|ui| {
+            let checkbox_response = ui.checkbox(&mut state.verified_seed_phrase, "");
+            ui.add_space(Spacing::SM); // Add margin between checkbox and label
+            ui.label("I have written down my seed phrase and stored it securely");
+            checkbox_response // Return the checkbox response
+        }).inner;
+        
+        // Auto-focus checkbox on step change
+        if state.step_just_changed(VaultCreationStep::VerifySeedPhrase) {
+            checkbox_response.request_focus();
+        }
+        
+        // Check if Enter was pressed on the checkbox (it will toggle it)
+        let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
+        let checkbox_has_focus = checkbox_response.has_focus();
+        let checkbox_toggled_by_enter = enter_pressed 
+            && checkbox_has_focus 
+            && checkbox_state_before != state.verified_seed_phrase;
 
         if let Some(ref error) = state.error {
             ui.add_space(Spacing::SM);
@@ -348,7 +575,23 @@ pub fn render_verify_seed_phrase(ui: &mut egui::Ui, state: &mut VaultCreationSta
 
         ui.add_space(Spacing::XL);
 
-        if button_large(ui, "Continue").clicked() {
+        let continue_response = button_large(ui, "Continue");
+        
+        // If Enter toggled the checkbox, move focus to Continue button (simulate Tab)
+        // This happens AFTER the checkbox toggle, so the next Enter will be on Continue button
+        if checkbox_toggled_by_enter {
+            continue_response.request_focus();
+        }
+        
+        // Only trigger Continue if Continue button has focus (not when checkbox has focus)
+        // This ensures: first Enter toggles checkbox and moves focus, second Enter triggers Continue
+        let continue_keyboard = continue_response.has_focus() 
+            && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
+        
+        // IMPORTANT: Only trigger Continue if Continue button has focus
+        // If checkbox was toggled by Enter, don't trigger Continue on the same frame
+        // (we moved focus to Continue, but the next Enter press should trigger it)
+        if continue_response.clicked() || (continue_keyboard && !checkbox_toggled_by_enter) {
             if state.verified_seed_phrase {
                 state.error = None;
                 if let Some(next) = state.next_step_for_role() {
@@ -360,7 +603,7 @@ pub fn render_verify_seed_phrase(ui: &mut egui::Ui, state: &mut VaultCreationSta
         }
 
         ui.add_space(Spacing::MD);
-        if ui.button("← Back").clicked() {
+        if button(ui, "← Back", ButtonStyle::Text).clicked() {
             state.go_to_previous_step();
         }
     });
@@ -375,8 +618,6 @@ pub fn render_set_pin(
 ) {
     ui.vertical_centered(|ui| {
         ui.heading("Set PIN");
-        ui.add_space(Spacing::MD);
-        ui.label("Set a 6-digit PIN to secure your wallet");
         ui.add_space(Spacing::LG);
     });
 
@@ -391,41 +632,164 @@ pub fn render_set_pin(
 
     ui.add_space(Spacing::MD);
     ui.vertical_centered(|ui| {
-        if ui.button("← Back").clicked() {
+        if button(ui, "← Back", ButtonStyle::Text).clicked() {
             state.go_to_previous_step();
         }
     });
 }
 
 /// Main device: Scan/enter co-owner's keys
-pub fn render_scan_coowner_keys(ui: &mut egui::Ui, state: &mut VaultCreationState) {
+pub fn render_scan_coowner_keys(ui: &mut egui::Ui, ctx: &egui::Context, state: &mut VaultCreationState) {
     ui.heading("Get Co-owner's Keys");
     ui.add_space(Spacing::MD);
 
-    ui.label("Ask your co-owner to share their public keys with you.");
-    ui.label("They can copy the text from their device and send it to you securely.");
+    ui.label("First, have your co-owner complete their setup and share their keys.");
+    ui.label("Then scan the QR code from their device or paste the key data.");
     ui.add_space(Spacing::LG);
 
-    ui.label("Paste co-owner's key data:");
+    // Webcam scanning option - centered
+    ui.vertical_centered(|ui| {
+        if state.is_scanning_qr {
+            if button(ui, "Stop Scanning", ButtonStyle::Secondary).clicked() {
+                if let Some(ref mut camera) = state.camera_capture {
+                    camera.stop_capture();
+                }
+                state.is_scanning_qr = false;
+            }
+        } else {
+            if button(ui, "📷 Scan QR Code", ButtonStyle::Secondary).clicked() {
+                let mut camera = crate::utils::camera::CameraCapture::new();
+                match camera.start_capture() {
+                    Ok(()) => {
+                        state.camera_capture = Some(camera);
+                        state.is_scanning_qr = true;
+                        state.error = None;
+                    }
+                    Err(e) => {
+                        state.error = Some(format!("Failed to start camera: {}", e));
+                    }
+                }
+            }
+        }
+    });
+
+    // Show camera preview and scan
+    if state.is_scanning_qr {
+        if let Some(ref mut camera) = state.camera_capture {
+            if let Some(texture) = camera.capture_frame(ctx) {
+                ui.add_space(Spacing::MD);
+                ui.image((texture.id(), egui::Vec2::new(400.0, 300.0)));
+                ui.add_space(Spacing::SM);
+                ui.label("Point camera at QR code");
+                
+                // Try to scan QR from current frame
+                match camera.scan_qr_from_frame() {
+                    Ok(qr_data) => {
+                        // Validate it's co-owner keys
+                        match bitvault_common::ur::decode_qr_data::<bitvault_common::derivation::CoownerKeys>(&qr_data) {
+                            Ok(keys) => {
+                                state.coowner_pubkeys = qr_data;
+                                state.coowner_keys = Some(keys);
+                                camera.stop_capture();
+                                state.camera_capture = None;
+                                state.is_scanning_qr = false;
+                                state.error = None;
+                                // Auto-advance to next step
+                                if let Some(next) = state.next_step_for_role() {
+                                    state.advance_to_step(next);
+                                }
+                                return;
+                            }
+                            Err(_) => {
+                                // Not valid co-owner keys, keep scanning
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // No QR code detected yet, keep scanning
+                    }
+                }
+            }
+        }
+    }
+
+    ui.add_space(Spacing::MD);
+    ui.separator();
+    ui.add_space(Spacing::MD);
+
+    ui.label("Or paste co-owner's key data:");
     ui.add_space(Spacing::SM);
     
-    ui.add(egui::TextEdit::multiline(&mut state.coowner_pubkeys)
+    let coowner_keys_response = ui.add(egui::TextEdit::multiline(&mut state.coowner_pubkeys)
         .hint_text("Paste the key data here...")
         .desired_width(400.0)
         .desired_rows(4));
+    
+    // Auto-focus on step change
+    if state.step_just_changed(VaultCreationStep::ScanCoownerKeys) {
+        coowner_keys_response.request_focus();
+    }
 
     ui.add_space(Spacing::MD);
 
-    // Or load from file
-    if ui.button("Load from File").clicked() {
+    // Or load from file (try encrypted first, then plain JSON for backward compatibility)
+    if button(ui, "Load from File", ButtonStyle::Secondary).clicked() {
         if let Some(path) = rfd::FileDialog::new()
             .add_filter("Text files", &["txt", "json"])
             .pick_file()
         {
             match std::fs::read_to_string(&path) {
                 Ok(contents) => {
-                    state.coowner_pubkeys = contents.trim().to_string();
-                    state.error = None;
+                    // Try to parse as encrypted file first
+                    match serde_json::from_str::<key_exchange::EncryptedCoownerKeysFile>(&contents) {
+                        Ok(encrypted_file) => {
+                            // Decrypt
+                            match key_exchange::decrypt_coowner_keys(&encrypted_file) {
+                                Ok(coowner_keys) => {
+                                    // Extract signature public key for File 2 encryption
+                                    match general_purpose::STANDARD.decode(&encrypted_file.sender_public_key) {
+                                        Ok(pubkey_bytes) => {
+                                            match secp256k1::PublicKey::from_slice(&pubkey_bytes) {
+                                                Ok(pubkey) => {
+                                                    state.recipient_public_key = Some(pubkey);
+                                                }
+                                                Err(e) => {
+                                                    state.error = Some(format!("Invalid public key in file: {}", e));
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            state.error = Some(format!("Failed to decode public key: {}", e));
+                                            return;
+                                        }
+                                    }
+                                    
+                                    // Encode decrypted keys back to JSON for display/QR
+                                    match bitvault_common::ur::encode_qr_data(&coowner_keys) {
+                                        Ok(keys_text) => {
+                                            state.coowner_pubkeys = keys_text;
+                                            state.coowner_keys = Some(coowner_keys);
+                                            state.error = None;
+                                            state.saved_key_file = Some(path);
+                                        }
+                                        Err(e) => {
+                                            state.error = Some(format!("Failed to encode decrypted keys: {}", e));
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    state.error = Some(format!("Failed to decrypt file: {}", e));
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            // Not encrypted, try plain JSON (backward compatibility)
+                            state.coowner_pubkeys = contents.trim().to_string();
+                            state.error = None;
+                            state.saved_key_file = Some(path);
+                        }
+                    }
                 }
                 Err(e) => {
                     state.error = Some(format!("Failed to read file: {}", e));
@@ -433,13 +797,30 @@ pub fn render_scan_coowner_keys(ui: &mut egui::Ui, state: &mut VaultCreationStat
             }
         }
     }
+    
+    // Show warning if file was loaded
+    if state.saved_key_file.is_some() && !state.coowner_pubkeys.is_empty() {
+        ui.add_space(Spacing::SM);
+        ui.colored_label(
+            egui::Color32::from_rgb(255, 200, 0),
+            "⚠ Security: Delete the key file after successful vault creation."
+        );
+    }
 
-    ui.add_space(Spacing::XL);
+    if let Some(ref error) = state.error {
+        ui.add_space(Spacing::MD);
+        ui.colored_label(egui::Color32::RED, error);
+    }
 
-    if button_large(ui, "Continue").clicked() {
-        if state.coowner_pubkeys.trim().is_empty() {
-            state.error = Some("Please paste or load the co-owner's key data".to_string());
-        } else {
+        ui.add_space(Spacing::XL);
+
+        let continue_response = button_large(ui, "Continue");
+        let continue_keyboard = continue_response.has_focus() 
+            && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
+        if continue_response.clicked() || continue_keyboard {
+            if state.coowner_pubkeys.trim().is_empty() {
+                state.error = Some("Please scan, paste, or load the co-owner's key data".to_string());
+            } else {
             // Validate the keys by decoding as CoownerKeys
             match bitvault_common::ur::decode_qr_data::<bitvault_common::derivation::CoownerKeys>(&state.coowner_pubkeys) {
                 Ok(keys) => {
@@ -457,7 +838,14 @@ pub fn render_scan_coowner_keys(ui: &mut egui::Ui, state: &mut VaultCreationStat
     }
 
     ui.add_space(Spacing::MD);
-    if ui.button("← Back").clicked() {
+    if button(ui, "← Back", ButtonStyle::Text).clicked() {
+        // Stop camera if scanning
+        if state.is_scanning_qr {
+            if let Some(ref mut camera) = state.camera_capture {
+                camera.stop_capture();
+            }
+            state.is_scanning_qr = false;
+        }
         state.go_to_previous_step();
     }
 }
@@ -500,23 +888,67 @@ pub fn render_display_own_keys(ui: &mut egui::Ui, ctx: &egui::Context, state: &m
         }
 
         // Copy button
-        if ui.button("Copy Key Data").clicked() {
+        if button(ui, "Copy Key Data", ButtonStyle::Secondary).clicked() {
             ui.ctx().copy_text(keys_text.clone());
         }
 
         ui.add_space(Spacing::SM);
 
-        // Save to file
-        if ui.button("Save to File").clicked() {
+        // Save to file (encrypted)
+        if button(ui, "Save to File", ButtonStyle::Secondary).clicked() {
             if let Some(path) = rfd::FileDialog::new()
                 .set_file_name("coowner_keys.txt")
                 .save_file()
             {
-                if let Err(e) = std::fs::write(&path, keys_text) {
-                    state.error = Some(format!("Failed to save file: {}", e));
+                // Parse keys from text
+                match bitvault_common::ur::decode_qr_data::<bitvault_common::derivation::CoownerKeys>(keys_text) {
+                    Ok(coowner_keys) => {
+                        // Encrypt and sign (generate signing key if not already stored)
+                        let signing_key_opt = state.signing_secret_key.as_ref();
+                        match key_exchange::encrypt_coowner_keys(&coowner_keys, signing_key_opt) {
+                            Ok((encrypted_file, signing_key)) => {
+                                // Store signing key for File 2 decryption
+                                state.signing_secret_key = Some(signing_key);
+                                
+                                // Serialize encrypted file to JSON
+                                match serde_json::to_string_pretty(&encrypted_file) {
+                                    Ok(json) => {
+                                        match std::fs::write(&path, json) {
+                                            Ok(()) => {
+                                                state.saved_key_file = Some(path.clone());
+                                                state.error = None;
+                                                ui.ctx().output_mut(|o| {
+                                                    o.copied_text = format!("Saved to: {}", path.display());
+                                                });
+                                            }
+                                            Err(e) => {
+                                                state.error = Some(format!("Failed to save file: {}", e));
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        state.error = Some(format!("Failed to serialize encrypted file: {}", e));
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                state.error = Some(format!("Failed to encrypt keys: {}", e));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        state.error = Some(format!("Failed to parse keys: {}", e));
+                    }
                 }
             }
         }
+        
+        // Security warning
+        ui.add_space(Spacing::SM);
+        ui.colored_label(
+            egui::Color32::from_rgb(255, 200, 0),
+            "⚠ Security: This file contains sensitive cryptographic keys. Delete it after use."
+        );
 
         ui.add_space(Spacing::MD);
 
@@ -524,9 +956,38 @@ pub fn render_display_own_keys(ui: &mut egui::Ui, ctx: &egui::Context, state: &m
         ui.collapsing("Show Key Data", |ui| {
             ui.monospace(keys_text);
         });
+        
+        // Offer secure deletion if file was saved
+        if let Some(ref file_path) = state.saved_key_file {
+            if file_path.exists() {
+                ui.add_space(Spacing::MD);
+                let file_path_clone = file_path.clone();
+                ui.horizontal(|ui| {
+                    ui.label(format!("Saved file: {}", file_path_clone.display()));
+                    if button(ui, "🗑️ Delete", ButtonStyle::Danger).clicked() {
+                        match secure_delete_file(&file_path_clone) {
+                            Ok(()) => {
+                                state.saved_key_file = None;
+                                ui.ctx().output_mut(|o| {
+                                    o.copied_text = "File securely deleted".to_string();
+                                });
+                            }
+                            Err(e) => {
+                                state.error = Some(format!("Failed to delete file: {}", e));
+                            }
+                        }
+                    }
+                });
+            }
+        }
     }
 
     ui.add_space(Spacing::XL);
+    
+    ui.colored_label(
+        egui::Color32::from_rgb(100, 149, 237),
+        "💡 Tip: Wait for the main device to scan your keys before continuing."
+    );
 
     if button_large(ui, "I've Shared My Keys").clicked() {
         if let Some(next) = state.next_step_for_role() {
@@ -535,39 +996,145 @@ pub fn render_display_own_keys(ui: &mut egui::Ui, ctx: &egui::Context, state: &m
     }
 
     ui.add_space(Spacing::MD);
-    if ui.button("← Back").clicked() {
+    if button(ui, "← Back", ButtonStyle::Text).clicked() {
         state.go_to_previous_step();
     }
 }
 
 /// Co-owner device: Enter exchange data from main device
-pub fn render_enter_exchange_data(ui: &mut egui::Ui, state: &mut VaultCreationState) {
+pub fn render_enter_exchange_data(ui: &mut egui::Ui, ctx: &egui::Context, state: &mut VaultCreationState) {
     ui.heading("Enter Vault Configuration");
     ui.add_space(Spacing::MD);
 
     ui.label("The main device owner will share the vault configuration with you");
-    ui.label("after they create the vault. Paste it below.");
+    ui.label("after they create the vault. Scan the QR code or paste it below.");
     ui.add_space(Spacing::LG);
 
-    ui.label("Paste vault configuration:");
+    // Webcam scanning option
+    ui.horizontal(|ui| {
+        if state.is_scanning_qr {
+            if button(ui, "Stop Scanning", ButtonStyle::Secondary).clicked() {
+                if let Some(ref mut camera) = state.camera_capture {
+                    camera.stop_capture();
+                }
+                state.is_scanning_qr = false;
+            }
+        } else {
+            if button(ui, "📷 Scan QR Code", ButtonStyle::Secondary).clicked() {
+                let mut camera = crate::utils::camera::CameraCapture::new();
+                match camera.start_capture() {
+                    Ok(()) => {
+                        state.camera_capture = Some(camera);
+                        state.is_scanning_qr = true;
+                        state.error = None;
+                    }
+                    Err(e) => {
+                        state.error = Some(format!("Failed to start camera: {}", e));
+                    }
+                }
+            }
+        }
+    });
+
+    // Show camera preview and scan
+    if state.is_scanning_qr {
+        if let Some(ref mut camera) = state.camera_capture {
+            if let Some(texture) = camera.capture_frame(ctx) {
+                ui.add_space(Spacing::MD);
+                ui.image((texture.id(), egui::Vec2::new(400.0, 300.0)));
+                ui.add_space(Spacing::SM);
+                ui.label("Point camera at QR code");
+                
+                // Try to scan QR from current frame
+                match camera.scan_qr_from_frame() {
+                    Ok(qr_data) => {
+                        // Validate it's exchange data
+                        match bitvault_common::ur::decode_qr_data::<bitvault_common::ur::QrExchangeData>(&qr_data) {
+                            Ok(_) => {
+                                state.exchange_data_input = qr_data;
+                                camera.stop_capture();
+                                state.camera_capture = None;
+                                state.is_scanning_qr = false;
+                                state.error = None;
+                                // Auto-validate and continue
+                                if let Some(next) = state.next_step_for_role() {
+                                    state.advance_to_step(next);
+                                }
+                                return;
+                            }
+                            Err(_) => {
+                                // Not valid exchange data, keep scanning
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // No QR code detected yet, keep scanning
+                    }
+                }
+            }
+        }
+    }
+
+    ui.add_space(Spacing::MD);
+    ui.separator();
+    ui.add_space(Spacing::MD);
+
+    ui.label("Or paste vault configuration:");
     ui.add_space(Spacing::SM);
 
-    ui.add(egui::TextEdit::multiline(&mut state.exchange_data_input)
+    let exchange_data_response = ui.add(egui::TextEdit::multiline(&mut state.exchange_data_input)
         .hint_text("Paste the configuration data here...")
         .desired_width(400.0)
         .desired_rows(4));
+    
+    // Auto-focus on step change
+    if state.step_just_changed(VaultCreationStep::EnterExchangeData) {
+        exchange_data_response.request_focus();
+    }
 
     ui.add_space(Spacing::MD);
 
-    if ui.button("Load from File").clicked() {
+    if button(ui, "Load from File", ButtonStyle::Secondary).clicked() {
         if let Some(path) = rfd::FileDialog::new()
             .add_filter("Text files", &["txt", "json"])
             .pick_file()
         {
             match std::fs::read_to_string(&path) {
                 Ok(contents) => {
-                    state.exchange_data_input = contents.trim().to_string();
-                    state.error = None;
+                    // Try to parse as encrypted file first
+                    match serde_json::from_str::<key_exchange::EncryptedExchangeDataFile>(&contents) {
+                        Ok(encrypted_file) => {
+                            // Decrypt using co-owner's signing private key
+                            if let Some(ref signing_key) = state.signing_secret_key {
+                                match key_exchange::decrypt_exchange_data(&encrypted_file, signing_key) {
+                                    Ok(exchange_data) => {
+                                        // Encode decrypted data back to JSON for display
+                                        match bitvault_common::ur::encode_qr_data(&exchange_data) {
+                                            Ok(exchange_data_text) => {
+                                                state.exchange_data_input = exchange_data_text;
+                                                state.error = None;
+                                                state.saved_exchange_file = Some(path);
+                                            }
+                                            Err(e) => {
+                                                state.error = Some(format!("Failed to encode decrypted data: {}", e));
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        state.error = Some(format!("Failed to decrypt file: {}", e));
+                                    }
+                                }
+                            } else {
+                                state.error = Some("Missing signing key - cannot decrypt file. Please restart the workflow.".to_string());
+                            }
+                        }
+                        Err(_) => {
+                            // Not encrypted, try plain JSON (backward compatibility)
+                            state.exchange_data_input = contents.trim().to_string();
+                            state.error = None;
+                            state.saved_exchange_file = Some(path);
+                        }
+                    }
                 }
                 Err(e) => {
                     state.error = Some(format!("Failed to read file: {}", e));
@@ -575,10 +1142,22 @@ pub fn render_enter_exchange_data(ui: &mut egui::Ui, state: &mut VaultCreationSt
             }
         }
     }
+    
+    // Show warning if file was loaded
+    if state.saved_exchange_file.is_some() && !state.exchange_data_input.is_empty() {
+        ui.add_space(Spacing::SM);
+        ui.colored_label(
+            egui::Color32::from_rgb(255, 200, 0),
+            "⚠ Security: Delete the config file after successful vault creation."
+        );
+    }
 
     ui.add_space(Spacing::XL);
 
-    if button_large(ui, "Continue").clicked() {
+    let continue_response = button_large(ui, "Continue");
+    let continue_keyboard = continue_response.has_focus() 
+        && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
+    if continue_response.clicked() || continue_keyboard {
         if state.exchange_data_input.trim().is_empty() {
             state.error = Some("Please paste or load the vault configuration".to_string());
         } else {
@@ -604,7 +1183,14 @@ pub fn render_enter_exchange_data(ui: &mut egui::Ui, state: &mut VaultCreationSt
     }
 
     ui.add_space(Spacing::MD);
-    if ui.button("← Back").clicked() {
+    if button(ui, "← Back", ButtonStyle::Text).clicked() {
+        // Stop camera if scanning
+        if state.is_scanning_qr {
+            if let Some(ref mut camera) = state.camera_capture {
+                camera.stop_capture();
+            }
+            state.is_scanning_qr = false;
+        }
         state.go_to_previous_step();
     }
 }
@@ -621,14 +1207,20 @@ pub fn render_email_auth(
     ui.label("Enter your email address to verify your identity:");
     ui.add_space(Spacing::MD);
 
-    ui.add(egui::TextEdit::singleline(&mut state.email)
+    let email_response = ui.add(egui::TextEdit::singleline(&mut state.email)
         .hint_text("you@example.com")
-        .desired_width(300.0));
+        .desired_width(300.0)
+        .margin(egui::vec2(8.0, 6.0)));
+    
+    // Handle Enter key to send code
+    let should_send_code = email_response.lost_focus() 
+        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+        && !state.code_sent;
 
     ui.add_space(Spacing::MD);
 
     if !state.code_sent {
-        if ui.button("Send Verification Code").clicked() {
+        if button(ui, "Send Verification Code", ButtonStyle::Secondary).clicked() || should_send_code {
             if state.email.trim().is_empty() || !state.email.contains('@') {
                 state.error = Some("Please enter a valid email address".to_string());
             } else {
@@ -668,13 +1260,26 @@ pub fn render_email_auth(
         ui.label("Enter the verification code:");
         ui.add_space(Spacing::SM);
 
-        ui.add(egui::TextEdit::singleline(&mut state.auth_code)
+        let auth_code_response = ui.add(egui::TextEdit::singleline(&mut state.auth_code)
             .hint_text("123456")
-            .desired_width(150.0));
+            .desired_width(150.0)
+            .margin(egui::vec2(8.0, 6.0)));
+        
+        // Auto-focus on step change (when code is sent)
+        if state.step_just_changed(VaultCreationStep::EmailAuth) && state.code_sent {
+            auth_code_response.request_focus();
+        }
+        
+        // Handle Enter key to verify
+        let should_verify = auth_code_response.lost_focus() 
+            && ui.input(|i| i.key_pressed(egui::Key::Enter));
 
         ui.add_space(Spacing::XL);
 
-        if button_large(ui, "Verify & Continue").clicked() {
+        let verify_response = button_large(ui, "Verify & Continue");
+        let verify_keyboard = verify_response.has_focus() 
+            && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
+        if verify_response.clicked() || should_verify || verify_keyboard {
             if state.auth_code.trim().is_empty() {
                 state.error = Some("Please enter the verification code".to_string());
             } else {
@@ -687,7 +1292,7 @@ pub fn render_email_auth(
     }
 
     ui.add_space(Spacing::MD);
-    if ui.button("← Back").clicked() {
+    if button(ui, "← Back", ButtonStyle::Text).clicked() {
         state.code_sent = false;
         state.auth_code.clear();
         state.go_to_previous_step();
@@ -725,7 +1330,10 @@ pub fn render_create_vault(
 
     ui.add_space(Spacing::XL);
 
-    if button_large(ui, action_text).clicked() {
+    let create_response = button_large(ui, action_text);
+    let create_keyboard = create_response.has_focus() 
+        && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
+    if create_response.clicked() || create_keyboard {
         state.is_creating = true;
         state.error = None;
 
@@ -804,6 +1412,9 @@ pub fn render_create_vault(
                         handler.fetch_address();
                     }
 
+                    // Clear sensitive data (mnemonic) from memory now that vault is created
+                    state.clear_sensitive_data();
+                    
                     state.is_creating = false;
                     
                     // Main device shows exchange data, co-owner goes to completed
@@ -826,7 +1437,7 @@ pub fn render_create_vault(
     }
 
     ui.add_space(Spacing::MD);
-    if ui.button("← Back").clicked() {
+    if button(ui, "← Back", ButtonStyle::Text).clicked() {
         state.go_to_previous_step();
     }
 }
@@ -850,19 +1461,95 @@ pub fn render_display_exchange_data(ui: &mut egui::Ui, ctx: &egui::Context, stat
             ui.add_space(Spacing::MD);
         }
 
-        if ui.button("Copy Configuration").clicked() {
+        if button(ui, "Copy Configuration", ButtonStyle::Secondary).clicked() {
             ui.ctx().copy_text(exchange_data.clone());
         }
 
         ui.add_space(Spacing::SM);
 
-        if ui.button("Save to File").clicked() {
+        if button(ui, "Save to File", ButtonStyle::Secondary).clicked() {
             if let Some(path) = rfd::FileDialog::new()
                 .set_file_name("vault_config.txt")
                 .save_file()
             {
-                if let Err(e) = std::fs::write(&path, exchange_data) {
-                    state.error = Some(format!("Failed to save file: {}", e));
+                // Parse exchange data from JSON
+                match bitvault_common::ur::decode_qr_data::<bitvault_common::ur::QrExchangeData>(exchange_data) {
+                    Ok(exchange_data_struct) => {
+                        // Encrypt with ECDH using co-owner's public key from File 1
+                        if let Some(ref recipient_pubkey) = state.recipient_public_key {
+                            match key_exchange::encrypt_exchange_data(&exchange_data_struct, recipient_pubkey) {
+                                Ok(encrypted_file) => {
+                                    // Serialize encrypted file to JSON
+                                    match serde_json::to_string_pretty(&encrypted_file) {
+                                        Ok(json) => {
+                                            match std::fs::write(&path, json) {
+                                                Ok(()) => {
+                                                    state.saved_exchange_file = Some(path.clone());
+                                                    state.error = None;
+                                                    ui.ctx().output_mut(|o| {
+                                                        o.copied_text = format!("Saved to: {}", path.display());
+                                                    });
+                                                }
+                                                Err(e) => {
+                                                    state.error = Some(format!("Failed to save file: {}", e));
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            state.error = Some(format!("Failed to serialize encrypted file: {}", e));
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    state.error = Some(format!("Failed to encrypt exchange data: {}", e));
+                                }
+                            }
+                        } else {
+                            // No recipient public key - save as plain JSON (backward compatibility)
+                            match std::fs::write(&path, exchange_data) {
+                                Ok(()) => {
+                                    state.saved_exchange_file = Some(path.clone());
+                                    state.error = None;
+                                    ui.ctx().output_mut(|o| {
+                                        o.copied_text = format!("Saved to: {}", path.display());
+                                    });
+                                }
+                                Err(e) => {
+                                    state.error = Some(format!("Failed to save file: {}", e));
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        state.error = Some(format!("Failed to parse exchange data: {}", e));
+                    }
+                }
+            }
+        }
+        
+        // Security warning
+        ui.add_space(Spacing::SM);
+        ui.colored_label(
+            egui::Color32::from_rgb(255, 200, 0),
+            "⚠ Security: This file contains sensitive vault configuration. Delete it after use."
+        );
+        
+        // Offer secure deletion if file was saved
+        if let Some(ref file_path) = state.saved_exchange_file {
+            if file_path.exists() {
+                ui.add_space(Spacing::SM);
+                if button(ui, "🗑️ Delete Saved File", ButtonStyle::Danger).clicked() {
+                    match secure_delete_file(file_path) {
+                        Ok(()) => {
+                            state.saved_exchange_file = None;
+                        ui.ctx().output_mut(|o| {
+                            o.copied_text = "File securely deleted".to_string();
+                        });
+                        }
+                        Err(e) => {
+                            state.error = Some(format!("Failed to delete file: {}", e));
+                        }
+                    }
                 }
             }
         }
@@ -934,7 +1621,7 @@ pub fn render_scan_descriptor_view_only(
 
     // File load option
     ui.horizontal(|ui| {
-        if ui.button("Load from File").clicked() {
+        if button(ui, "Load from File", ButtonStyle::Secondary).clicked() {
             if let Some(path) = rfd::FileDialog::new()
                 .add_filter("Text/JSON", &["txt", "json"])
                 .pick_file()
@@ -967,7 +1654,7 @@ pub fn render_scan_descriptor_view_only(
     }
 
     ui.add_space(Spacing::MD);
-    if ui.button("← Back").clicked() {
+    if button(ui, "← Back", ButtonStyle::Text).clicked() {
         state.go_to_previous_step();
     }
 }
@@ -1047,8 +1734,15 @@ pub fn render_view_only_complete(
                             handler.fetch_address();
                         }
 
+                        // Clear any sensitive data from memory
+                        state.clear_sensitive_data();
+
                         state.vault_address = Some(vault_address);
                         state.is_importing = false;
+                        
+                        // Navigate to dashboard
+                        state.advance_to_step(VaultCreationStep::Completed);
+                        navigation.navigate_to(View::Dashboard { tab: 0 });
                     }
                     Err(e) => {
                         state.error = Some(e);
@@ -1068,7 +1762,7 @@ pub fn render_view_only_complete(
     }
 
     ui.add_space(Spacing::MD);
-    if ui.button("← Back").clicked() {
+    if button(ui, "← Back", ButtonStyle::Text).clicked() {
         state.go_to_previous_step();
     }
 }
@@ -1154,7 +1848,7 @@ pub fn render_enter_seed_phrase(
     }
 
     ui.add_space(Spacing::MD);
-    if ui.button("← Back").clicked() {
+    if button(ui, "← Back", ButtonStyle::Text).clicked() {
         state.go_to_previous_step();
     }
 }
@@ -1185,7 +1879,7 @@ pub fn render_scan_descriptor_restore(
 
     // File load option
     ui.horizontal(|ui| {
-        if ui.button("Load from File").clicked() {
+        if button(ui, "Load from File", ButtonStyle::Secondary).clicked() {
             if let Some(path) = rfd::FileDialog::new()
                 .add_filter("Text/JSON", &["txt", "json"])
                 .pick_file()
@@ -1265,6 +1959,9 @@ pub fn render_scan_descriptor_restore(
                         handler.fetch_address();
                     }
 
+                    // Clear sensitive data (seed phrase) from memory now that vault is restored
+                    state.clear_sensitive_data();
+
                     state.vault_address = Some(vault_address);
                     state.is_importing = false;
                     
@@ -1285,7 +1982,7 @@ pub fn render_scan_descriptor_restore(
     }
 
     ui.add_space(Spacing::MD);
-    if ui.button("← Back").clicked() {
+    if button(ui, "← Back", ButtonStyle::Text).clicked() {
         state.go_to_previous_step();
     }
 }

@@ -48,9 +48,18 @@ impl ButtonStyle {
 }
 
 /// Render a styled button with proper padding
+/// Gray buttons (Secondary/Text) are smaller than primary buttons but not tiny
 pub fn button(ui: &mut egui::Ui, text: impl Into<String>, style: ButtonStyle) -> egui::Response {
     let text = text.into();
     let (bg_color, hover_color, text_color) = style.colors(ui.ctx());
+    
+    // Gray buttons (Secondary/Text) should be smaller than primary but not tiny
+    // Primary buttons are 200x44, so gray buttons should be around 140x38
+    let min_size = match style {
+        ButtonStyle::Primary => egui::vec2(200.0, 44.0),
+        ButtonStyle::Secondary | ButtonStyle::Text => egui::vec2(140.0, 38.0),
+        ButtonStyle::Danger | ButtonStyle::Success => egui::vec2(140.0, 38.0),
+    };
     
     let button = egui::Button::new(
         egui::RichText::new(&text)
@@ -58,7 +67,7 @@ pub fn button(ui: &mut egui::Ui, text: impl Into<String>, style: ButtonStyle) ->
             .size(14.0)
     )
     .fill(bg_color)
-    .min_size(egui::vec2(80.0, 32.0)); // Minimum size with padding
+    .min_size(min_size);
     
     let response = ui.add(button);
     
@@ -82,19 +91,43 @@ pub fn button(ui: &mut egui::Ui, text: impl Into<String>, style: ButtonStyle) ->
 pub fn button_large(ui: &mut egui::Ui, text: impl Into<String>) -> egui::Response {
     let text = text.into();
     
-    // Pre-allocate the rect to check hover state
+    // Pre-allocate space for the button
     let desired_size = egui::Vec2::new(200.0, 44.0);
     let (rect, response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
     
+    // Check focus and keyboard input before using response
+    let is_focused = response.has_focus();
+    let keyboard_activated = is_focused 
+        && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
+    
+    // Custom styling with focus indicator
     if ui.is_rect_visible(rect) {
-        let bg_color = if response.hovered() {
+        let bg_color = if is_focused {
+            // Focused: slightly brighter
+            Colors::PRIMARY_DARK
+        } else if response.hovered() || keyboard_activated {
             Colors::PRIMARY_DARK
         } else {
             Colors::PRIMARY
         };
         
         let painter = ui.painter();
+        
+        // Draw focus outline if focused (blue outline)
+        if is_focused {
+            // Draw a 2px outline around the button
+            let outline_rect = rect.expand(2.0);
+            painter.rect_stroke(
+                outline_rect, 
+                8.0, 
+                egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 149, 237))
+            );
+        }
+        
+        // Draw custom background
         painter.rect_filled(rect, 8.0, bg_color);
+        
+        // Draw text
         painter.text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
@@ -104,5 +137,7 @@ pub fn button_large(ui: &mut egui::Ui, text: impl Into<String>) -> egui::Respons
         );
     }
     
+    // Return response, and check for keyboard activation in the calling code
+    // The caller should check: response.clicked() || (response.has_focus() && keyboard_activated)
     response
 }
