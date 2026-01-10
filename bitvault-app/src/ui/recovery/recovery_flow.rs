@@ -6,33 +6,93 @@ use super::utxo_selection::{render_utxo_selection, RecoveryMode, UtxoSelectionSt
 use crate::state::{AppState, Navigation};
 use eframe::egui;
 
-/// Recovery flow state
-#[derive(Default)]
-enum RecoveryState {
-    #[default]
+/// Recovery workflow steps
+#[derive(Debug, Clone, PartialEq)]
+enum RecoveryStep {
     LoadingUtxos,
-    SelectingUtxos(UtxoSelectionState),
-    BuildingPreview {
-        selected_utxos: Vec<String>, // OutPoint as string
-    },
-    PreviewReady {
-        preview: bitvault_common::types::TransactionPreview,
-        psbt_base64: String,
-    },
-    Signing {
-        psbt_base64: String,
-        recipient: String,
-    },
-    Sharing {
-        compressed_psbt: String,
-    },
-    Error(String),
+    SelectingUtxos,
+    BuildingPreview,
+    PreviewReady,
+    Signing,
+    Sharing,
+    Error,
+}
+
+/// Recovery flow state
+struct RecoveryState {
+    current_step: RecoveryStep,
+    step_history: Vec<RecoveryStep>,
+    // Step-specific data
+    selection_state: Option<UtxoSelectionState>,
+    selected_utxos: Vec<String>,
+    preview: Option<bitvault_common::types::TransactionPreview>,
+    psbt_base64: String,
+    recipient: String,
+    compressed_psbt: String,
+    error: Option<String>,
+}
+
+impl Default for RecoveryState {
+    fn default() -> Self {
+        Self {
+            current_step: RecoveryStep::LoadingUtxos,
+            step_history: Vec::new(),
+            selection_state: None,
+            selected_utxos: Vec::new(),
+            preview: None,
+            psbt_base64: String::new(),
+            recipient: String::new(),
+            compressed_psbt: String::new(),
+            error: None,
+        }
+    }
+}
+
+impl RecoveryState {
+    /// Advance to the next step in the workflow
+    fn advance_to_step(&mut self, step: RecoveryStep) {
+        if step != self.current_step {
+            self.step_history.push(self.current_step.clone());
+            self.current_step = step;
+        }
+    }
+
+    /// Go back to the previous step in the workflow
+    /// Returns true if there was a previous step, false if at first step
+    fn go_to_previous_step(&mut self) -> bool {
+        if let Some(previous) = self.step_history.pop() {
+            self.current_step = previous;
+            true
+        } else {
+            false  // At first step
+        }
+    }
+
+    /// Check if we can go back in the workflow
+    fn can_go_back_in_workflow(&self) -> bool {
+        !self.step_history.is_empty()
+    }
 }
 
 // Thread-local state for recovery flow
 thread_local! {
     static RECOVERY_STATE: std::cell::RefCell<RecoveryState> =
         std::cell::RefCell::new(RecoveryState::default());
+}
+
+/// Check if we can go back in the recovery workflow
+pub fn can_go_back_in_recovery_workflow() -> bool {
+    RECOVERY_STATE.with(|state| {
+        state.borrow().can_go_back_in_workflow()
+    })
+}
+
+/// Go back in the recovery workflow
+/// Returns true if there was a previous step, false if at first step
+pub fn go_back_in_recovery_workflow() -> bool {
+    RECOVERY_STATE.with(|state| {
+        state.borrow_mut().go_to_previous_step()
+    })
 }
 
 pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navigation) {
@@ -53,123 +113,88 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
         RECOVERY_STATE.with(|state| {
             let mut state = state.borrow_mut();
 
-            // Use a flag to defer state mutations
-            let mut next_state: Option<RecoveryState> = None;
-
-            match &mut *state {
-                RecoveryState::LoadingUtxos => {
-                    // Defer the load to avoid borrow conflict
-                    next_state = Some(RecoveryState::LoadingUtxos);
+            match state.current_step {
+                RecoveryStep::LoadingUtxos => {
+                    load_old_utxos(ui, app_state, &mut state, false);
                 }
-                RecoveryState::SelectingUtxos(selection_state) => {
-                    render_utxo_selection(ui, selection_state, RecoveryMode::Recovery);
-                    ui.add_space(20.0);
-                    // Buttons - centered
-                    let button_width = 120.0;
-                    let (rect, _) = ui.allocate_exact_size(
-                        egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
-                        egui::Sense::click()
-                    );
-                    let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
-                    if button_ui.button("Cancel").clicked() {
-                        navigation.go_back();
+                RecoveryStep::SelectingUtxos => {
+                    let mut cancel_clicked = false;
+                    let mut continue_clicked = false;
+                    let mut has_selection = false;
+                    
+                    if let Some(ref mut selection_state) = state.selection_state {
+                        render_utxo_selection(ui, selection_state, RecoveryMode::Recovery);
+                        ui.add_space(20.0);
+                        // Buttons - centered
+                        let button_width = 120.0;
+                        let (rect, _) = ui.allocate_exact_size(
+                            egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
+                            egui::Sense::click()
+                        );
+                        let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                        cancel_clicked = button_ui.button("Cancel").clicked();
+                        button_ui.add_space(10.0);
+                        has_selection = selection_state.has_selection();
+                        continue_clicked = button_ui.button("Continue").clicked() && has_selection;
                     }
-                    button_ui.add_space(10.0);
-                    if button_ui.button("Continue").clicked() && selection_state.has_selection() {
-                        let selected: Vec<String> =
-                            selection_state.selected.iter().cloned().collect();
-                        next_state = Some(RecoveryState::BuildingPreview {
-                            selected_utxos: selected,
+                    
+                    // Handle navigation outside the borrow
+                    if cancel_clicked {
+                        // Use step-based navigation for consistency
+                        if !state.go_to_previous_step() {
+                            // At first step, exit workflow
+                            navigation.go_back();
+                        }
+                    }
+                    if continue_clicked {
+                        if let Some(ref selection_state) = state.selection_state {
+                            state.selected_utxos = selection_state.selected.iter().cloned().collect();
+                            state.advance_to_step(RecoveryStep::BuildingPreview);
+                        }
+                    }
+                }
+                RecoveryStep::BuildingPreview => {
+                    ui.label("Building transaction preview...");
+                    build_recovery_preview(ui, app_state, &mut state);
+                }
+                RecoveryStep::PreviewReady => {
+                    if let Some(ref preview) = state.preview {
+                        render_preview(ui, preview);
+                        ui.add_space(20.0);
+                        ui.horizontal(|ui| {
+                            if ui.button("Cancel").clicked() {
+                                state.go_to_previous_step();
+                            }
+                            if ui.button("Sign & Share").clicked() {
+                                // Get recipient address (for now, use vault address)
+                                match app_state.vault_data.lock() {
+                                    Ok(data) => {
+                                        state.recipient = data.receive_address.clone().unwrap_or_default();
+                                        state.advance_to_step(RecoveryStep::Signing);
+                                    }
+                                    Err(_) => {
+                                        state.error = Some("Error: Mutex poisoned".to_string());
+                                        state.advance_to_step(RecoveryStep::Error);
+                                    }
+                                }
+                            }
                         });
                     }
                 }
-                RecoveryState::BuildingPreview { selected_utxos } => {
-                    ui.label("Building transaction preview...");
-                    let selected = selected_utxos.clone();
-                    // Will handle after match
-                    next_state = Some(RecoveryState::BuildingPreview {
-                        selected_utxos: selected,
-                    });
-                }
-                RecoveryState::PreviewReady {
-                    preview,
-                    psbt_base64,
-                } => {
-                    render_preview(ui, preview);
-                    ui.add_space(20.0);
-                    ui.horizontal(|ui| {
-                        if ui.button("Cancel").clicked() {
-                            navigation.go_back();
-                        }
-                        if ui.button("Sign & Share").clicked() {
-                            // Get recipient address (for now, use vault address)
-                            match app_state.vault_data.lock() {
-                                Ok(data) => {
-                                    let recipient =
-                                        data.receive_address.clone().unwrap_or_default();
-                                    next_state = Some(RecoveryState::Signing {
-                                        psbt_base64: psbt_base64.clone(),
-                                        recipient: recipient.clone(),
-                                    });
-                                }
-                                Err(_) => {
-                                    next_state = Some(RecoveryState::Error(
-                                        "Error: Mutex poisoned".to_string(),
-                                    ));
-                                }
-                            }
-                        }
-                    });
-                }
-                RecoveryState::Signing {
-                    psbt_base64,
-                    recipient,
-                } => {
+                RecoveryStep::Signing => {
                     ui.label("Signing transaction...");
-                    let psbt = psbt_base64.clone();
-                    let recip = recipient.clone();
-                    // Will handle after match
-                    next_state = Some(RecoveryState::Signing {
-                        psbt_base64: psbt,
-                        recipient: recip,
-                    });
+                    sign_and_share(ui, app_state, &mut state);
                 }
-                RecoveryState::Sharing { compressed_psbt } => {
-                    render_sharing(ui, app_state, navigation, compressed_psbt);
+                RecoveryStep::Sharing => {
+                    render_sharing(ui, app_state, navigation, &state.compressed_psbt);
                 }
-                RecoveryState::Error(error) => {
-                    ui.colored_label(egui::Color32::RED, error);
-                    ui.add_space(10.0);
-                    if ui.button("Back").clicked() {
-                        navigation.go_back();
-                    }
-                }
-            }
-
-            // Handle deferred state changes and async operations
-            if let Some(new_state) = next_state {
-                match new_state {
-                    RecoveryState::LoadingUtxos => {
-                        load_old_utxos(ui, app_state, &mut state, false);
-                    }
-                    RecoveryState::BuildingPreview { selected_utxos } => {
-                        *state = RecoveryState::BuildingPreview {
-                            selected_utxos: selected_utxos.clone(),
-                        };
-                        build_recovery_preview(ui, app_state, &mut state, selected_utxos);
-                    }
-                    RecoveryState::Signing {
-                        psbt_base64,
-                        recipient,
-                    } => {
-                        *state = RecoveryState::Signing {
-                            psbt_base64: psbt_base64.clone(),
-                            recipient: recipient.clone(),
-                        };
-                        sign_and_share(ui, app_state, &mut state, psbt_base64, recipient);
-                    }
-                    _ => {
-                        *state = new_state;
+                RecoveryStep::Error => {
+                    if let Some(ref error) = state.error {
+                        ui.colored_label(egui::Color32::RED, error);
+                        ui.add_space(10.0);
+                        if ui.button("Back").clicked() {
+                            state.go_to_previous_step();
+                        }
                     }
                 }
             }
@@ -195,14 +220,17 @@ fn load_old_utxos(
             Ok(utxos) => {
                 let mut selection_state = UtxoSelectionState::default();
                 selection_state.utxos = utxos;
-                *state = RecoveryState::SelectingUtxos(selection_state);
+                state.selection_state = Some(selection_state);
+                state.advance_to_step(RecoveryStep::SelectingUtxos);
             }
             Err(e) => {
-                *state = RecoveryState::Error(format!("Failed to load UTXOs: {}", e));
+                state.error = Some(format!("Failed to load UTXOs: {}", e));
+                state.advance_to_step(RecoveryStep::Error);
             }
         }
     } else {
-        *state = RecoveryState::Error("Vault not loaded or runtime not available".to_string());
+        state.error = Some("Vault not loaded or runtime not available".to_string());
+        state.advance_to_step(RecoveryStep::Error);
     }
 }
 
@@ -210,7 +238,6 @@ fn build_recovery_preview(
     _ui: &mut egui::Ui,
     app_state: &mut AppState,
     state: &mut RecoveryState,
-    selected_utxos: Vec<String>,
 ) {
     if let (Some(vault_service), Some(runtime)) =
         (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
@@ -219,22 +246,23 @@ fn build_recovery_preview(
         let recipient = match app_state.vault_data.lock() {
             Ok(data) => data.receive_address.clone().unwrap_or_default(),
             Err(_) => {
-                *state = RecoveryState::Error("Error: Mutex poisoned".to_string());
+                state.error = Some("Error: Mutex poisoned".to_string());
+                state.advance_to_step(RecoveryStep::Error);
                 return;
             }
         };
 
         if recipient.is_empty() {
-            *state = RecoveryState::Error("No recipient address available".to_string());
+            state.error = Some("No recipient address available".to_string());
+            state.advance_to_step(RecoveryStep::Error);
             return;
         }
 
         // Convert OutPoint strings to the format expected by build_transaction_preview
-        // We need to keep the vector alive for the reference
-        let utxos_to_spend: Option<&[String]> = if selected_utxos.is_empty() {
+        let utxos_to_spend: Option<&[String]> = if state.selected_utxos.is_empty() {
             None
         } else {
-            Some(&selected_utxos)
+            Some(&state.selected_utxos)
         };
 
         let result = runtime.block_on(async {
@@ -253,19 +281,19 @@ fn build_recovery_preview(
 
         match result {
             Ok(preview) => {
-                // Extract PSBT from preview (it should be in the preview)
-                let psbt_base64 = preview.psbt.clone();
-                *state = RecoveryState::PreviewReady {
-                    preview,
-                    psbt_base64,
-                };
+                state.preview = Some(preview.clone());
+                state.psbt_base64 = preview.psbt.clone();
+                state.recipient = recipient;
+                state.advance_to_step(RecoveryStep::PreviewReady);
             }
             Err(e) => {
-                *state = RecoveryState::Error(format!("Failed to build preview: {}", e));
+                state.error = Some(format!("Failed to build preview: {}", e));
+                state.advance_to_step(RecoveryStep::Error);
             }
         }
     } else {
-        *state = RecoveryState::Error("Vault not loaded or runtime not available".to_string());
+        state.error = Some("Vault not loaded or runtime not available".to_string());
+        state.advance_to_step(RecoveryStep::Error);
     }
 }
 
@@ -285,12 +313,13 @@ fn sign_and_share(
     _ui: &mut egui::Ui,
     app_state: &mut AppState,
     state: &mut RecoveryState,
-    psbt_base64: String,
-    recipient: String,
 ) {
     if let (Some(vault_service), Some(runtime)) =
         (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
     {
+        let psbt_base64 = state.psbt_base64.clone();
+        let recipient = state.recipient.clone();
+
         let result = runtime.block_on(async {
             let mut vs = vault_service.write().await;
             vs.sign_and_share_recovery_tx(&psbt_base64, &recipient)
@@ -299,14 +328,17 @@ fn sign_and_share(
 
         match result {
             Ok(compressed_psbt) => {
-                *state = RecoveryState::Sharing { compressed_psbt };
+                state.compressed_psbt = compressed_psbt;
+                state.advance_to_step(RecoveryStep::Sharing);
             }
             Err(e) => {
-                *state = RecoveryState::Error(format!("Failed to sign and share: {}", e));
+                state.error = Some(format!("Failed to sign and share: {}", e));
+                state.advance_to_step(RecoveryStep::Error);
             }
         }
     } else {
-        *state = RecoveryState::Error("Vault not loaded or runtime not available".to_string());
+        state.error = Some("Vault not loaded or runtime not available".to_string());
+        state.advance_to_step(RecoveryStep::Error);
     }
 }
 

@@ -10,6 +10,12 @@ eframe = "0.27"
 egui = "0.27"
 egui_extras = { version = "0.27", features = ["svg"] }
 
+# SVG icon rendering
+resvg = "0.37"
+usvg = "0.37"
+tiny-skia = "0.11"
+lazy_static = "1.4"
+
 # Bitcoin - Use directly, no wrappers
 bdk = { workspace = true, features = ["keys-bip39", "sqlite"] }
 bitcoin = { workspace = true }

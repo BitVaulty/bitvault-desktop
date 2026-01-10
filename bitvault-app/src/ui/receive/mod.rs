@@ -6,6 +6,7 @@
 //! - Copy and share buttons
 
 use crate::state::{AppState, Navigation};
+use crate::ui::components::{card, badge, button, button_large, BadgeStyle, ButtonStyle, Colors, Spacing, Typography};
 use crate::utils::qr::generate_qr_image;
 use eframe::egui;
 
@@ -31,23 +32,34 @@ pub fn render(
     navigation: &mut Navigation,
     ctx: &egui::Context,
 ) {
-    ui.vertical_centered(|ui| {
-        ui.add_space(20.0);
+    egui::ScrollArea::vertical().show(ui, |ui| {
+        ui.vertical_centered(|ui| {
+            ui.add_space(Spacing::XL);
 
-        if !app_state.is_vault_loaded() {
-            ui.label("No vault loaded");
-            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                if ui.button("Back").clicked() {
+            if !app_state.is_vault_loaded() {
+                card(ui, |ui| {
+                    ui.label(
+                        Typography::body("No vault loaded")
+                            .color(Colors::text_secondary(ctx))
+                    );
+                });
+                ui.add_space(Spacing::MD);
+                if button(ui, "Back", ButtonStyle::Secondary).clicked() {
                     navigation.go_back();
                 }
-            });
-            return;
-        }
+                return;
+            }
 
-        ui.heading("Receive Bitcoin");
-        ui.add_space(10.0);
-        ui.label("Scan the QR code or copy the address to receive Bitcoin.");
-        ui.add_space(20.0);
+            ui.label(
+                Typography::heading("Receive Bitcoin")
+                    .color(Colors::text_primary(ctx))
+            );
+            ui.add_space(Spacing::SM);
+            ui.label(
+                Typography::body("Scan the QR code or copy the address to receive Bitcoin")
+                    .color(Colors::text_secondary(ctx))
+            );
+            ui.add_space(Spacing::LG);
 
         RECEIVE_STATE.with(|state| {
             let mut state = state.borrow_mut();
@@ -57,71 +69,115 @@ pub fn render(
                 load_address(ui, app_state, &mut state);
             }
 
-            // Show error if any
-            if let Some(ref error) = state.error {
-                ui.colored_label(egui::Color32::RED, error);
-                ui.add_space(10.0);
-            }
-
-            // Show loading indicator
-            if state.is_loading {
-                ui.label("Loading address...");
-                return;
-            }
-
-            // Show address and QR code
-            let address_opt = state.address.clone();
-            let qr_image_opt = state.qr_image.clone();
-            let copied = state.copied;
-
-            if let Some(ref address) = address_opt {
-                // Generate QR code if not already generated
-                if qr_image_opt.is_none() {
-                    if let Some(texture) = generate_qr_image(ctx, address) {
-                        state.qr_image = Some(texture);
-                    }
+                // Show error if any
+                if let Some(ref error) = state.error {
+                    card(ui, |ui| {
+                        ui.label(
+                            Typography::body(error)
+                                .color(Colors::ERROR)
+                        );
+                    });
+                    ui.add_space(Spacing::MD);
                 }
 
-                // Display QR code (re-read after potential update)
-                let qr_texture_opt = state.qr_image.clone();
-                if let Some(ref qr_texture) = qr_texture_opt {
-                    ui.add_space(10.0);
-                    ui.image((qr_texture.id(), egui::Vec2::new(300.0, 300.0)));
-                    ui.add_space(20.0);
+                // Show loading indicator
+                if state.is_loading {
+                    ui.vertical_centered(|ui| {
+                        ui.spinner();
+                        ui.add_space(Spacing::MD);
+                        ui.label(
+                            Typography::body("Loading address...")
+                                .color(Colors::text_secondary(ctx))
+                        );
+                    });
+                    return;
                 }
 
-                // Address section
-                ui.label("BTC deposit address");
-                ui.add_space(5.0);
+                // Show address and QR code
+                let address_opt = state.address.clone();
+                let qr_image_opt = state.qr_image.clone();
+                let copied = state.copied;
 
-                // Address text (selectable)
-                ui.horizontal(|ui| {
-                    ui.label(address);
-                });
-
-                ui.add_space(10.0);
-
-                // Copy button - centered
-                ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                    if copied {
-                        ui.label("✓ Copied to clipboard!");
-                    } else if ui.button("Copy Address").clicked() {
-                        copy_to_clipboard(ui, address);
-                        state.copied = true;
+                if let Some(ref address) = address_opt {
+                    // Generate QR code if not already generated
+                    if qr_image_opt.is_none() {
+                        if let Some(texture) = generate_qr_image(ctx, address) {
+                            state.qr_image = Some(texture);
+                        }
                     }
-                });
 
-                ui.add_space(10.0);
-            } else {
-                ui.label("Failed to load address");
-            }
+                    // QR code card
+                    card(ui, |ui| {
+                        ui.vertical_centered(|ui| {
+                            ui.add_space(Spacing::MD);
+                            
+                            // Display QR code (re-read after potential update)
+                            let qr_texture_opt = state.qr_image.clone();
+                            if let Some(ref qr_texture) = qr_texture_opt {
+                                ui.image((qr_texture.id(), egui::Vec2::new(300.0, 300.0)));
+                            }
+                            
+                            ui.add_space(Spacing::MD);
+                        });
+                    });
 
-            // Back button - centered
-            ui.add_space(20.0);
-            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                if ui.button("Back").clicked() {
+                    ui.add_space(Spacing::LG);
+
+                    // Address card
+                    card(ui, |ui| {
+                        ui.vertical(|ui| {
+                            ui.add_space(Spacing::MD);
+                            
+                            ui.label(
+                                Typography::body("BTC Deposit Address")
+                                    .color(Colors::text_secondary(ctx))
+                            );
+                            ui.add_space(Spacing::SM);
+                            
+                            // Address text (selectable, monospace)
+                            ui.label(
+                                Typography::body(address)
+                                    .color(Colors::text_primary(ctx))
+                                    .monospace()
+                            );
+                            
+                            ui.add_space(Spacing::MD);
+                            
+                            // Copy button
+                            if copied {
+                                ui.vertical_centered(|ui| {
+                                    badge(ui, "✓ Copied to clipboard!", BadgeStyle::Success);
+                                });
+                            } else {
+                                ui.vertical_centered(|ui| {
+                                    if button_large(ui, "Copy Address").clicked() {
+                                        copy_to_clipboard(ui, address);
+                                        state.copied = true;
+                                    }
+                                });
+                            }
+                            
+                            ui.add_space(Spacing::MD);
+                        });
+                    });
+
+                    ui.add_space(Spacing::LG);
+                } else {
+                    card(ui, |ui| {
+                        ui.label(
+                            Typography::body("Failed to load address")
+                                .color(Colors::ERROR)
+                        );
+                    });
+                }
+
+                // Back button - centered
+                ui.add_space(Spacing::MD);
+                if button(ui, "Back", ButtonStyle::Secondary).clicked() {
                     navigation.go_back();
                 }
+                
+                ui.add_space(Spacing::XL);
             });
         });
     });

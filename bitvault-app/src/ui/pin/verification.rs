@@ -238,8 +238,9 @@ fn render_number_button(ui: &mut egui::Ui, num: &str, pin: &mut String) -> bool 
 }
 
 fn render_del_button(ui: &mut egui::Ui, pin: &mut String) -> bool {
+    // DEL button - using emoji/Unicode that should work with default fonts
     let button = ui.add_sized([60.0, 60.0], egui::Button::new(
-        egui::RichText::new("Del").size(20.0)
+        egui::RichText::new("⌫").size(24.0) // Unicode BACKSPACE symbol
     ));
     if button.clicked() {
         pin.pop();

@@ -4,29 +4,87 @@
 
 use super::utxo_selection::{render_utxo_selection, RecoveryMode, UtxoSelectionState};
 use crate::state::{AppState, Navigation};
-use bdk::bitcoin::{OutPoint, Txid};
 use eframe::egui;
-use std::str::FromStr;
+
+/// UTXO refresh workflow steps
+#[derive(Debug, Clone, PartialEq)]
+enum UtxoRefreshStep {
+    LoadingUtxos,
+    SelectingUtxos,
+    Signing,
+    Sharing,
+    Error,
+}
 
 /// UTXO refresh flow state
-#[derive(Default)]
-enum UtxoRefreshState {
-    #[default]
-    LoadingUtxos,
-    SelectingUtxos(UtxoSelectionState),
-    Signing {
-        psbt_base64: String,
-    },
-    Sharing {
-        compressed_psbt: String,
-    },
-    Error(String),
+struct UtxoRefreshState {
+    current_step: UtxoRefreshStep,
+    step_history: Vec<UtxoRefreshStep>,
+    // Step-specific data
+    selection_state: Option<UtxoSelectionState>,
+    psbt_base64: String,
+    compressed_psbt: String,
+    error: Option<String>,
+}
+
+impl Default for UtxoRefreshState {
+    fn default() -> Self {
+        Self {
+            current_step: UtxoRefreshStep::LoadingUtxos,
+            step_history: Vec::new(),
+            selection_state: None,
+            psbt_base64: String::new(),
+            compressed_psbt: String::new(),
+            error: None,
+        }
+    }
+}
+
+impl UtxoRefreshState {
+    /// Advance to the next step in the workflow
+    fn advance_to_step(&mut self, step: UtxoRefreshStep) {
+        if step != self.current_step {
+            self.step_history.push(self.current_step.clone());
+            self.current_step = step;
+        }
+    }
+
+    /// Go back to the previous step in the workflow
+    /// Returns true if there was a previous step, false if at first step
+    fn go_to_previous_step(&mut self) -> bool {
+        if let Some(previous) = self.step_history.pop() {
+            self.current_step = previous;
+            true
+        } else {
+            false  // At first step
+        }
+    }
+
+    /// Check if we can go back in the workflow
+    fn can_go_back_in_workflow(&self) -> bool {
+        !self.step_history.is_empty()
+    }
 }
 
 // Thread-local state for UTXO refresh flow
 thread_local! {
     static REFRESH_STATE: std::cell::RefCell<UtxoRefreshState> =
         std::cell::RefCell::new(UtxoRefreshState::default());
+}
+
+/// Check if we can go back in the UTXO refresh workflow
+pub fn can_go_back_in_utxo_refresh_workflow() -> bool {
+    REFRESH_STATE.with(|state| {
+        state.borrow().can_go_back_in_workflow()
+    })
+}
+
+/// Go back in the UTXO refresh workflow
+/// Returns true if there was a previous step, false if at first step
+pub fn go_back_in_utxo_refresh_workflow() -> bool {
+    REFRESH_STATE.with(|state| {
+        state.borrow_mut().go_to_previous_step()
+    })
 }
 
 pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navigation) {
@@ -47,45 +105,53 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
         REFRESH_STATE.with(|state_ref| {
             let mut state = state_ref.borrow_mut();
 
-            match &mut *state {
-                UtxoRefreshState::LoadingUtxos => {
+            match state.current_step {
+                UtxoRefreshStep::LoadingUtxos => {
                     load_old_utxos(ui, app_state, &mut state, true);
                 }
-                UtxoRefreshState::SelectingUtxos(selection_state) => {
-                    let selection_state_clone = selection_state.clone();
-                    render_utxo_selection(ui, selection_state, RecoveryMode::Refresh);
-                    ui.add_space(20.0);
-                    ui.horizontal(|ui| {
-                        if ui.button("Cancel").clicked() {
+                UtxoRefreshStep::SelectingUtxos => {
+                    let mut cancel_clicked = false;
+                    let mut continue_clicked = false;
+                    let mut has_selection = false;
+                    
+                    if let Some(ref mut selection_state) = state.selection_state {
+                        has_selection = selection_state.has_selection();
+                        render_utxo_selection(ui, selection_state, RecoveryMode::Refresh);
+                        ui.add_space(20.0);
+                        ui.horizontal(|ui| {
+                            cancel_clicked = ui.button("Cancel").clicked();
+                            continue_clicked = ui.button("Continue").clicked() && has_selection;
+                        });
+                    }
+                    
+                    // Handle navigation outside the borrow
+                    if cancel_clicked {
+                        // Use step-based navigation for consistency
+                        if !state.go_to_previous_step() {
+                            // At first step, exit workflow
                             navigation.go_back();
                         }
-                        if ui.button("Continue").clicked() && selection_state_clone.has_selection()
-                        {
-                            // Build refresh transaction with selected UTXOs
-                            // Use a temporary variable to avoid borrow conflicts
-                            let next_state =
-                                build_refresh_transaction_state(app_state, &selection_state_clone);
-                            *state = next_state;
-                        }
-                    });
+                    }
+                    if continue_clicked {
+                        build_refresh_transaction(ui, app_state, &mut state);
+                    }
                 }
-                UtxoRefreshState::Signing { psbt_base64 } => {
-                    let psbt_clone = psbt_base64.clone();
-                    // Use a temporary variable to avoid borrow conflicts
-                    let next_state = sign_refresh_transaction_state(app_state, &psbt_clone);
-                    *state = next_state;
+                UtxoRefreshStep::Signing => {
+                    sign_refresh_transaction(ui, app_state, &mut state);
                 }
-                UtxoRefreshState::Sharing { compressed_psbt } => {
-                    render_sharing(ui, app_state, navigation, compressed_psbt);
+                UtxoRefreshStep::Sharing => {
+                    render_sharing(ui, app_state, navigation, &state.compressed_psbt);
                 }
-                UtxoRefreshState::Error(error) => {
-                    ui.colored_label(egui::Color32::RED, error);
-                    ui.add_space(10.0);
-                    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                        if ui.button("Back").clicked() {
-                            navigation.go_back();
-                        }
-                    });
+                UtxoRefreshStep::Error => {
+                    if let Some(ref error) = state.error {
+                        ui.colored_label(egui::Color32::RED, error);
+                        ui.add_space(10.0);
+                        ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                            if ui.button("Back").clicked() {
+                                state.go_to_previous_step();
+                            }
+                        });
+                    }
                 }
             }
         });
@@ -110,21 +176,25 @@ fn load_old_utxos(
             Ok(utxos) => {
                 let mut selection_state = UtxoSelectionState::default();
                 selection_state.utxos = utxos;
-                *state = UtxoRefreshState::SelectingUtxos(selection_state);
+                state.selection_state = Some(selection_state);
+                state.advance_to_step(UtxoRefreshStep::SelectingUtxos);
             }
             Err(e) => {
-                *state = UtxoRefreshState::Error(format!("Failed to load UTXOs: {}", e));
+                state.error = Some(format!("Failed to load UTXOs: {}", e));
+                state.advance_to_step(UtxoRefreshStep::Error);
             }
         }
     } else {
-        *state = UtxoRefreshState::Error("Vault not loaded or runtime not available".to_string());
+        state.error = Some("Vault not loaded or runtime not available".to_string());
+        state.advance_to_step(UtxoRefreshStep::Error);
     }
 }
 
-fn build_refresh_transaction_state(
+fn build_refresh_transaction(
+    _ui: &mut egui::Ui,
     app_state: &mut AppState,
-    selection_state: &UtxoSelectionState,
-) -> UtxoRefreshState {
+    state: &mut UtxoRefreshState,
+) {
     if let (Some(vault_service), Some(runtime)) =
         (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
     {
@@ -132,18 +202,32 @@ fn build_refresh_transaction_state(
         let vault_address = match app_state.vault_data.lock() {
             Ok(data) => data.receive_address.clone().unwrap_or_default(),
             Err(_) => {
-                return UtxoRefreshState::Error("Failed to get vault address".to_string());
+                state.error = Some("Failed to get vault address".to_string());
+                state.advance_to_step(UtxoRefreshStep::Error);
+                return;
             }
         };
 
         if vault_address.is_empty() {
-            return UtxoRefreshState::Error("Vault address not available".to_string());
+            state.error = Some("Vault address not available".to_string());
+            state.advance_to_step(UtxoRefreshStep::Error);
+            return;
         }
 
+        // Get selected UTXOs from selection state
+        let selected_utxos: Vec<String> = if let Some(ref selection_state) = state.selection_state {
+            selection_state.selected.iter().cloned().collect()
+        } else {
+            state.error = Some("No UTXOs selected".to_string());
+            state.advance_to_step(UtxoRefreshStep::Error);
+            return;
+        };
+
         // Convert selected outpoints from strings to OutPoint
-        // Note: OutPoint and Txid are already imported at the top
-        let utxos_to_spend: Result<Vec<OutPoint>, _> = selection_state
-            .selected
+        use bdk::bitcoin::{OutPoint, Txid};
+        use std::str::FromStr;
+        
+        let utxos_to_spend: Result<Vec<OutPoint>, _> = selected_utxos
             .iter()
             .map(|outpoint_str| {
                 // Format: "txid:vout"
@@ -159,18 +243,17 @@ fn build_refresh_transaction_state(
             })
             .collect();
 
-        let utxos_to_spend = match utxos_to_spend {
+        let _utxos_to_spend = match utxos_to_spend {
             Ok(utxos) => utxos,
             Err(e) => {
-                return UtxoRefreshState::Error(e);
+                state.error = Some(e);
+                state.advance_to_step(UtxoRefreshStep::Error);
+                return;
             }
         };
 
         // Convert OutPoints to strings for the API
-        let utxo_strings: Vec<String> = utxos_to_spend
-            .iter()
-            .map(|op| format!("{}:{}", op.txid, op.vout))
-            .collect();
+        let utxo_strings: Vec<String> = selected_utxos;
 
         // Build transaction preview (refresh = send max to self, with selected UTXOs)
         let result = runtime.block_on(async {
@@ -190,19 +273,25 @@ fn build_refresh_transaction_state(
         match result {
             Ok(preview) => {
                 // Sign and share the refresh transaction
-                let psbt_base64 = preview.psbt.clone();
-                UtxoRefreshState::Signing { psbt_base64 }
+                state.psbt_base64 = preview.psbt.clone();
+                state.advance_to_step(UtxoRefreshStep::Signing);
             }
             Err(e) => {
-                UtxoRefreshState::Error(format!("Failed to build refresh transaction: {}", e))
+                state.error = Some(format!("Failed to build refresh transaction: {}", e));
+                state.advance_to_step(UtxoRefreshStep::Error);
             }
         }
     } else {
-        UtxoRefreshState::Error("Vault not loaded or runtime not available".to_string())
+        state.error = Some("Vault not loaded or runtime not available".to_string());
+        state.advance_to_step(UtxoRefreshStep::Error);
     }
 }
 
-fn sign_refresh_transaction_state(app_state: &mut AppState, psbt_base64: &str) -> UtxoRefreshState {
+fn sign_refresh_transaction(
+    _ui: &mut egui::Ui,
+    app_state: &mut AppState,
+    state: &mut UtxoRefreshState,
+) {
     if let (Some(vault_service), Some(runtime)) =
         (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
     {
@@ -210,41 +299,41 @@ fn sign_refresh_transaction_state(app_state: &mut AppState, psbt_base64: &str) -
         let vault_address = match app_state.vault_data.lock() {
             Ok(data) => data.receive_address.clone().unwrap_or_default(),
             Err(_) => {
-                return UtxoRefreshState::Error("Failed to get vault address".to_string());
+                state.error = Some("Failed to get vault address".to_string());
+                state.advance_to_step(UtxoRefreshStep::Error);
+                return;
             }
         };
 
         if vault_address.is_empty() {
-            return UtxoRefreshState::Error("Vault address not available".to_string());
+            state.error = Some("Vault address not available".to_string());
+            state.advance_to_step(UtxoRefreshStep::Error);
+            return;
         }
+
+        let psbt_base64 = state.psbt_base64.clone();
 
         // Sign and compress PSBT for sharing
         let result = runtime.block_on(async {
             let mut vs = vault_service.write().await;
-            vs.sign_and_share_recovery_tx(psbt_base64, &vault_address)
+            vs.sign_and_share_recovery_tx(&psbt_base64, &vault_address)
                 .await
         });
 
         match result {
-            Ok(compressed_psbt) => UtxoRefreshState::Sharing { compressed_psbt },
-            Err(e) => UtxoRefreshState::Error(format!("Failed to sign refresh transaction: {}", e)),
+            Ok(compressed_psbt) => {
+                state.compressed_psbt = compressed_psbt;
+                state.advance_to_step(UtxoRefreshStep::Sharing);
+            }
+            Err(e) => {
+                state.error = Some(format!("Failed to sign refresh transaction: {}", e));
+                state.advance_to_step(UtxoRefreshStep::Error);
+            }
         }
     } else {
-        UtxoRefreshState::Error("Vault not loaded or runtime not available".to_string())
+        state.error = Some("Vault not loaded or runtime not available".to_string());
+        state.advance_to_step(UtxoRefreshStep::Error);
     }
-}
-
-fn sign_refresh_transaction(
-    ui: &mut egui::Ui,
-    app_state: &mut AppState,
-    state: &mut UtxoRefreshState,
-    psbt_base64: &str,
-) {
-    ui.label("Signing refresh transaction...");
-    ui.spinner();
-
-    let next_state = sign_refresh_transaction_state(app_state, psbt_base64);
-    *state = next_state;
 }
 
 fn render_sharing(

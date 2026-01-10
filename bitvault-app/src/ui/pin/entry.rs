@@ -6,56 +6,6 @@
 use crate::services::biometric_service::{BiometricResult, BiometricService};
 use bitvault_common::PinService;
 use eframe::egui;
-use std::path::PathBuf;
-
-/// Load the BitVault logo for display
-fn load_bitvault_logo(ctx: &egui::Context) -> Option<egui::TextureHandle> {
-    let mut possible_paths = vec![
-        // Relative to workspace root
-        PathBuf::from("bitvault-desktop/bitvault-app/resources/bitvault_logo.png"),
-        PathBuf::from("bitvault-desktop/bitvault-app/resources/bitvault_logo.svg"),
-        // Relative to current working directory
-        PathBuf::from("resources/bitvault_logo.png"),
-        PathBuf::from("resources/bitvault_logo.svg"),
-        PathBuf::from("bitvault-app/resources/bitvault_logo.png"),
-        PathBuf::from("bitvault-app/resources/bitvault_logo.svg"),
-    ];
-    
-    // Add executable-relative paths
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            // Try resources next to executable
-            possible_paths.push(exe_dir.join("resources/bitvault_logo.png"));
-            possible_paths.push(exe_dir.join("resources/bitvault_logo.svg"));
-            
-            // If we're in target/release, go up to find bitvault-app/resources
-            let mut current = exe_dir;
-            while let Some(parent) = current.parent() {
-                // Check if we're in the bitvault-desktop directory structure
-                let bitvault_app_resources = parent.join("bitvault-app/resources/bitvault_logo.png");
-                if bitvault_app_resources.exists() {
-                    possible_paths.push(bitvault_app_resources.clone());
-                    possible_paths.push(parent.join("bitvault-app/resources/bitvault_logo.svg"));
-                    break;
-                }
-                // Stop if we've gone too far up (reached root or workspace)
-                if parent == current || !parent.exists() {
-                    break;
-                }
-                current = parent;
-            }
-        }
-    }
-    
-    for path in possible_paths.iter() {
-        if path.exists() {
-            if let Some(texture) = crate::utils::images::load_image_texture(ctx, path) {
-                return Some(texture);
-            }
-        }
-    }
-    None
-}
 
 /// State for PIN entry
 pub struct PinEntryState {
@@ -166,20 +116,6 @@ pub fn render_pin_entry(
     // }
 
     ui.vertical_centered(|ui| {
-        // Display BitVault logo
-        if let Some(logo_texture) = load_bitvault_logo(_ctx) {
-            let logo_size = 200.0; // Size for the bigger logo
-            let texture_size = logo_texture.size_vec2();
-            let aspect_ratio = texture_size.y / texture_size.x;
-            // Use Image widget - bg_fill(TRANSPARENT) makes the image background transparent
-            // The panel behind will show through, matching the app theme
-            ui.add(
-                egui::Image::from_texture((logo_texture.id(), egui::Vec2::new(logo_size, logo_size * aspect_ratio)))
-                    .bg_fill(egui::Color32::TRANSPARENT)
-            );
-            ui.add_space(20.0);
-        }
-        
         ui.heading("Enter PIN");
         ui.add_space(20.0);
 
@@ -279,39 +215,88 @@ pub fn render_pin_entry(
 
             // Validate PIN asynchronously
             let pin_service = PinService::new();
-            match pin_service.validate_pin(&pin_clone) {
-                Ok(true) => {
-                    // PIN is valid
-                    state.clear();
-                    pin_validated = true;
-                }
-                Ok(false) => {
-                    // PIN is invalid
-                    state.error = Some("Invalid PIN. Please try again.".to_string());
-                    state.pin.clear();
-                    state.is_validating = false;
-                }
-                Err(e) => {
-                    // Handle rate limiting error specifically
-                    let error_msg = match &e {
-                        bitvault_common::PinServiceError::RateLimited(seconds) => {
-                            let minutes = seconds / 60;
-                            format!(
-                                "Too many failed attempts. Please try again in {} minute(s).",
-                                minutes
-                            )
-                        }
-                        _ => format!("Error validating PIN: {}", e),
-                    };
-                    state.error = Some(error_msg);
-                    state.pin.clear();
-                    state.is_validating = false;
+            
+            // Check if PIN exists first
+            if !pin_service.has_pin() {
+                eprintln!("[PIN] No PIN set, but user entered PIN. This shouldn't happen.");
+                state.error = Some("No PIN is set. Please set up a PIN first.".to_string());
+                state.pin.clear();
+                state.is_validating = false;
+            } else {
+                eprintln!("[PIN] Attempting to validate PIN...");
+                match pin_service.validate_pin(&pin_clone) {
+                    Ok(true) => {
+                        // PIN is valid
+                        state.clear();
+                        pin_validated = true;
+                    }
+                    Ok(false) => {
+                        // PIN is invalid
+                        state.error = Some("Invalid PIN. Please try again.".to_string());
+                        state.pin.clear();
+                        state.is_validating = false;
+                    }
+                    Err(e) => {
+                        // Handle errors with better messages
+                        let error_msg = match &e {
+                            bitvault_common::PinServiceError::RateLimited(seconds) => {
+                                let minutes = seconds / 60;
+                                format!(
+                                    "Too many failed attempts. Please try again in {} minute(s).",
+                                    minutes
+                                )
+                            }
+                            bitvault_common::PinServiceError::DecryptionFailed => {
+                                eprintln!("[PIN_ERROR] Decryption failed - encryption key may be missing or wrong");
+                                format!("Decryption failed. The encryption key may be missing or corrupted. Click 'Reset PIN' below to delete the corrupted PIN and start fresh.")
+                            }
+                            bitvault_common::PinServiceError::PinNotFound => {
+                                eprintln!("[PIN_ERROR] PIN not found in storage");
+                                "No PIN is set. Please set up a PIN first.".to_string()
+                            }
+                            _ => {
+                                eprintln!("[PIN_ERROR] Validation error: {:?}", e);
+                                format!("Error validating PIN: {}", e)
+                            }
+                        };
+                        state.error = Some(error_msg);
+                        state.pin.clear();
+                        state.is_validating = false;
+                    }
                 }
             }
         }
 
         if state.is_validating {
             ui.label("Validating...");
+        }
+
+        // Show reset PIN option if there's a decryption error
+        if let Some(ref error) = state.error {
+            if error.contains("Decryption failed") {
+                ui.add_space(20.0);
+                ui.separator();
+                ui.add_space(10.0);
+                ui.colored_label(
+                    egui::Color32::YELLOW,
+                    "If you cannot recover your encryption key, you can reset your PIN:"
+                );
+                ui.add_space(10.0);
+                if ui.button("Reset PIN (Delete Corrupted PIN)").clicked() {
+                    let pin_service = PinService::new();
+                    match pin_service.delete_pin() {
+                        Ok(_) => {
+                            eprintln!("[PIN_RESET] PIN successfully deleted from PIN entry screen");
+                            state.clear();
+                            pin_validated = true; // Allow user to proceed
+                        }
+                        Err(e) => {
+                            state.error = Some(format!("Failed to reset PIN: {}", e));
+                            eprintln!("[PIN_RESET] Failed to delete PIN: {:?}", e);
+                        }
+                    }
+                }
+            }
         }
     });
 
@@ -328,8 +313,10 @@ fn render_number_button(ui: &mut egui::Ui, num: &str, pin: &mut String) {
 }
 
 fn render_del_button(ui: &mut egui::Ui, pin: &mut String) {
+    // DEL button - using emoji/Unicode that should work with default fonts
+    // Try backspace emoji or arrow - fallback to text if not supported
     let button = ui.add_sized([60.0, 60.0], egui::Button::new(
-        egui::RichText::new("Del").size(20.0)
+        egui::RichText::new("⌫").size(24.0) // Unicode BACKSPACE symbol
     ));
     if button.clicked() {
         pin.pop();

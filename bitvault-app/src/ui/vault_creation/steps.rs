@@ -1,398 +1,640 @@
 //! Vault creation step implementations
 
-use crate::state::{AppState, Navigation};
+use crate::state::{AppState, Navigation, View};
+use crate::ui::components::{button_large, Spacing};
 use crate::ui::pin::render_pin_setup;
-use crate::ui::vault_creation::{VaultCreationState, VaultCreationStep};
+use crate::ui::vault_creation::{DeviceRole, VaultCreationState, VaultCreationStep};
+use crate::utils::icons::{Icon, icon_image};
 use bip39::{Language, Mnemonic};
 use bitvault_common::utils::TimeDelay;
 use eframe::egui;
 
-/// Step 1: Generate or import mnemonic
-pub fn render_mnemonic_generation(ui: &mut egui::Ui, state: &mut VaultCreationState) {
-    ui.label("Step 1: Generate or Import Seed Phrase");
-    ui.add_space(10.0);
+/// Role selection step - first step in vault creation
+pub fn render_role_selection(
+    ui: &mut egui::Ui,
+    state: &mut VaultCreationState,
+    navigation: &mut Navigation,
+) {
+    ui.vertical_centered(|ui| {
+        ui.heading("Set Up Vault");
+        ui.add_space(Spacing::MD);
 
-    // Center buttons
-    let button_width = 150.0;
-    let (rect, _) = ui.allocate_exact_size(
-        egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
-        egui::Sense::click()
-    );
-    let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
-    if button_ui.button("Generate New").clicked() {
-        // Generate new mnemonic (12 words = 128 bits entropy)
-        // bip39 2.0 API: Mnemonic::new(entropy, language)
-        use rand::RngCore;
-        let mut entropy = [0u8; 16]; // 128 bits for 12 words
-        rand::thread_rng().fill_bytes(&mut entropy);
-        match Mnemonic::from_entropy_in(Language::English, &entropy) {
-            Ok(mnemonic) => {
-                state.mnemonic = Some(mnemonic);
-            }
-            Err(e) => {
-                state.error = Some(format!("Failed to generate mnemonic: {}", e));
-                return;
-            }
-        }
-        state.current_step = VaultCreationStep::DisplaySeedPhrase;
-    }
-    button_ui.add_space(10.0);
-    if button_ui.button("Import Existing").clicked() {
-        state.current_step = VaultCreationStep::ImportVault;
-        state.error = None;
-    }
-}
+        ui.label("How would you like to set up your vault?");
+        ui.add_space(Spacing::LG);
+    });
 
-/// Step 2: Display seed phrase with warning
-pub fn render_display_seed_phrase(ui: &mut egui::Ui, state: &mut VaultCreationState) {
-    ui.label("Step 2: Write Down Your Seed Phrase");
-    ui.add_space(10.0);
+    let icon_color = ui.style().visuals.text_color();
+    let icon_size = 20.0;
+    let card_width = 280.0;
+    let card_height = 120.0;
+    let row_width = card_width * 2.0 + Spacing::MD;
 
-    ui.colored_label(
-        egui::Color32::RED,
-        "⚠ WARNING: Write this down in a safe place!",
-    );
-    ui.label("You will need this to recover your vault.");
-    ui.add_space(10.0);
+    // Center the grid
+    let available_width = ui.available_width();
+    let left_margin = ((available_width - row_width) / 2.0).max(0.0);
 
-    if let Some(ref mnemonic) = state.mnemonic {
-        // Display words in a centered grid
-        let words: Vec<&str> = mnemonic.word_iter().collect();
-        // Calculate approximate width: 3 columns, each ~100px wide = 300px
-        let grid_width = 300.0;
-        let grid_height = ((words.len() as f32 / 3.0).ceil() * 25.0).max(100.0);
-        let (rect, _) = ui.allocate_exact_size(
-            egui::Vec2::new(grid_width, grid_height),
-            egui::Sense::click()
-        );
-        let mut grid_ui = ui.child_ui(rect, egui::Layout::top_down(egui::Align::Center));
-        egui::Grid::new("seed_words")
-            .num_columns(3)
-            .spacing([10.0, 5.0])
-            .show(&mut grid_ui, |ui| {
-                for (i, word) in words.iter().enumerate() {
-                    ui.label(format!("{}. {}", i + 1, word));
-                    if (i + 1) % 3 == 0 {
-                        ui.end_row();
+    // Row 1: View-Only and Create New
+    ui.horizontal(|ui| {
+        ui.add_space(left_margin);
+        
+        // Option 1: View-Only Mode
+        ui.group(|ui| {
+            ui.set_min_size(egui::vec2(card_width, card_height));
+            ui.vertical(|ui| {
+                ui.horizontal(|ui| {
+                    if let Some(img) = icon_image(ui.ctx(), Icon::Import, icon_size, icon_color) {
+                        ui.add(img);
                     }
+                    ui.strong("View-Only Mode");
+                });
+                ui.add_space(Spacing::SM);
+                ui.label("Monitor without signing.");
+                ui.add_space(Spacing::MD);
+                if ui.button("Set Up View-Only").clicked() {
+                    state.device_role = DeviceRole::ViewOnly;
+                    state.advance_to_step(VaultCreationStep::NameVault);
                 }
             });
-    }
+        });
 
-    ui.add_space(20.0);
+        ui.add_space(Spacing::MD);
 
-    // Center the button
-    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-        if ui.button("I've Written It Down").clicked() {
-            state.current_step = VaultCreationStep::VerifySeedPhrase;
+        // Option 2: Create New Vault
+        ui.group(|ui| {
+            ui.set_min_size(egui::vec2(card_width, card_height));
+            ui.vertical(|ui| {
+                ui.horizontal(|ui| {
+                    if let Some(img) = icon_image(ui.ctx(), Icon::Plus, icon_size, icon_color) {
+                        ui.add(img);
+                    }
+                    ui.strong("Create New Vault");
+                });
+                ui.add_space(Spacing::SM);
+                ui.label("Start a new vault.");
+                ui.add_space(Spacing::MD);
+                if ui.button("Create New Vault").clicked() {
+                    state.device_role = DeviceRole::Main;
+                    state.advance_to_step(VaultCreationStep::NameVault);
+                }
+            });
+        });
+    });
+
+    ui.add_space(Spacing::MD);
+
+    // Row 2: Join as Co-owner and Restore
+    ui.horizontal(|ui| {
+        ui.add_space(left_margin);
+        
+        // Option 3: Join as Co-owner
+        ui.group(|ui| {
+            ui.set_min_size(egui::vec2(card_width, card_height));
+            ui.vertical(|ui| {
+                ui.horizontal(|ui| {
+                    if let Some(img) = icon_image(ui.ctx(), Icon::Users, icon_size, icon_color) {
+                        ui.add(img);
+                    }
+                    ui.strong("Join as Co-owner");
+                });
+                ui.add_space(Spacing::SM);
+                ui.label("Pair with main device.");
+                ui.add_space(Spacing::MD);
+                if ui.button("Join as Co-owner").clicked() {
+                    state.device_role = DeviceRole::Coowner;
+                    state.advance_to_step(VaultCreationStep::NameVault);
+                }
+            });
+        });
+
+        ui.add_space(Spacing::MD);
+
+        // Option 4: Restore from Backup
+        ui.group(|ui| {
+            ui.set_min_size(egui::vec2(card_width, card_height));
+            ui.vertical(|ui| {
+                ui.horizontal(|ui| {
+                    if let Some(img) = icon_image(ui.ctx(), Icon::Back, icon_size, icon_color) {
+                        ui.add(img);
+                    }
+                    ui.strong("Restore from Backup");
+                });
+                ui.add_space(Spacing::SM);
+                ui.colored_label(egui::Color32::YELLOW, "Requires paper backup.");
+                ui.add_space(Spacing::MD);
+                if ui.button("Restore from Backup").clicked() {
+                    state.device_role = DeviceRole::Restore;
+                    state.advance_to_step(VaultCreationStep::NameVault);
+                }
+            });
+        });
+    });
+
+    ui.add_space(Spacing::XL);
+
+    ui.vertical_centered(|ui| {
+        if ui.button("Cancel").clicked() {
+            navigation.go_back();
         }
     });
 }
 
-/// Step 3: Verify seed phrase
-pub fn render_verify_seed_phrase(ui: &mut egui::Ui, state: &mut VaultCreationState) {
-    ui.label("Step 3: Verify Seed Phrase");
-    ui.add_space(10.0);
+/// Name vault step
+pub fn render_name_vault(ui: &mut egui::Ui, state: &mut VaultCreationState) {
+    let role_text = match state.device_role {
+        DeviceRole::Main => "Main Device Setup",
+        DeviceRole::Coowner => "Co-owner Setup",
+        DeviceRole::ViewOnly => "View-Only Setup",
+        DeviceRole::Restore => "Restore from Backup",
+    };
+    
+    ui.vertical_centered(|ui| {
+        ui.heading(role_text);
+        ui.add_space(Spacing::LG);
 
-    ui.label("Enter your seed phrase to verify:");
-    ui.add_space(10.0);
+        ui.label("Enter a name for this vault:");
+        ui.add_space(Spacing::MD);
 
-    // Simple verification: ask user to enter words at specific positions
-    // For now, just ask them to confirm they've written it down
-    ui.label("Please confirm you have written down your seed phrase.");
-    ui.label("You will need it to recover your vault.");
-    ui.add_space(10.0);
+        ui.add(
+            egui::TextEdit::singleline(&mut state.vault_name)
+                .hint_text("My Bitcoin Vault")
+                .desired_width(300.0)
+                .margin(egui::vec2(8.0, 6.0))
+        );
 
-    ui.checkbox(
-        &mut state.verified_seed_phrase,
-        "I have written down my seed phrase",
-    );
+        if let Some(ref error) = state.error {
+            ui.add_space(Spacing::SM);
+            ui.colored_label(egui::Color32::RED, error);
+        }
 
-    ui.add_space(20.0);
+        ui.add_space(Spacing::XL);
 
-    // Center buttons
-    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-        if ui.button("Verify").clicked() {
-            if state.verified_seed_phrase {
-                state.current_step = VaultCreationStep::SetTimeDelay;
+        if button_large(ui, "Continue").clicked() {
+            if state.vault_name.trim().is_empty() {
+                state.error = Some("Please enter a vault name".to_string());
+            } else {
                 state.error = None;
+                if let Some(next) = state.next_step_for_role() {
+                    state.advance_to_step(next);
+                }
+            }
+        }
+
+        ui.add_space(Spacing::MD);
+        if ui.button("← Back").clicked() {
+            state.go_to_previous_step();
+        }
+    });
+}
+
+/// Set time delay (main device only)
+pub fn render_set_time_delay(ui: &mut egui::Ui, state: &mut VaultCreationState) {
+    ui.vertical_centered(|ui| {
+        ui.heading("Set Time Delay");
+        ui.add_space(Spacing::MD);
+
+        ui.label("Choose how long before the fast-path becomes available.");
+        ui.label("This is your security buffer if your device is compromised.");
+        ui.add_space(Spacing::LG);
+
+        // Days slider in a centered group
+        ui.label("Days:");
+        ui.add_space(4.0);
+        ui.group(|ui| {
+            ui.set_width(400.0);
+            ui.style_mut().spacing.slider_width = 380.0;
+            ui.add(egui::Slider::new(&mut state.time_delay_days, 0..=365));
+        });
+
+        ui.add_space(Spacing::MD);
+
+        // Hours slider in a centered group
+        ui.label("Hours:");
+        ui.add_space(4.0);
+        ui.group(|ui| {
+            ui.set_width(400.0);
+            ui.style_mut().spacing.slider_width = 380.0;
+            ui.add(egui::Slider::new(&mut state.time_delay_hours, 0..=23));
+        });
+
+        ui.add_space(Spacing::MD);
+
+        let total_hours = (state.time_delay_days * 24 + state.time_delay_hours) as f32;
+        if total_hours < 24.0 {
+            ui.colored_label(egui::Color32::YELLOW, "⚠ A time delay of at least 24 hours is recommended.");
+        }
+
+        ui.add_space(Spacing::XL);
+
+        if button_large(ui, "Continue").clicked() {
+            if let Some(next) = state.next_step_for_role() {
+                state.advance_to_step(next);
+            }
+        }
+
+        ui.add_space(Spacing::MD);
+        if ui.button("← Back").clicked() {
+            state.go_to_previous_step();
+        }
+    });
+}
+
+/// Generate mnemonic step
+pub fn render_mnemonic_generation(ui: &mut egui::Ui, state: &mut VaultCreationState) {
+    ui.vertical_centered(|ui| {
+        ui.heading("Create Seed Phrase");
+        ui.add_space(Spacing::LG);
+
+        ui.label("Your seed phrase is the key to your vault.");
+        ui.label("It will be generated securely on this device.");
+        ui.add_space(Spacing::XL);
+
+        if button_large(ui, "Generate Seed Phrase").clicked() {
+            use rand::RngCore;
+            let mut entropy = [0u8; 16]; // 128 bits for 12 words
+            rand::thread_rng().fill_bytes(&mut entropy);
+            
+            match Mnemonic::from_entropy_in(Language::English, &entropy) {
+                Ok(mnemonic) => {
+                    state.mnemonic = Some(mnemonic);
+                    state.error = None;
+                    state.advance_to_step(VaultCreationStep::DisplaySeedPhrase);
+                }
+                Err(e) => {
+                    state.error = Some(format!("Failed to generate mnemonic: {}", e));
+                }
+            }
+        }
+
+        if let Some(ref error) = state.error {
+            ui.add_space(Spacing::SM);
+            ui.colored_label(egui::Color32::RED, error);
+        }
+
+        ui.add_space(Spacing::MD);
+        if ui.button("← Back").clicked() {
+            state.go_to_previous_step();
+        }
+    });
+}
+
+/// Display seed phrase
+pub fn render_display_seed_phrase(ui: &mut egui::Ui, state: &mut VaultCreationState) {
+    ui.vertical_centered(|ui| {
+        ui.heading("Write Down Your Seed Phrase");
+        ui.add_space(Spacing::MD);
+
+        ui.colored_label(egui::Color32::RED, "⚠ IMPORTANT: Write this down on paper!");
+        ui.label("Never share it. Never store it digitally. You need this to recover your vault.");
+        ui.add_space(Spacing::LG);
+    });
+
+    // Center the seed phrase card
+    if let Some(ref mnemonic) = state.mnemonic {
+        let words: Vec<&str> = mnemonic.words().collect();
+        let card_width = 380.0;
+        let available_width = ui.available_width();
+        let left_margin = ((available_width - card_width) / 2.0).max(0.0);
+
+        ui.horizontal(|ui| {
+            ui.add_space(left_margin);
+            egui::Frame::group(ui.style())
+                .inner_margin(egui::Margin::same(20.0))
+                .show(ui, |ui| {
+                    ui.set_width(card_width - 40.0); // Account for margins
+                    egui::Grid::new("seed_words")
+                        .num_columns(3)
+                        .spacing([28.0, 14.0])
+                        .show(ui, |ui| {
+                            for (i, word) in words.iter().enumerate() {
+                                ui.monospace(format!("{:2}. {}", i + 1, word));
+                                if (i + 1) % 3 == 0 {
+                                    ui.end_row();
+                                }
+                            }
+                        });
+                });
+        });
+    }
+
+    ui.add_space(Spacing::XL);
+
+    ui.vertical_centered(|ui| {
+        if button_large(ui, "I've Written It Down").clicked() {
+            state.advance_to_step(VaultCreationStep::VerifySeedPhrase);
+        }
+
+        ui.add_space(Spacing::MD);
+        if ui.button("← Back").clicked() {
+            state.go_to_previous_step();
+        }
+    });
+}
+
+/// Verify seed phrase
+pub fn render_verify_seed_phrase(ui: &mut egui::Ui, state: &mut VaultCreationState) {
+    ui.vertical_centered(|ui| {
+        ui.heading("Verify Seed Phrase");
+        ui.add_space(Spacing::LG);
+
+        ui.label("Please confirm you have written down your seed phrase.");
+        ui.add_space(Spacing::MD);
+
+        ui.checkbox(&mut state.verified_seed_phrase, "I have written down my seed phrase and stored it securely");
+
+        if let Some(ref error) = state.error {
+            ui.add_space(Spacing::SM);
+            ui.colored_label(egui::Color32::RED, error);
+        }
+
+        ui.add_space(Spacing::XL);
+
+        if button_large(ui, "Continue").clicked() {
+            if state.verified_seed_phrase {
+                state.error = None;
+                if let Some(next) = state.next_step_for_role() {
+                    state.advance_to_step(next);
+                }
             } else {
                 state.error = Some("Please confirm you have written down your seed phrase".to_string());
             }
         }
-        ui.add_space(5.0);
-        if ui.button("Back").clicked() {
-            state.current_step = VaultCreationStep::DisplaySeedPhrase;
+
+        ui.add_space(Spacing::MD);
+        if ui.button("← Back").clicked() {
+            state.go_to_previous_step();
         }
     });
 }
 
-/// Step 4: Set time delay
-pub fn render_set_time_delay(ui: &mut egui::Ui, state: &mut VaultCreationState) {
-    ui.label("Step 4: Set Time Delay");
-    ui.add_space(10.0);
-
-    ui.label("Time delay before fast path becomes available:");
-    ui.add_space(10.0);
-
-    ui.horizontal(|ui| {
-        ui.label("Days:");
-        ui.add(egui::Slider::new(&mut state.time_delay_days, 0..=365));
-    });
-
-    ui.horizontal(|ui| {
-        ui.label("Hours:");
-        ui.add(egui::Slider::new(&mut state.time_delay_hours, 0..=23));
-    });
-
-    ui.add_space(20.0);
-
-    // Center buttons
-    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-        if ui.button("Next").clicked() {
-            state.current_step = VaultCreationStep::SetPin;
-        }
-        ui.add_space(5.0);
-        if ui.button("Back").clicked() {
-            state.current_step = VaultCreationStep::VerifySeedPhrase;
-        }
-    });
-}
-
-/// Step 5: Set PIN
+/// Set PIN step
 pub fn render_set_pin(
     ui: &mut egui::Ui,
     _app_state: &mut AppState,
     _navigation: &mut Navigation,
     state: &mut VaultCreationState,
 ) {
-    ui.label("Step 5: Set PIN");
-    ui.add_space(10.0);
-    ui.label("Set a 6-digit PIN to secure your wallet");
-    ui.add_space(10.0);
+    ui.vertical_centered(|ui| {
+        ui.heading("Set PIN");
+        ui.add_space(Spacing::MD);
+        ui.label("Set a 6-digit PIN to secure your wallet");
+        ui.add_space(Spacing::LG);
+    });
 
     let mut callback = None;
     let pin_set = render_pin_setup(ui, &mut state.pin_setup_state, &mut callback);
 
     if pin_set {
-        // PIN set successfully - move to next step
-        state.current_step = VaultCreationStep::GenerateCoownerQR;
+        if let Some(next) = state.next_step_for_role() {
+            state.advance_to_step(next);
+        }
     }
 
-    ui.add_space(10.0);
-    // Center button
-    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-        if ui.button("Back").clicked() {
-            state.current_step = VaultCreationStep::SetTimeDelay;
+    ui.add_space(Spacing::MD);
+    ui.vertical_centered(|ui| {
+        if ui.button("← Back").clicked() {
+            state.go_to_previous_step();
         }
     });
 }
 
-/// Step 6: Generate QR code for coowner
-pub fn render_generate_coowner_qr(ui: &mut egui::Ui, ctx: &egui::Context, state: &mut VaultCreationState) {
-    ui.label("Step 5: Generate QR Code for Coowner");
-    ui.add_space(10.0);
+/// Main device: Scan/enter co-owner's keys
+pub fn render_scan_coowner_keys(ui: &mut egui::Ui, state: &mut VaultCreationState) {
+    ui.heading("Get Co-owner's Keys");
+    ui.add_space(Spacing::MD);
 
-    ui.label("On the coowner device, generate and display the QR code.");
-    ui.label("Then scan it here or enter the keys manually.");
-    ui.add_space(10.0);
+    ui.label("Ask your co-owner to share their public keys with you.");
+    ui.label("They can copy the text from their device and send it to you securely.");
+    ui.add_space(Spacing::LG);
 
-    // QR scanning options - centered
-    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-        if ui.button("Use Camera").clicked() {
-            // Start camera capture
-            let mut camera = crate::utils::camera::CameraCapture::new();
-            match camera.start_capture() {
-                Ok(()) => {
-                    state.coowner_qr_scanner_state.use_camera = true;
-                    state.coowner_qr_scanner_state.camera_capture = Some(camera);
-                    state.coowner_qr_scanner_state.camera_error = None;
-                }
-                Err(e) => {
-                    state.coowner_qr_scanner_state.camera_error = Some(e);
-                    state.coowner_qr_scanner_state.use_camera = false;
-                }
-            }
-        }
-        
-        ui.add_space(5.0);
-        
-        if ui.button("Scan QR Code from Image File").clicked() {
-            // Stop camera if active
-            if state.coowner_qr_scanner_state.use_camera {
-                if let Some(ref mut camera) = state.coowner_qr_scanner_state.camera_capture {
-                    camera.stop_capture();
-                }
-                state.coowner_qr_scanner_state.use_camera = false;
-                state.coowner_qr_scanner_state.camera_capture = None;
-                state.coowner_qr_scanner_state.camera_frame = None;
-            }
-            state.coowner_qr_scanner_state.pending_file_selection = true;
-        }
-    });
+    ui.label("Paste co-owner's key data:");
+    ui.add_space(Spacing::SM);
+    
+    ui.add(egui::TextEdit::multiline(&mut state.coowner_pubkeys)
+        .hint_text("Paste the key data here...")
+        .desired_width(400.0)
+        .desired_rows(4));
 
-    // Show selected file
-    if let Some(ref file_path) = state.coowner_qr_scanner_state.selected_file {
-        ui.add_space(5.0);
-        ui.label(format!("Selected: {}", file_path.display()));
-        ui.add_space(5.0);
+    ui.add_space(Spacing::MD);
 
-        // Scan button - centered
-        let file_path_clone = file_path.clone();
-        ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-            if ui.button("Scan QR Code from File").clicked() {
-                match crate::utils::qr::decode_qr_from_file(&file_path_clone) {
-                    Ok(decoded) => {
-                        state.coowner_pubkeys = decoded;
-                        state.coowner_qr_scanner_state.selected_file = None;
-                    }
-                    Err(e) => {
-                        state.error = Some(format!("Failed to scan QR code: {}", e));
-                    }
-                }
-            }
-        });
-    }
-
-    // Camera view
-    if state.coowner_qr_scanner_state.use_camera {
-        if let Some(ref mut camera) = state.coowner_qr_scanner_state.camera_capture {
-            // Capture and display frame
-            if let Some(texture) = camera.capture_frame(ctx) {
-                state.coowner_qr_scanner_state.camera_frame = Some(texture);
-                
-                // Try to scan QR code from frame (throttled)
-                let should_scan = state.coowner_qr_scanner_state.last_scan_attempt
-                    .map(|t| t.elapsed().as_millis() > 500) // Scan every 500ms
-                    .unwrap_or(true);
-                
-                if should_scan {
-                    state.coowner_qr_scanner_state.last_scan_attempt = Some(std::time::Instant::now());
-                    match camera.scan_qr_from_frame() {
-                        Ok(qr_data) => {
-                            state.coowner_pubkeys = qr_data;
-                            state.coowner_qr_scanner_state.camera_error = None;
-                            // Keep camera running for now, user can continue or stop
-                        }
-                        Err(_) => {
-                            // QR not found yet, continue scanning
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Display camera frame
-        if let Some(ref texture) = state.coowner_qr_scanner_state.camera_frame {
-            ui.add_space(10.0);
-            ui.label("Camera Preview:");
-            ui.add_space(5.0);
-            // Display camera feed (scaled to fit)
-            let max_width = 400.0;
-            let max_height = 300.0;
-            let texture_size = texture.size_vec2();
-            let scale = (max_width / texture_size.x).min(max_height / texture_size.y).min(1.0);
-            let display_size = texture_size * scale;
-            
-            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                ui.image((texture.id(), display_size));
-            });
-            
-            // Show scanned result if available
-            if !state.coowner_pubkeys.is_empty() {
-                ui.add_space(10.0);
-                ui.colored_label(egui::Color32::GREEN, "✓ QR code scanned!");
-            }
-        }
-        
-        // Show camera error if any
-        if let Some(ref error) = state.coowner_qr_scanner_state.camera_error {
-            ui.add_space(5.0);
-            ui.colored_label(egui::Color32::RED, format!("Camera error: {}", error));
-        }
-        
-        ui.add_space(10.0);
-        ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-            if ui.button("Stop Camera").clicked() {
-                if let Some(ref mut camera) = state.coowner_qr_scanner_state.camera_capture {
-                    camera.stop_capture();
-                }
-                state.coowner_qr_scanner_state.use_camera = false;
-                state.coowner_qr_scanner_state.camera_capture = None;
-                state.coowner_qr_scanner_state.camera_frame = None;
-            }
-        });
-        
-        ui.add_space(10.0);
-        ui.separator();
-        ui.add_space(10.0);
-    }
-
-    // Handle file selection (non-blocking)
-    if state.coowner_qr_scanner_state.pending_file_selection {
-        state.coowner_qr_scanner_state.pending_file_selection = false;
+    // Or load from file
+    if ui.button("Load from File").clicked() {
         if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Image files", &["png", "jpg", "jpeg", "gif", "bmp"])
+            .add_filter("Text files", &["txt", "json"])
             .pick_file()
         {
-            state.coowner_qr_scanner_state.selected_file = Some(path);
-        }
-    }
-
-    if !state.coowner_qr_scanner_state.use_camera {
-        ui.add_space(10.0);
-        ui.separator();
-        ui.add_space(10.0);
-    }
-
-    // Manual input option
-    ui.label("Or enter coowner keys manually:");
-    ui.add_space(5.0);
-    ui.text_edit_singleline(&mut state.coowner_pubkeys);
-
-    ui.add_space(20.0);
-    // Center buttons
-    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-        if ui.button("Next").clicked() {
-            if !state.coowner_pubkeys.is_empty() {
-                state.current_step = VaultCreationStep::EmailAuth;
-                state.error = None;
-            } else {
-                state.error = Some("Please enter coowner keys or scan QR code".to_string());
+            match std::fs::read_to_string(&path) {
+                Ok(contents) => {
+                    state.coowner_pubkeys = contents.trim().to_string();
+                    state.error = None;
+                }
+                Err(e) => {
+                    state.error = Some(format!("Failed to read file: {}", e));
+                }
             }
         }
-        ui.add_space(5.0);
-        if ui.button("Back").clicked() {
-            state.current_step = VaultCreationStep::SetTimeDelay;
+    }
+
+    ui.add_space(Spacing::XL);
+
+    if button_large(ui, "Continue").clicked() {
+        if state.coowner_pubkeys.trim().is_empty() {
+            state.error = Some("Please paste or load the co-owner's key data".to_string());
+        } else {
+            // Validate the keys by decoding as CoownerKeys
+            match bitvault_common::ur::decode_qr_data::<bitvault_common::derivation::CoownerKeys>(&state.coowner_pubkeys) {
+                Ok(keys) => {
+                    state.coowner_keys = Some(keys);
+                    state.error = None;
+                    if let Some(next) = state.next_step_for_role() {
+                        state.advance_to_step(next);
+                    }
+                }
+                Err(e) => {
+                    state.error = Some(format!("Invalid key data: {}", e));
+                }
+            }
         }
-    });
+    }
+
+    ui.add_space(Spacing::MD);
+    if ui.button("← Back").clicked() {
+        state.go_to_previous_step();
+    }
 }
 
-/// Step 6: Email 2FA
+/// Co-owner device: Display own keys for main device
+pub fn render_display_own_keys(ui: &mut egui::Ui, ctx: &egui::Context, state: &mut VaultCreationState) {
+    ui.heading("Share Your Keys");
+    ui.add_space(Spacing::MD);
+
+    ui.label("Share this key data with the main device owner.");
+    ui.label("They will enter it on their device to link you as co-owner.");
+    ui.add_space(Spacing::LG);
+
+    // Generate keys text if not already done
+    if state.my_keys_text.is_none() {
+        if let Some(ref mnemonic) = state.mnemonic {
+            match bitvault_common::derivation::get_owner_keys(mnemonic) {
+                Ok(owner_keys) => {
+                    match bitvault_common::ur::encode_qr_data(&owner_keys) {
+                        Ok(keys_text) => {
+                            state.my_keys_text = Some(keys_text);
+                        }
+                        Err(e) => {
+                            state.error = Some(format!("Failed to encode keys: {}", e));
+                        }
+                    }
+                }
+                Err(e) => {
+                    state.error = Some(format!("Failed to derive keys: {}", e));
+                }
+            }
+        }
+    }
+
+    if let Some(ref keys_text) = state.my_keys_text {
+        // Show QR code
+        if let Some(qr_texture) = crate::utils::qr::generate_qr_image(ctx, keys_text) {
+            ui.image((qr_texture.id(), egui::Vec2::new(200.0, 200.0)));
+            ui.add_space(Spacing::MD);
+        }
+
+        // Copy button
+        if ui.button("Copy Key Data").clicked() {
+            ui.ctx().copy_text(keys_text.clone());
+        }
+
+        ui.add_space(Spacing::SM);
+
+        // Save to file
+        if ui.button("Save to File").clicked() {
+            if let Some(path) = rfd::FileDialog::new()
+                .set_file_name("coowner_keys.txt")
+                .save_file()
+            {
+                if let Err(e) = std::fs::write(&path, keys_text) {
+                    state.error = Some(format!("Failed to save file: {}", e));
+                }
+            }
+        }
+
+        ui.add_space(Spacing::MD);
+
+        // Show truncated text
+        ui.collapsing("Show Key Data", |ui| {
+            ui.monospace(keys_text);
+        });
+    }
+
+    ui.add_space(Spacing::XL);
+
+    if button_large(ui, "I've Shared My Keys").clicked() {
+        if let Some(next) = state.next_step_for_role() {
+            state.advance_to_step(next);
+        }
+    }
+
+    ui.add_space(Spacing::MD);
+    if ui.button("← Back").clicked() {
+        state.go_to_previous_step();
+    }
+}
+
+/// Co-owner device: Enter exchange data from main device
+pub fn render_enter_exchange_data(ui: &mut egui::Ui, state: &mut VaultCreationState) {
+    ui.heading("Enter Vault Configuration");
+    ui.add_space(Spacing::MD);
+
+    ui.label("The main device owner will share the vault configuration with you");
+    ui.label("after they create the vault. Paste it below.");
+    ui.add_space(Spacing::LG);
+
+    ui.label("Paste vault configuration:");
+    ui.add_space(Spacing::SM);
+
+    ui.add(egui::TextEdit::multiline(&mut state.exchange_data_input)
+        .hint_text("Paste the configuration data here...")
+        .desired_width(400.0)
+        .desired_rows(4));
+
+    ui.add_space(Spacing::MD);
+
+    if ui.button("Load from File").clicked() {
+        if let Some(path) = rfd::FileDialog::new()
+            .add_filter("Text files", &["txt", "json"])
+            .pick_file()
+        {
+            match std::fs::read_to_string(&path) {
+                Ok(contents) => {
+                    state.exchange_data_input = contents.trim().to_string();
+                    state.error = None;
+                }
+                Err(e) => {
+                    state.error = Some(format!("Failed to read file: {}", e));
+                }
+            }
+        }
+    }
+
+    ui.add_space(Spacing::XL);
+
+    if button_large(ui, "Continue").clicked() {
+        if state.exchange_data_input.trim().is_empty() {
+            state.error = Some("Please paste or load the vault configuration".to_string());
+        } else {
+            // Validate the exchange data
+            match bitvault_common::ur::decode_qr_data::<bitvault_common::ur::QrExchangeData>(&state.exchange_data_input) {
+                Ok(exchange_data) => {
+                    // Store the main device's keys
+                    state.coowner_keys = Some(exchange_data.coowner_public_keys);
+                    // Extract time delay from exchange data
+                    let time_delay = bitvault_common::utils::blocks_to_time_delay(exchange_data.timelock_in_blocks);
+                    state.time_delay_days = time_delay.days;
+                    state.time_delay_hours = time_delay.hours;
+                    state.error = None;
+                    if let Some(next) = state.next_step_for_role() {
+                        state.advance_to_step(next);
+                    }
+                }
+                Err(e) => {
+                    state.error = Some(format!("Invalid configuration data: {}", e));
+                }
+            }
+        }
+    }
+
+    ui.add_space(Spacing::MD);
+    if ui.button("← Back").clicked() {
+        state.go_to_previous_step();
+    }
+}
+
+/// Email authentication step
 pub fn render_email_auth(
     ui: &mut egui::Ui,
     app_state: &mut AppState,
     state: &mut VaultCreationState,
 ) {
-    ui.label("Step 6: Email Authentication");
-    ui.add_space(10.0);
+    ui.heading("Email Verification");
+    ui.add_space(Spacing::MD);
 
-    ui.label("Enter your email address to receive an authentication code:");
-    ui.add_space(5.0);
+    ui.label("Enter your email address to verify your identity:");
+    ui.add_space(Spacing::MD);
 
-    ui.text_edit_singleline(&mut state.email);
-    ui.add_space(10.0);
+    ui.add(egui::TextEdit::singleline(&mut state.email)
+        .hint_text("you@example.com")
+        .desired_width(300.0));
 
-    // Send code button - centered
-    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-        if ui.button("Send Authentication Code").clicked() && !state.email.trim().is_empty() {
-            if !state.email.contains('@') {
+    ui.add_space(Spacing::MD);
+
+    if !state.code_sent {
+        if ui.button("Send Verification Code").clicked() {
+            if state.email.trim().is_empty() || !state.email.contains('@') {
                 state.error = Some("Please enter a valid email address".to_string());
             } else {
                 state.is_sending_code = true;
                 state.error = None;
 
-                // Create a temporary service just for sending the code
                 if let Some(ref runtime) = app_state.runtime {
                     let email = state.email.clone();
                     let network = app_state.network;
@@ -414,108 +656,80 @@ pub fn render_email_auth(
                 }
             }
         }
-    });
 
-    if state.is_sending_code {
-        ui.label("Sending code...");
-    }
-
-    if state.code_sent {
-        ui.add_space(10.0);
+        if state.is_sending_code {
+            ui.spinner();
+            ui.label("Sending...");
+        }
+    } else {
         ui.colored_label(egui::Color32::GREEN, "✓ Code sent! Check your email.");
-        ui.add_space(10.0);
+        ui.add_space(Spacing::MD);
 
-        ui.label("Enter the authentication code:");
-        ui.text_edit_singleline(&mut state.auth_code);
-        ui.add_space(10.0);
+        ui.label("Enter the verification code:");
+        ui.add_space(Spacing::SM);
 
-        // Center button
-        ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-            if ui.button("Verify and Continue").clicked() {
-                if !state.auth_code.trim().is_empty() {
-                    state.current_step = VaultCreationStep::LinkCoowner;
-                    state.error = None;
-                } else {
-                    state.error = Some("Please enter the authentication code".to_string());
+        ui.add(egui::TextEdit::singleline(&mut state.auth_code)
+            .hint_text("123456")
+            .desired_width(150.0));
+
+        ui.add_space(Spacing::XL);
+
+        if button_large(ui, "Verify & Continue").clicked() {
+            if state.auth_code.trim().is_empty() {
+                state.error = Some("Please enter the verification code".to_string());
+            } else {
+                state.error = None;
+                if let Some(next) = state.next_step_for_role() {
+                    state.advance_to_step(next);
                 }
             }
-        });
-    }
-
-    ui.add_space(20.0);
-    // Center back button
-    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-        if ui.button("Back").clicked() {
-            state.current_step = VaultCreationStep::GenerateCoownerQR;
-            state.code_sent = false;
-            state.auth_code.clear();
-        }
-    });
-}
-
-/// Step 7: Link coowner (now just shows summary before creation)
-pub fn render_link_coowner(ui: &mut egui::Ui, state: &mut VaultCreationState) {
-    ui.label("Step 7: Confirm Vault Details");
-    ui.add_space(10.0);
-
-    ui.label("Coowner keys entered:");
-    ui.label(&state.coowner_pubkeys);
-    ui.add_space(10.0);
-
-    ui.label("Vault Name:");
-    ui.text_edit_singleline(&mut state.vault_name);
-
-    ui.add_space(20.0);
-
-    if ui.button("Next").clicked() {
-        if !state.vault_name.is_empty() {
-            state.current_step = VaultCreationStep::CreateVault;
-            state.error = None;
-        } else {
-            state.error = Some("Please enter a vault name".to_string());
         }
     }
 
-    if ui.button("Back").clicked() {
-        state.current_step = VaultCreationStep::EmailAuth;
+    ui.add_space(Spacing::MD);
+    if ui.button("← Back").clicked() {
+        state.code_sent = false;
+        state.auth_code.clear();
+        state.go_to_previous_step();
     }
 }
 
-/// Step 8: Create vault
+/// Create vault step
 pub fn render_create_vault(
     ui: &mut egui::Ui,
     app_state: &mut AppState,
     navigation: &mut Navigation,
     state: &mut VaultCreationState,
 ) {
-    ui.label("Step 8: Create Vault");
-    ui.add_space(10.0);
+    let action_text = match state.device_role {
+        DeviceRole::Main => "Create Vault",
+        DeviceRole::Coowner => "Join Vault",
+        DeviceRole::ViewOnly => "Set Up View-Only",
+        DeviceRole::Restore => "Restore Vault",
+    };
+
+    ui.heading(action_text);
+    ui.add_space(Spacing::MD);
 
     if state.is_creating {
-        ui.label("Creating vault...");
-        ui.add_space(10.0);
         ui.spinner();
+        ui.label(format!("{}...", if state.device_role == DeviceRole::Main { "Creating vault" } else { "Joining vault" }));
         return;
     }
 
-    ui.label("Ready to create vault:");
-    ui.label(format!("Name: {}", state.vault_name));
-    ui.label(format!(
-        "Time Delay: {} days, {} hours",
-        state.time_delay_days, state.time_delay_hours
-    ));
+    // Summary
+    ui.label(format!("Vault Name: {}", state.vault_name));
+    ui.label(format!("Time Delay: {} days, {} hours", state.time_delay_days, state.time_delay_hours));
     ui.label(format!("Email: {}", state.email));
-    ui.add_space(10.0);
+    ui.label(format!("Role: {}", if state.device_role == DeviceRole::Main { "Main Device" } else { "Co-owner" }));
 
-    ui.add_space(20.0);
+    ui.add_space(Spacing::XL);
 
-    // Center button
-    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-        if ui.button("Create Vault").clicked() {
-            state.is_creating = true;
-            state.error = None;
+    if button_large(ui, action_text).clicked() {
+        state.is_creating = true;
+        state.error = None;
 
-        // Validate inputs
+        // Validation
         if state.vault_name.trim().is_empty() {
             state.error = Some("Vault name cannot be empty".to_string());
             state.is_creating = false;
@@ -534,16 +748,14 @@ pub fn render_create_vault(
             return;
         }
 
-        if state.coowner_pubkeys.trim().is_empty() {
-            state.error = Some("Please enter coowner keys or scan QR code".to_string());
+        if state.coowner_pubkeys.trim().is_empty() && state.coowner_keys.is_none() {
+            state.error = Some("Co-owner keys are required".to_string());
             state.is_creating = false;
             return;
         }
 
-        // Create vault synchronously using block_on (acceptable for one-time operation)
-        if let (Some(mnemonic), Some(runtime)) =
-            (state.mnemonic.as_ref(), app_state.runtime.as_ref())
-        {
+        // Create/join vault
+        if let (Some(mnemonic), Some(runtime)) = (state.mnemonic.as_ref(), app_state.runtime.as_ref()) {
             let time_delay = TimeDelay {
                 days: state.time_delay_days,
                 hours: state.time_delay_hours,
@@ -551,8 +763,8 @@ pub fn render_create_vault(
             let coowner_pubkeys = state.coowner_pubkeys.clone();
             let vault_name = state.vault_name.clone();
             let network = app_state.network;
-            let email_clone = state.email.clone();
-            let auth_code_clone = state.auth_code.clone();
+            let email = state.email.clone();
+            let auth_code = state.auth_code.clone();
             let runtime_handle = runtime.handle().clone();
 
             let result = runtime.block_on(async {
@@ -564,13 +776,11 @@ pub fn render_create_vault(
                         &coowner_pubkeys,
                         time_delay,
                         &vault_name,
-                        &email_clone,
-                        &auth_code_clone,
+                        &email,
+                        &auth_code,
                     )
                     .await;
 
-                // If setup succeeded, vault_service now has the wallet initialized
-                // Return both the QR result and the vault service
                 match qr_result {
                     Ok(qr) => Ok((qr, vault_service)),
                     Err(e) => Err(e),
@@ -578,27 +788,31 @@ pub fn render_create_vault(
             });
 
             match result {
-                Ok((final_qr, vault_service)) => {
-                    state.final_qr = Some(final_qr);
+                Ok((exchange_data, vault_service)) => {
+                    state.exchange_data_output = Some(exchange_data);
 
-                    // Initialize vault in app_state (use runtime handle to avoid borrow conflict)
                     if let Err(e) = runtime_handle.block_on(async {
                         app_state.initialize_vault_from_service(vault_service).await
                     }) {
-                        state.error = Some(format!("Failed to initialize vault in app: {}", e));
-                    } else {
-                        // Fetch initial data
-                        if let Some(ref mut handler) = app_state.async_handler {
-                            handler.fetch_balance();
-                            handler.fetch_address();
-                        }
-
-                        // Navigate to dashboard
-                        navigation.navigate_to(crate::state::View::Dashboard { tab: 0 });
+                        state.error = Some(format!("Failed to initialize vault: {}", e));
+                        state.is_creating = false;
+                        return;
                     }
 
-                    state.current_step = VaultCreationStep::Completed;
+                    if let Some(ref mut handler) = app_state.async_handler {
+                        handler.fetch_balance();
+                        handler.fetch_address();
+                    }
+
                     state.is_creating = false;
+                    
+                    // Main device shows exchange data, co-owner goes to completed
+                    if state.device_role == DeviceRole::Main {
+                        state.advance_to_step(VaultCreationStep::DisplayExchangeData);
+                    } else {
+                        state.advance_to_step(VaultCreationStep::Completed);
+                        navigation.navigate_to(View::Dashboard { tab: 0 });
+                    }
                 }
                 Err(e) => {
                     state.error = Some(format!("Failed to create vault: {}", e));
@@ -609,26 +823,71 @@ pub fn render_create_vault(
             state.error = Some("Missing mnemonic or runtime".to_string());
             state.is_creating = false;
         }
-        }
-    });
+    }
 
-    ui.add_space(10.0);
-    // Center back button
-    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-        if ui.button("Back").clicked() {
-            state.current_step = VaultCreationStep::LinkCoowner;
-        }
-    });
+    ui.add_space(Spacing::MD);
+    if ui.button("← Back").clicked() {
+        state.go_to_previous_step();
+    }
 }
 
-/// Step 8: Completed
-pub fn render_completed(
-    ui: &mut egui::Ui,
-    navigation: &mut Navigation,
-    state: &mut VaultCreationState,
-) {
-    ui.heading("Vault Created Successfully!");
-    ui.add_space(10.0);
+/// Main device: Display exchange data for co-owner
+pub fn render_display_exchange_data(ui: &mut egui::Ui, ctx: &egui::Context, state: &mut VaultCreationState) {
+    ui.heading("Share with Co-owner");
+    ui.add_space(Spacing::MD);
+
+    ui.colored_label(egui::Color32::GREEN, "✓ Vault created successfully!");
+    ui.add_space(Spacing::MD);
+
+    ui.label("Share this configuration with your co-owner.");
+    ui.label("They will enter it on their device to join the vault.");
+    ui.add_space(Spacing::LG);
+
+    if let Some(ref exchange_data) = state.exchange_data_output {
+        // Show QR code
+        if let Some(qr_texture) = crate::utils::qr::generate_qr_image(ctx, exchange_data) {
+            ui.image((qr_texture.id(), egui::Vec2::new(200.0, 200.0)));
+            ui.add_space(Spacing::MD);
+        }
+
+        if ui.button("Copy Configuration").clicked() {
+            ui.ctx().copy_text(exchange_data.clone());
+        }
+
+        ui.add_space(Spacing::SM);
+
+        if ui.button("Save to File").clicked() {
+            if let Some(path) = rfd::FileDialog::new()
+                .set_file_name("vault_config.txt")
+                .save_file()
+            {
+                if let Err(e) = std::fs::write(&path, exchange_data) {
+                    state.error = Some(format!("Failed to save file: {}", e));
+                }
+            }
+        }
+
+        ui.add_space(Spacing::MD);
+
+        ui.collapsing("Show Configuration Data", |ui| {
+            ui.monospace(exchange_data);
+        });
+    }
+
+    ui.add_space(Spacing::XL);
+
+    if button_large(ui, "Go to Dashboard").clicked() {
+        state.advance_to_step(VaultCreationStep::Completed);
+    }
+}
+
+/// Completed step
+pub fn render_completed(ui: &mut egui::Ui, navigation: &mut Navigation, state: &mut VaultCreationState) {
+    ui.heading("Vault Setup Complete!");
+    ui.add_space(Spacing::LG);
+
+    ui.colored_label(egui::Color32::GREEN, "✓ Your vault is ready to use.");
+    ui.add_space(Spacing::MD);
 
     ui.label(format!("Vault Name: {}", state.vault_name));
 
@@ -636,99 +895,334 @@ pub fn render_completed(
         ui.label(format!("Vault Address: {}", address));
     }
 
-    if let Some(ref final_qr) = state.final_qr {
-        ui.add_space(10.0);
-        ui.label("QR Code for Second Device:");
-        // Generate and display QR code
-        use crate::utils::qr::generate_qr_image;
+    ui.add_space(Spacing::XL);
 
-        if let Some(qr_texture) = generate_qr_image(ui.ctx(), final_qr) {
-            ui.image((qr_texture.id(), egui::Vec2::new(300.0, 300.0)));
-            ui.add_space(10.0);
-        } else {
-            ui.colored_label(egui::Color32::YELLOW, "Failed to generate QR code");
-            ui.label(format!(
-                "QR Data: {}...",
-                &final_qr[..final_qr.len().min(50)]
-            ));
+    if button_large(ui, "Go to Dashboard").clicked() {
+        navigation.navigate_to(View::Dashboard { tab: 0 });
+    }
+}
+
+// ============================================================================
+// VIEW-ONLY FLOW
+// ============================================================================
+
+/// Scan descriptor QR for view-only mode
+pub fn render_scan_descriptor_view_only(
+    ui: &mut egui::Ui,
+    state: &mut VaultCreationState,
+) {
+    ui.heading("View-Only Setup");
+    ui.add_space(Spacing::MD);
+
+    ui.label("Scan or paste the descriptor from your mobile device.");
+    ui.add_space(Spacing::SM);
+    
+    ui.colored_label(
+        egui::Color32::from_rgb(100, 149, 237),
+        "This will let you monitor your vault without signing capability."
+    );
+    ui.add_space(Spacing::LG);
+
+    ui.label("Paste the descriptor configuration:");
+    ui.add_space(Spacing::SM);
+    ui.add(egui::TextEdit::multiline(&mut state.import_descriptors_qr)
+        .hint_text("Paste configuration from mobile app...")
+        .desired_width(400.0)
+        .desired_rows(3));
+
+    ui.add_space(Spacing::MD);
+
+    // File load option
+    ui.horizontal(|ui| {
+        if ui.button("Load from File").clicked() {
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("Text/JSON", &["txt", "json"])
+                .pick_file()
+            {
+                if let Ok(contents) = std::fs::read_to_string(&path) {
+                    state.import_descriptors_qr = contents;
+                } else {
+                    state.error = Some("Failed to read file".to_string());
+                }
+            }
+        }
+    });
+
+    if let Some(ref error) = state.error {
+        ui.add_space(Spacing::MD);
+        ui.colored_label(egui::Color32::RED, error);
+    }
+
+    ui.add_space(Spacing::XL);
+
+    if button_large(ui, "Continue").clicked() {
+        if state.import_descriptors_qr.trim().is_empty() {
+            state.error = Some("Please enter the descriptor configuration".to_string());
+            return;
+        }
+        state.error = None;
+        if let Some(next) = state.next_step_for_role() {
+            state.advance_to_step(next);
         }
     }
 
-    ui.add_space(20.0);
-
-    // Center button
-    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-        if ui.button("Go to Dashboard").clicked() {
-            navigation.navigate_to(crate::state::View::Dashboard { tab: 0 });
-        }
-    });
+    ui.add_space(Spacing::MD);
+    if ui.button("← Back").clicked() {
+        state.go_to_previous_step();
+    }
 }
 
-/// Import vault flow
-/// Step 1: Enter mnemonic and scan QR descriptors
-pub fn render_import_vault(
+/// View-only setup complete
+pub fn render_view_only_complete(
     ui: &mut egui::Ui,
     app_state: &mut AppState,
     navigation: &mut Navigation,
     state: &mut VaultCreationState,
 ) {
-    ui.label("Import Existing Vault");
-    ui.add_space(10.0);
-
-    ui.label("Enter your 12 or 24-word mnemonic phrase:");
-    ui.add_space(5.0);
-    ui.text_edit_multiline(&mut state.import_mnemonic_text);
-    ui.add_space(10.0);
-
-    ui.label("Scan or paste the descriptor QR code (compressed base64):");
-    ui.add_space(5.0);
-    ui.text_edit_multiline(&mut state.import_descriptors_qr);
-    ui.add_space(10.0);
-
-    ui.label("Vault Name:");
-    ui.text_edit_singleline(&mut state.vault_name);
-    ui.add_space(10.0);
-
-    ui.checkbox(&mut state.is_coowner, "This is a coowner device");
-    ui.add_space(10.0);
+    ui.heading("View-Only Setup");
+    ui.add_space(Spacing::MD);
 
     if state.is_importing {
-        ui.label("Importing vault...");
-        ui.add_space(10.0);
         ui.spinner();
+        ui.label("Setting up view-only wallet...");
         return;
     }
+
+    if state.vault_address.is_some() {
+        // Success
+        ui.colored_label(egui::Color32::GREEN, "✓ View-only wallet created!");
+        ui.add_space(Spacing::MD);
+        ui.label("You can now monitor your vault balance and transactions.");
+        ui.label("Signing transactions will require your mobile device.");
+        ui.add_space(Spacing::XL);
+        
+        if button_large(ui, "Open Wallet").clicked() {
+            navigation.navigate_to(View::Dashboard { tab: 0 });
+        }
+    } else {
+        // Setup button
+        ui.label("Ready to set up view-only wallet?");
+        ui.add_space(Spacing::LG);
+
+        if button_large(ui, "Create View-Only Wallet").clicked() {
+            state.is_importing = true;
+            state.error = None;
+
+            if let Some(ref runtime) = app_state.runtime {
+                let descriptors_qr = state.import_descriptors_qr.clone();
+                let vault_name = state.vault_name.clone();
+                let network = app_state.network;
+                let runtime_handle = runtime.handle().clone();
+
+                // For view-only, we use a dummy mnemonic since we don't need signing
+                let entropy: [u8; 16] = rand::random();
+                let dummy_mnemonic = Mnemonic::from_entropy(&entropy).expect("Failed to generate dummy mnemonic");
+
+                let result: Result<(bitvault_common::wallet::VaultService, String), String> =
+                    runtime.block_on(async {
+                        let mut vault_service = bitvault_common::wallet::VaultService::new(network);
+                        vault_service
+                            .import_vault(&dummy_mnemonic, &descriptors_qr, &vault_name, false)
+                            .await
+                            .map_err(|e| format!("Setup failed: {}", e))?;
+
+                        let vault_address = vault_service
+                            .get_address()
+                            .map_err(|e| format!("Failed to get address: {}", e))?;
+                        Ok((vault_service, vault_address))
+                    });
+
+                match result {
+                    Ok((vault_service, vault_address)) => {
+                        if let Err(e) = runtime_handle.block_on(async {
+                            app_state.initialize_vault_from_service(vault_service).await
+                        }) {
+                            state.error = Some(format!("Failed to initialize: {}", e));
+                            state.is_importing = false;
+                            return;
+                        }
+
+                        if let Some(ref mut handler) = app_state.async_handler {
+                            handler.fetch_balance();
+                            handler.fetch_address();
+                        }
+
+                        state.vault_address = Some(vault_address);
+                        state.is_importing = false;
+                    }
+                    Err(e) => {
+                        state.error = Some(e);
+                        state.is_importing = false;
+                    }
+                }
+            } else {
+                state.error = Some("Runtime not available".to_string());
+                state.is_importing = false;
+            }
+        }
+    }
+
+    if let Some(ref error) = state.error {
+        ui.add_space(Spacing::MD);
+        ui.colored_label(egui::Color32::RED, error);
+    }
+
+    ui.add_space(Spacing::MD);
+    if ui.button("← Back").clicked() {
+        state.go_to_previous_step();
+    }
+}
+
+// ============================================================================
+// RESTORE FROM BACKUP FLOW
+// ============================================================================
+
+/// Enter seed phrase from paper backup
+pub fn render_enter_seed_phrase(
+    ui: &mut egui::Ui,
+    state: &mut VaultCreationState,
+) {
+    ui.heading("Restore from Backup");
+    ui.add_space(Spacing::MD);
+
+    // Warning banner
+    egui::Frame::none()
+        .fill(egui::Color32::from_rgb(80, 60, 0))
+        .rounding(egui::Rounding::same(8.0))
+        .inner_margin(egui::Margin::same(12.0))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.colored_label(egui::Color32::YELLOW, "⚠");
+                ui.colored_label(
+                    egui::Color32::WHITE,
+                    "Only use your PAPER BACKUP - the seed phrase you wrote down during vault creation."
+                );
+            });
+        });
+
+    ui.add_space(Spacing::LG);
+
+    ui.label("Enter your 12 or 24 word seed phrase:");
+    ui.add_space(Spacing::SM);
     
-    // Center buttons
-    let button_width = 120.0;
-    let (rect, _) = ui.allocate_exact_size(
-        egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
-        egui::Sense::click()
-    );
-    let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
-    if button_ui.button("Import").clicked() {
-        // Validate inputs
-        if state.import_mnemonic_text.trim().is_empty() {
-            state.error = Some("Please enter your mnemonic phrase".to_string());
+    ui.add(egui::TextEdit::multiline(&mut state.import_mnemonic_text)
+        .hint_text("word1 word2 word3 word4 ...")
+        .desired_width(400.0)
+        .desired_rows(4)
+        .password(true)); // Hide for security
+
+    ui.add_space(Spacing::SM);
+    ui.label(egui::RichText::new("Your seed phrase is never transmitted and stays on this device.")
+        .small()
+        .color(egui::Color32::GRAY));
+
+    if let Some(ref error) = state.error {
+        ui.add_space(Spacing::MD);
+        ui.colored_label(egui::Color32::RED, error);
+    }
+
+    ui.add_space(Spacing::XL);
+
+    if button_large(ui, "Continue").clicked() {
+        let words: Vec<&str> = state.import_mnemonic_text.trim().split_whitespace().collect();
+        
+        if words.is_empty() {
+            state.error = Some("Please enter your seed phrase".to_string());
             return;
         }
 
+        if words.len() != 12 && words.len() != 24 {
+            state.error = Some(format!(
+                "Seed phrase should be 12 or 24 words (you entered {})",
+                words.len()
+            ));
+            return;
+        }
+
+        // Validate mnemonic
+        match Mnemonic::parse_in(Language::English, state.import_mnemonic_text.trim()) {
+            Ok(_) => {
+                state.error = None;
+                if let Some(next) = state.next_step_for_role() {
+                    state.advance_to_step(next);
+                }
+            }
+            Err(e) => {
+                state.error = Some(format!("Invalid seed phrase: {}", e));
+            }
+        }
+    }
+
+    ui.add_space(Spacing::MD);
+    if ui.button("← Back").clicked() {
+        state.go_to_previous_step();
+    }
+}
+
+/// Scan descriptor QR for restore flow
+pub fn render_scan_descriptor_restore(
+    ui: &mut egui::Ui,
+    app_state: &mut AppState,
+    navigation: &mut Navigation,
+    state: &mut VaultCreationState,
+) {
+    ui.heading("Restore from Backup");
+    ui.add_space(Spacing::MD);
+
+    ui.label("Now enter the descriptor configuration from your mobile device.");
+    ui.add_space(Spacing::SM);
+    ui.label("On your mobile, go to Settings → Export Vault Descriptor.");
+    ui.add_space(Spacing::LG);
+
+    ui.label("Paste the descriptor configuration:");
+    ui.add_space(Spacing::SM);
+    ui.add(egui::TextEdit::multiline(&mut state.import_descriptors_qr)
+        .hint_text("Paste configuration from mobile app...")
+        .desired_width(400.0)
+        .desired_rows(3));
+
+    ui.add_space(Spacing::MD);
+
+    // File load option
+    ui.horizontal(|ui| {
+        if ui.button("Load from File").clicked() {
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("Text/JSON", &["txt", "json"])
+                .pick_file()
+            {
+                if let Ok(contents) = std::fs::read_to_string(&path) {
+                    state.import_descriptors_qr = contents;
+                } else {
+                    state.error = Some("Failed to read file".to_string());
+                }
+            }
+        }
+    });
+
+    if let Some(ref error) = state.error {
+        ui.add_space(Spacing::MD);
+        ui.colored_label(egui::Color32::RED, error);
+    }
+
+    ui.add_space(Spacing::XL);
+
+    if state.is_importing {
+        ui.spinner();
+        ui.label("Restoring vault...");
+        return;
+    }
+
+    if button_large(ui, "Restore Vault").clicked() {
         if state.import_descriptors_qr.trim().is_empty() {
-            state.error = Some("Please enter or scan the descriptor QR code".to_string());
-            return;
-        }
-
-        if state.vault_name.trim().is_empty() {
-            state.error = Some("Please enter a vault name".to_string());
+            state.error = Some("Please enter the descriptor configuration".to_string());
             return;
         }
 
         // Parse mnemonic
-        let mnemonic_text = state.import_mnemonic_text.trim();
-        let mnemonic = match Mnemonic::parse_in(Language::English, mnemonic_text) {
+        let mnemonic = match Mnemonic::parse_in(Language::English, state.import_mnemonic_text.trim()) {
             Ok(m) => m,
             Err(e) => {
-                state.error = Some(format!("Invalid mnemonic: {}", e));
+                state.error = Some(format!("Invalid seed phrase: {}", e));
                 return;
             }
         };
@@ -736,25 +1230,20 @@ pub fn render_import_vault(
         state.is_importing = true;
         state.error = None;
 
-        // Import vault using runtime
         if let Some(ref runtime) = app_state.runtime {
             let descriptors_qr = state.import_descriptors_qr.clone();
             let vault_name = state.vault_name.clone();
-            let is_coowner = state.is_coowner;
             let network = app_state.network;
             let runtime_handle = runtime.handle().clone();
 
             let result: Result<(bitvault_common::wallet::VaultService, String), String> =
                 runtime.block_on(async {
                     let mut vault_service = bitvault_common::wallet::VaultService::new(network);
-
                     vault_service
-                        .import_vault(&mnemonic, &descriptors_qr, &vault_name, is_coowner)
+                        .import_vault(&mnemonic, &descriptors_qr, &vault_name, false)
                         .await
-                        .map_err(|e| format!("Import failed: {}", e))?;
+                        .map_err(|e| format!("Restore failed: {}", e))?;
 
-                    // After import, the vault service has the wallet initialized
-                    // Get the vault address from the service
                     let vault_address = vault_service
                         .get_address()
                         .map_err(|e| format!("Failed to get address: {}", e))?;
@@ -763,29 +1252,29 @@ pub fn render_import_vault(
 
             match result {
                 Ok((vault_service, vault_address)) => {
-                    // Initialize vault in app_state
                     if let Err(e) = runtime_handle.block_on(async {
                         app_state.initialize_vault_from_service(vault_service).await
                     }) {
-                        state.error = Some(format!("Failed to initialize vault in app: {}", e));
+                        state.error = Some(format!("Failed to initialize: {}", e));
                         state.is_importing = false;
                         return;
                     }
 
-                    // Fetch initial data
                     if let Some(ref mut handler) = app_state.async_handler {
                         handler.fetch_balance();
                         handler.fetch_address();
                     }
 
-                    // Navigate to dashboard
-                    navigation.navigate_to(crate::state::View::Dashboard { tab: 0 });
                     state.vault_address = Some(vault_address);
-                    state.current_step = VaultCreationStep::Completed;
                     state.is_importing = false;
+                    
+                    // Go to PIN setup
+                    if let Some(next) = state.next_step_for_role() {
+                        state.advance_to_step(next);
+                    }
                 }
                 Err(e) => {
-                    state.error = Some(format!("Failed to import vault: {}", e));
+                    state.error = Some(e);
                     state.is_importing = false;
                 }
             }
@@ -795,21 +1284,8 @@ pub fn render_import_vault(
         }
     }
 
-    ui.add_space(10.0);
-    // Center cancel button
-    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-        if ui.button("Cancel").clicked() {
-            state.current_step = VaultCreationStep::MnemonicGeneration;
-            state.import_mnemonic_text.clear();
-            state.import_descriptors_qr.clear();
-            state.vault_name.clear();
-            state.error = None;
-        }
-    });
-
-    // Show error if any
-    if let Some(ref error) = state.error {
-        ui.add_space(10.0);
-        ui.colored_label(egui::Color32::RED, error);
+    ui.add_space(Spacing::MD);
+    if ui.button("← Back").clicked() {
+        state.go_to_previous_step();
     }
 }

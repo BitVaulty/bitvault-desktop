@@ -10,6 +10,7 @@ mod transaction_history;
 mod vault_detail;
 
 use crate::state::{AppState, Navigation};
+use crate::ui::components::tab_bar;
 use eframe::egui;
 
 /// Render the dashboard
@@ -19,20 +20,24 @@ pub fn render_dashboard(
     navigation: &mut Navigation,
     current_tab: usize,
 ) {
-    // Tab bar
-    ui.horizontal(|ui| {
-        if ui.selectable_label(current_tab == 0, "Vault").clicked() {
-            navigation.set_dashboard_tab(0);
-        }
-        if ui.selectable_label(current_tab == 1, "History").clicked() {
-            navigation.set_dashboard_tab(1);
-        }
-        if ui.selectable_label(current_tab == 2, "Settings").clicked() {
-            navigation.set_dashboard_tab(2);
-        }
+    // Modern tab bar with underline indicators
+    let tabs = [
+        ("Vault", current_tab == 0),
+        ("History", current_tab == 1),
+        ("Settings", current_tab == 2),
+    ];
+    
+    // Collect tab clicks first, then apply navigation
+    let mut clicked_tab: Option<usize> = None;
+    tab_bar(ui, &tabs, |idx| {
+        clicked_tab = Some(idx);
     });
+    
+    if let Some(idx) = clicked_tab {
+        navigation.set_dashboard_tab(idx);
+    }
 
-    ui.separator();
+    ui.add_space(8.0);
 
     // Tab content
     match current_tab {

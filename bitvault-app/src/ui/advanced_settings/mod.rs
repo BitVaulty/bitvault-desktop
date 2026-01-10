@@ -26,6 +26,7 @@ pub enum AdvancedSettingsTab {
     UtxoSelection,
     FeeRate,
     Backup,
+    Security,
 }
 
 impl Default for AdvancedSettingsState {
@@ -78,6 +79,13 @@ pub fn render_advanced_settings(
             {
                 state.current_tab = AdvancedSettingsTab::Backup;
             }
+
+            if ui
+                .selectable_label(state.current_tab == AdvancedSettingsTab::Security, "Security")
+                .clicked()
+            {
+                state.current_tab = AdvancedSettingsTab::Security;
+            }
         });
 
         ui.add_space(10.0);
@@ -95,6 +103,9 @@ pub fn render_advanced_settings(
             AdvancedSettingsTab::Backup => {
                 render_backup_management(ui, app_state, navigation, &mut state.backup_management);
             }
+            AdvancedSettingsTab::Security => {
+                render_security_settings(ui);
+            }
         }
 
         ui.add_space(10.0);
@@ -103,6 +114,51 @@ pub fn render_advanced_settings(
 
         if ui.button("Back").clicked() {
             navigation.go_back();
+        }
+    });
+}
+
+/// Render security settings (PIN management)
+fn render_security_settings(ui: &mut egui::Ui) {
+    ui.vertical(|ui| {
+        ui.heading("Security Settings");
+        ui.add_space(20.0);
+
+        let pin_service = bitvault_common::PinService::new();
+        let has_pin = pin_service.has_pin();
+
+        if has_pin {
+            ui.label("PIN is currently set.");
+            ui.add_space(10.0);
+            
+            ui.colored_label(
+                egui::Color32::YELLOW,
+                "Warning: Resetting your PIN will remove it completely. You will need to set a new PIN if you want to use PIN protection again."
+            );
+            ui.add_space(20.0);
+
+            if ui.button("Reset PIN").clicked() {
+                match pin_service.delete_pin() {
+                    Ok(_) => {
+                        ui.colored_label(
+                            egui::Color32::GREEN,
+                            "✓ PIN has been reset. You can now use the app without PIN authentication."
+                        );
+                        eprintln!("[PIN_RESET] PIN successfully deleted");
+                    }
+                    Err(e) => {
+                        ui.colored_label(
+                            egui::Color32::RED,
+                            format!("Failed to reset PIN: {}", e)
+                        );
+                        eprintln!("[PIN_RESET] Failed to delete PIN: {:?}", e);
+                    }
+                }
+            }
+        } else {
+            ui.label("No PIN is currently set.");
+            ui.add_space(10.0);
+            ui.label("You can set a PIN from the vault creation flow or settings.");
         }
     });
 }

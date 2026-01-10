@@ -2,6 +2,7 @@
 
 pub mod address_book;
 pub mod advanced_settings;
+pub mod components;
 pub mod dashboard;
 pub mod hardware_wallet;
 pub mod help;

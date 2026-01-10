@@ -13,6 +13,57 @@ use crate::ui::transaction_detail::render as render_transaction_detail;
 use crate::ui::vault_creation::{render as render_vault_creation, VaultCreationState};
 use crate::ui::vault_selection::{render as render_vault_selection, VaultSelectionState};
 use eframe::egui;
+use std::path::PathBuf;
+
+/// Load the BitVault logo for display in the top bar
+fn load_bitvault_logo(ctx: &egui::Context) -> Option<egui::TextureHandle> {
+    let mut possible_paths = vec![
+        // Relative to workspace root
+        PathBuf::from("bitvault-desktop/bitvault-app/resources/bitvault_logo.png"),
+        PathBuf::from("bitvault-desktop/bitvault-app/resources/bitvault_logo.svg"),
+        // Relative to current working directory
+        PathBuf::from("resources/bitvault_logo.png"),
+        PathBuf::from("resources/bitvault_logo.svg"),
+        PathBuf::from("bitvault-app/resources/bitvault_logo.png"),
+        PathBuf::from("bitvault-app/resources/bitvault_logo.svg"),
+    ];
+    
+    // Add executable-relative paths
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            // Try resources next to executable
+            possible_paths.push(exe_dir.join("resources/bitvault_logo.png"));
+            possible_paths.push(exe_dir.join("resources/bitvault_logo.svg"));
+            
+            // If we're in target/release, go up to find bitvault-app/resources
+            let mut current = exe_dir;
+            while let Some(parent) = current.parent() {
+                // Check if we're in the bitvault-desktop directory structure
+                let bitvault_app_resources = parent.join("bitvault-app/resources/bitvault_logo.png");
+                if bitvault_app_resources.exists() {
+                    possible_paths.push(bitvault_app_resources.clone());
+                    possible_paths.push(parent.join("bitvault-app/resources/bitvault_logo.svg"));
+                    break;
+                }
+                // Stop if we've gone too far up (reached root or workspace)
+                if parent == current || !parent.exists() {
+                    break;
+                }
+                current = parent;
+            }
+        }
+    }
+    
+    for path in possible_paths.iter() {
+        if path.exists() {
+            if let Some(texture) = crate::utils::images::load_image_texture(ctx, path) {
+                return Some(texture);
+            }
+        }
+    }
+    
+    None
+}
 
 pub struct BitVaultApp {
     app_state: AppState,
@@ -26,27 +77,45 @@ pub struct BitVaultApp {
     address_book_state: AddressBookState,
     advanced_settings_state: AdvancedSettingsState,
     is_authenticated: bool, // Whether user has entered PIN
+    needs_pin_setup: bool, // True if PIN needs to be set (doesn't exist yet)
+    cached_logo_texture: Option<egui::TextureHandle>, // Cache texture handle to keep it alive
+    cached_logo_rect: Option<egui::Rect>, // Cache logo rect - calculated once, never changes
 }
 
 impl BitVaultApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // Configure fonts to support Unicode arrow characters
+        // Configure fonts - try to add system fonts with better Unicode support
         let mut fonts = egui::FontDefinitions::default();
         
-        // Try to use system fonts that support Unicode arrows
-        // On Linux, try common fonts that support arrows
+        // Try to add system fonts that have better Unicode symbol support
+        // This helps with displaying arrows, backspace, and other symbols
         #[cfg(target_os = "linux")]
         {
-            // Try to find a font with good Unicode support
-            // Common Linux fonts: DejaVu Sans, Liberation Sans, Noto Sans
-            // We'll let egui use its default which should work, but ensure we have fallback
-            if let Some(proportional) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
-                // Ensure we have fonts that support arrows
-                // The default egui fonts should work, but we can add system fonts as fallback
+            // Try common Linux fonts with good Unicode coverage
+            let font_paths = [
+                "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+                "/usr/share/fonts/TTF/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            ];
+            
+            for font_path in font_paths.iter() {
+                if let Ok(font_data) = std::fs::read(font_path) {
+                    // In egui 0.27, FontData is created directly from bytes
+                    fonts.font_data.insert(
+                        "noto_sans".to_string(),
+                        egui::FontData::from_owned(font_data),
+                    );
+                    fonts
+                        .families
+                        .get_mut(&egui::FontFamily::Proportional)
+                        .unwrap()
+                        .insert(0, "noto_sans".to_string());
+                    break;
+                }
             }
         }
         
-        // Apply font configuration
         cc.egui_ctx.set_fonts(fonts);
         
         // Ensure panel backgrounds use system theme (not gray)
@@ -108,10 +177,13 @@ impl BitVaultApp {
             }
         };
 
-        // Check if PIN is required
+        // Always require PIN setup/entry - show PIN screen on startup
+        // If PIN exists, show entry screen; if not, show setup screen
         let pin_service = bitvault_common::PinService::new();
-        let requires_pin = pin_service.has_pin();
-        let is_authenticated = !requires_pin; // If no PIN is set, user is already "authenticated"
+        let has_pin = pin_service.has_pin();
+        eprintln!("[APP_INIT] has_pin: {}, will show PIN screen", has_pin);
+        let is_authenticated = false; // Always start unauthenticated - must set/enter PIN
+        let needs_pin_setup = !has_pin; // Show setup screen if no PIN exists
 
         Self {
             app_state,
@@ -121,10 +193,13 @@ impl BitVaultApp {
             send_transaction_state: SendTransactionState::default(),
             pin_entry_state: PinEntryState::new(),
             pin_setup_state: PinSetupState::new(),
+            needs_pin_setup,
             help_and_support_state: HelpAndSupportState::new(),
             address_book_state: AddressBookState::default(),
             advanced_settings_state: AdvancedSettingsState::default(),
             is_authenticated,
+            cached_logo_texture: None,
+            cached_logo_rect: None,
         }
     }
 
@@ -139,45 +214,182 @@ impl eframe::App for BitVaultApp {
         // Process async commands and results
         self.app_state.process_async(Some(ctx));
 
-        // Top bar (if needed)
-        egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
+        // Modern top bar - set minimum height for larger logo
+        egui::TopBottomPanel::top("top_bar")
+            .min_height(48.0) // Minimum height to accommodate larger logo
+            .show(ctx, |ui| {
+            use crate::ui::components::{Colors, Spacing, Typography, ButtonStyle, button};
+            
+            // Get screen rect ONCE - this is TRULY stable and doesn't change with mouse
+            let screen_rect = ctx.screen_rect();
+            let screen_center_x = screen_rect.center().x;
+            
+            // Get the clip rect for the top bar - this is the actual drawing area
+            let clip_rect = ui.clip_rect();
+            let top_bar_y = clip_rect.min.y + clip_rect.height() / 2.0;
+            
+            // Background for top bar
+            let available_rect = ui.available_rect_before_wrap();
+            ui.painter().rect_filled(
+                available_rect,
+                0.0,
+                if ctx.style().visuals.dark_mode {
+                    Colors::GRAY_900
+                } else {
+                    Colors::GRAY_50
+                },
+            );
+            
+            // Draw BitVault logo - STABLE implementation
+            // Cache texture handle (not just ID) to keep it alive
+            if self.cached_logo_texture.is_none() {
+                if let Some(logo_texture) = load_bitvault_logo(ctx) {
+                    self.cached_logo_texture = Some(logo_texture);
+                }
+            }
+            
+            // Draw logo if we have cached texture
+            if let Some(ref logo_texture) = self.cached_logo_texture {
+                // Calculate rect ONCE - size logo to fit within top bar with margins
+                let logo_rect = *self.cached_logo_rect.get_or_insert_with(|| {
+                    // Get top bar height and calculate logo size to fit with margins
+                    let top_bar_height = available_rect.height();
+                    let margin = 8.0; // 8px margin on top and bottom
+                    let max_logo_height = (top_bar_height - margin * 2.0).max(32.0).min(40.0); // Larger logo: min 32px, max 40px
+                    
+                    // Calculate width from aspect ratio
+                    let texture_size = logo_texture.size_vec2();
+                    let aspect_ratio = if texture_size.x > 0.0 && texture_size.y > 0.0 {
+                        texture_size.y / texture_size.x
+                    } else {
+                        1.0
+                    };
+                    let logo_width = max_logo_height / aspect_ratio;
+                    
+                    // Use screen center X and available rect center Y (within bounds)
+                    let screen_center_x = screen_rect.center().x;
+                    let logo_y = available_rect.center().y;
+                    
+                    egui::Rect::from_center_size(
+                        egui::pos2(screen_center_x, logo_y),
+                        egui::Vec2::new(logo_width, max_logo_height)
+                    )
+                });
+                
+                // Draw using painter - outside layout system
+                ui.painter().image(
+                    logo_texture.id(),
+                    logo_rect,
+                    egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                    egui::Color32::WHITE
+                );
+            }
+            
             ui.horizontal(|ui| {
-                ui.heading("BitVault");
+                // Left side: Branding and vault info
+                ui.add_space(Spacing::MD);
 
                 // Show current vault info if loaded
                 if let Some(metadata) = self.app_state.get_current_vault_metadata() {
+                    ui.add_space(Spacing::MD);
                     ui.separator();
-                    ui.label(format!("{} ({})", metadata.name, metadata.network));
+                    ui.add_space(Spacing::MD);
+                    
+                    // Vault name badge
+                    use crate::ui::components::badge;
+                    use crate::ui::components::BadgeStyle;
+                    badge(ui, &metadata.name, BadgeStyle::Info);
+                    
+                    ui.add_space(Spacing::SM);
+                    
+                    // Network badge
+                    let network_badge = match metadata.network.as_str() {
+                        "mainnet" => BadgeStyle::Success,
+                        "testnet" => BadgeStyle::Warning,
+                        "signet" => BadgeStyle::Info,
+                        _ => BadgeStyle::Neutral,
+                    };
+                    badge(ui, &metadata.network, network_badge);
                 }
 
+                // Push back button to the right using available space
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    // Only show back button if there's history to go back to
+                    ui.add_space(Spacing::MD);
+                    
+                    // Right side: Back button
                     if self.navigation.can_go_back() {
-                        // Use "< Back" instead of Unicode arrow to avoid font rendering issues
-                        if ui.button(egui::RichText::new("< Back").size(16.0)).clicked() {
-                            self.navigation.go_back();
+                        // Back button - using Unicode arrow
+                        if button(ui, "← Back", ButtonStyle::Text).clicked() {
+                            // Check if we're in a workflow that has step tracking
+                            match self.navigation.current_view {
+                                View::VaultCreation => {
+                                    // Handle vault creation workflow step navigation
+                                    if !self.vault_creation_state.go_to_previous_step() {
+                                        // At first step, exit workflow
+                                        self.navigation.go_back();
+                                    }
+                                }
+                                View::Recovery => {
+                                    // Handle recovery workflow step navigation
+                                    use crate::ui::recovery::go_back_in_recovery_workflow;
+                                    if !go_back_in_recovery_workflow() {
+                                        // At first step, exit workflow
+                                        self.navigation.go_back();
+                                    }
+                                }
+                                View::UtxoRefresh => {
+                                    // Handle UTXO refresh workflow step navigation
+                                    use crate::ui::recovery::go_back_in_utxo_refresh_workflow;
+                                    if !go_back_in_utxo_refresh_workflow() {
+                                        // At first step, exit workflow
+                                        self.navigation.go_back();
+                                    }
+                                }
+                                _ => {
+                                    // Not a workflow, use normal navigation
+                                    self.navigation.go_back();
+                                }
+                            }
                         }
                     }
                 });
             });
+            
+            ui.add_space(Spacing::SM);
         });
 
         // Main content
-        egui::CentralPanel::default().show(ctx, |ui| {
-            // Check if PIN authentication is required
+        egui::CentralPanel::default()
+            .show(ctx, |ui| {
+            // Check if PIN authentication/setup is required
             if !self.is_authenticated {
-                let mut callback = None;
-                let runtime = self.app_state.get_runtime();
-                let pin_validated =
-                    render_pin_entry(ui, &mut self.pin_entry_state, &mut callback, ctx, runtime);
-
-                if pin_validated {
-                    self.is_authenticated = true;
-                    // Set view without adding to history (PIN entry is not a workflow screen)
-                    if self.app_state.is_vault_loaded() {
-                        self.navigation.set_view(View::Dashboard { tab: 0 });
-                    } else {
+                if self.needs_pin_setup {
+                    // Show PIN setup screen if no PIN exists
+                    let mut callback = None;
+                    let pin_set = render_pin_setup(ui, &mut self.pin_setup_state, &mut callback);
+                    
+                    if pin_set {
+                        eprintln!("[APP] PIN successfully set");
+                        self.is_authenticated = true;
+                        self.needs_pin_setup = false;
+                        // Navigate to vault selection after PIN is set
                         self.navigation.set_view(View::VaultSelection);
+                    }
+                } else {
+                    // Show PIN entry screen if PIN exists
+                    let mut callback = None;
+                    let runtime = self.app_state.get_runtime();
+                    let pin_validated =
+                        render_pin_entry(ui, &mut self.pin_entry_state, &mut callback, ctx, runtime);
+
+                    if pin_validated {
+                        self.is_authenticated = true;
+                        // Set view without adding to history (PIN entry is not a workflow screen)
+                        if self.app_state.is_vault_loaded() {
+                            self.navigation.set_view(View::Dashboard { tab: 0 });
+                        } else {
+                            self.navigation.set_view(View::VaultSelection);
+                        }
                     }
                 }
                 return; // Don't show other content until authenticated
