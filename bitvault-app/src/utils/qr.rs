@@ -30,7 +30,7 @@ pub fn generate_qr_image(ctx: &egui::Context, text: &str) -> Option<egui::Textur
 
         // Get QR code dimensions
         let qr_size = qr.width();
-        
+
         // Scale factor: each QR module becomes this many pixels
         // Higher = crisper when displayed large
         let scale = 8;
@@ -92,7 +92,7 @@ pub fn decode_qr_from_image(image_data: &[u8]) -> Result<String, String> {
     if let Ok(img) = image::load_from_memory(image_data) {
         return decode_qr_from_dynamic_image(&img);
     }
-    
+
     // If that fails, try direct quircs decoding (for raw RGB data from camera)
     decode_qr_from_raw_data(image_data)
 }
@@ -103,57 +103,58 @@ fn decode_qr_from_dynamic_image(img: &image::DynamicImage) -> Result<String, Str
     let rgb_img = img.to_rgb8();
     let (width, _height) = rgb_img.dimensions();
     let raw_data = rgb_img.into_raw();
-    
+
     decode_qr_from_raw_data(&raw_data)
 }
 
 /// Decode QR code from raw RGB data
 fn decode_qr_from_raw_data(rgb_data: &[u8]) -> Result<String, String> {
     use quircs::Quirc;
-    
+
     // Create quirc decoder
     let mut decoder = Quirc::default();
-    
+
     // For now, we need to know the dimensions. Try common aspect ratios
     // This is a limitation - we should pass width/height separately
     // For camera frames, we'll need to handle this differently
-    
+
     // Try to decode assuming square image first (common for QR codes)
     let size = (rgb_data.len() / 3) as f64;
     let width = size.sqrt() as u32;
     let height = width;
-    
+
     if width * height * 3 != rgb_data.len() as u32 {
         // Not square, try 16:9 or 4:3
         // For now, return error and let caller handle dimensions
         return Err("Image dimensions not determinable from data alone".to_string());
     }
-    
+
     // Convert RGB to grayscale for quircs
     let mut gray_data = Vec::with_capacity((width * height) as usize);
     for chunk in rgb_data.chunks_exact(3) {
         // Convert RGB to grayscale using standard formula
-        let gray = (0.299 * chunk[0] as f32 + 0.587 * chunk[1] as f32 + 0.114 * chunk[2] as f32) as u8;
+        let gray =
+            (0.299 * chunk[0] as f32 + 0.587 * chunk[1] as f32 + 0.114 * chunk[2] as f32) as u8;
         gray_data.push(gray);
     }
-    
+
     // Decode with quircs
     let codes = decoder.identify(width as usize, height as usize, &gray_data);
-    
+
     for code_result in codes {
         let code = code_result.map_err(|e| format!("Quircs identify error: {}", e))?;
         if let Ok(decoded) = code.decode() {
             return Ok(String::from_utf8_lossy(&decoded.payload).to_string());
         }
     }
-    
+
     Err("No QR code found in image".to_string())
 }
 
 /// Decode QR code from raw RGB data with known dimensions
 pub fn decode_qr_from_rgb(rgb_data: &[u8], width: u32, height: u32) -> Result<String, String> {
     use quircs::Quirc;
-    
+
     // Validate dimensions
     if rgb_data.len() != (width * height * 3) as usize {
         return Err(format!(
@@ -162,25 +163,26 @@ pub fn decode_qr_from_rgb(rgb_data: &[u8], width: u32, height: u32) -> Result<St
             rgb_data.len()
         ));
     }
-    
+
     // Convert RGB to grayscale
     let mut gray_data = Vec::with_capacity((width * height) as usize);
     for chunk in rgb_data.chunks_exact(3) {
-        let gray = (0.299 * chunk[0] as f32 + 0.587 * chunk[1] as f32 + 0.114 * chunk[2] as f32) as u8;
+        let gray =
+            (0.299 * chunk[0] as f32 + 0.587 * chunk[1] as f32 + 0.114 * chunk[2] as f32) as u8;
         gray_data.push(gray);
     }
-    
+
     // Decode with quircs
     let mut decoder = Quirc::default();
     let codes = decoder.identify(width as usize, height as usize, &gray_data);
-    
+
     for code_result in codes {
         let code = code_result.map_err(|e| format!("Quircs identify error: {}", e))?;
         if let Ok(decoded) = code.decode() {
             return Ok(String::from_utf8_lossy(&decoded.payload).to_string());
         }
     }
-    
+
     Err("No QR code found in image".to_string())
 }
 

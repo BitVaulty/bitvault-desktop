@@ -13,21 +13,46 @@ pub fn load_image_texture(ctx: &egui::Context, path: &Path) -> Option<egui::Text
     if let Ok(img) = image::open(path) {
         return image_to_texture(ctx, &img);
     }
-    
+
     // If image crate fails and it's an SVG, try using egui_extras RetainedImage
     if let Some(ext) = path.extension() {
         if ext == "svg" || ext == "SVG" {
             return load_svg_as_texture(ctx, path);
         }
     }
-    
+
     None
 }
 
-/// Load SVG file - for now returns None as SVG requires async loading
-/// TODO: Implement proper SVG loading with egui_extras or convert to PNG
+/// Load SVG file as an egui texture
+///
+/// # Current Limitation
+/// SVG rendering requires additional dependencies (`resvg` or `egui_extras` with SVG feature)
+/// and careful integration with egui's texture loading pipeline. For now, SVG files should
+/// be pre-converted to PNG format for use in the application.
+///
+/// # Workaround
+/// Convert SVG files to PNG at appropriate resolutions (e.g., 64x64, 128x128, 256x256)
+/// using tools like Inkscape, ImageMagick, or online converters. The application will
+/// then load these PNG files normally.
+///
+/// # Future Enhancement
+/// Full SVG support could be added using:
+/// - `resvg` crate for rendering SVG to pixels
+/// - `egui_extras::RetainedImage` with SVG feature enabled
+///
+/// # Arguments
+/// * `_ctx` - egui context (unused, reserved for future implementation)
+/// * `path` - Path to the SVG file
+///
+/// # Returns
+/// Currently always returns `None`. Future implementations will return the rendered texture.
+#[allow(dead_code)]
 fn load_svg_as_texture(_ctx: &egui::Context, path: &Path) -> Option<egui::TextureHandle> {
-    eprintln!("SVG files require conversion to PNG for now. Please convert {} to PNG format.", path.display());
+    log::warn!(
+        "SVG loading not implemented. Please convert {} to PNG format.",
+        path.display()
+    );
     None
 }
 
@@ -44,7 +69,7 @@ fn image_to_texture(ctx: &egui::Context, img: &DynamicImage) -> Option<egui::Tex
     // For grayscale+alpha images, this will expand to RGB+alpha
     let rgba = img.to_rgba8();
     let size = [rgba.width() as usize, rgba.height() as usize];
-    
+
     // Convert pixels, preserving alpha channel
     // from_rgba_unmultiplied correctly handles transparency
     // For grayscale images, the RGB channels will be the same value
@@ -61,7 +86,7 @@ fn image_to_texture(ctx: &egui::Context, img: &DynamicImage) -> Option<egui::Tex
     let color_image = egui::ColorImage { size, pixels };
     let (width, height) = rgba.dimensions();
     let texture_id = format!("image_{}x{}", width, height);
-    
+
     // Use LINEAR filtering - transparency is preserved in Color32
     Some(ctx.load_texture(&texture_id, color_image, egui::TextureOptions::LINEAR))
 }
@@ -71,7 +96,7 @@ pub fn image_to_icon_data(img: &DynamicImage) -> egui::IconData {
     let rgba = img.to_rgba8();
     let (width, height) = rgba.dimensions();
     let rgba_vec: Vec<u8> = rgba.into_raw();
-    
+
     egui::IconData {
         rgba: rgba_vec,
         width: width as u32,
@@ -91,6 +116,9 @@ pub fn load_icon_data_from_bytes(bytes: &[u8]) -> Option<egui::IconData> {
     Some(image_to_icon_data(&img))
 }
 
+/// Convert a file path to a texture ID string
+/// Replaces path separators and spaces with underscores
+#[allow(dead_code)]
 fn path_to_id(path: &str) -> String {
     path.replace('/', "_").replace('\\', "_").replace(' ', "_")
 }

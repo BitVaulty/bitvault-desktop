@@ -125,9 +125,10 @@ fn show_pcloud_backup_dialog(ui: &mut egui::Ui, app_state: &mut AppState) {
                 let button_width = 140.0;
                 let (rect, _) = ui.allocate_exact_size(
                     egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
-                    egui::Sense::click()
+                    egui::Sense::click(),
                 );
-                let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                let mut button_ui =
+                    ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
                 if button_ui.button("Cancel").clicked() {
                     state.show_dialog = false;
                     state.email_input.clear();
@@ -161,8 +162,7 @@ fn show_pcloud_backup_dialog(ui: &mut egui::Ui, app_state: &mut AppState) {
                             }
                         }
                     } else {
-                        state.error =
-                            Some("Vault not loaded or runtime not available".to_string());
+                        state.error = Some("Vault not loaded or runtime not available".to_string());
                         state.is_uploading = false;
                     }
                 }
@@ -341,9 +341,10 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                 let button_width = 160.0;
                 let (rect, _) = ui.allocate_exact_size(
                     egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
-                    egui::Sense::click()
+                    egui::Sense::click(),
                 );
-                let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                let mut button_ui =
+                    ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
                 if button_ui.button("Manual Backup (ZIP)").clicked() {
                     export_manual_backup(ui, app_state);
                 }

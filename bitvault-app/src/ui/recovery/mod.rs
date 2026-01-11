@@ -9,7 +9,7 @@ mod recovery_flow;
 mod utxo_refresh_flow;
 mod utxo_selection;
 
-pub use recovery_flow::render as render_recovery;
 pub use recovery_flow::go_back_in_recovery_workflow;
-pub use utxo_refresh_flow::render as render_utxo_refresh;
+pub use recovery_flow::render as render_recovery;
 pub use utxo_refresh_flow::go_back_in_utxo_refresh_workflow;
+pub use utxo_refresh_flow::render as render_utxo_refresh;

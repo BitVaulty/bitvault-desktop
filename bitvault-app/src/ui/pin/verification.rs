@@ -100,7 +100,7 @@ pub fn render_pin_verification(ctx: &egui::Context, state: &mut PinVerificationS
                 let row_width = 190.0;
                 let available_width = ui.available_width();
                 let left_margin = ((available_width - row_width) / 2.0).max(0.0);
-                
+
                 // Row 1: 1, 2, 3
                 ui.horizontal(|ui| {
                     ui.add_space(left_margin);
@@ -116,7 +116,7 @@ pub fn render_pin_verification(ctx: &egui::Context, state: &mut PinVerificationS
                         state.error = None;
                     }
                 });
-                
+
                 ui.add_space(5.0);
                 // Row 2: 4, 5, 6
                 ui.horizontal(|ui| {
@@ -133,7 +133,7 @@ pub fn render_pin_verification(ctx: &egui::Context, state: &mut PinVerificationS
                         state.error = None;
                     }
                 });
-                
+
                 ui.add_space(5.0);
                 // Row 3: 7, 8, 9
                 ui.horizontal(|ui| {
@@ -150,7 +150,7 @@ pub fn render_pin_verification(ctx: &egui::Context, state: &mut PinVerificationS
                         state.error = None;
                     }
                 });
-                
+
                 ui.add_space(5.0);
                 // Last row: 0, DEL
                 let last_row_width = 125.0;
@@ -226,9 +226,10 @@ pub fn render_pin_verification(ctx: &egui::Context, state: &mut PinVerificationS
 }
 
 fn render_number_button(ui: &mut egui::Ui, num: &str, pin: &mut String) -> bool {
-    let button = ui.add_sized([60.0, 60.0], egui::Button::new(
-        egui::RichText::new(num).size(24.0)
-    ));
+    let button = ui.add_sized(
+        [60.0, 60.0],
+        egui::Button::new(egui::RichText::new(num).size(24.0)),
+    );
     if button.clicked() && pin.len() < 6 {
         pin.push_str(num);
         true
@@ -239,9 +240,12 @@ fn render_number_button(ui: &mut egui::Ui, num: &str, pin: &mut String) -> bool 
 
 fn render_del_button(ui: &mut egui::Ui, pin: &mut String) -> bool {
     // DEL button - using emoji/Unicode that should work with default fonts
-    let button = ui.add_sized([60.0, 60.0], egui::Button::new(
-        egui::RichText::new("⌫").size(24.0) // Unicode BACKSPACE symbol
-    ));
+    let button = ui.add_sized(
+        [60.0, 60.0],
+        egui::Button::new(
+            egui::RichText::new("⌫").size(24.0), // Unicode BACKSPACE symbol
+        ),
+    );
     if button.clicked() {
         pin.pop();
         true

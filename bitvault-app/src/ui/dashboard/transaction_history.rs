@@ -7,7 +7,9 @@
 //! - Click to view details
 
 use crate::state::{AppState, Navigation, View};
-use crate::ui::components::{card, badge, button, BadgeStyle, ButtonStyle, Colors, Spacing, Typography};
+use crate::ui::components::{
+    badge, button, card, BadgeStyle, ButtonStyle, Colors, Spacing, Typography,
+};
 use chrono::{Local, TimeZone};
 use eframe::egui;
 
@@ -83,21 +85,17 @@ thread_local! {
 
 pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navigation) {
     let ctx = ui.ctx().clone();
-    
+
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.vertical(|ui| {
             ui.add_space(Spacing::MD);
-            
-            ui.label(
-                Typography::heading("Transaction History")
-                    .color(Colors::text_primary(&ctx))
-            );
+
+            ui.label(Typography::heading("Transaction History").color(Colors::text_primary(&ctx)));
 
             if !app_state.is_vault_loaded() {
                 card(ui, |ui| {
                     ui.label(
-                        Typography::body("No vault loaded")
-                            .color(Colors::text_secondary(&ctx))
+                        Typography::body("No vault loaded").color(Colors::text_secondary(&ctx)),
                     );
                 });
                 return;
@@ -118,7 +116,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                             TransactionFilter::Sent => BadgeStyle::Error,
                             TransactionFilter::Received => BadgeStyle::Success,
                         };
-                        
+
                         if is_selected {
                             badge(ui, filter.title(), filter_badge);
                         } else {
@@ -148,10 +146,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                 // Show error if any
                 if let Some(ref error) = state.error {
                     card(ui, |ui| {
-                        ui.label(
-                            Typography::body(error)
-                                .color(Colors::ERROR)
-                        );
+                        ui.label(Typography::body(error).color(Colors::ERROR));
                     });
                     ui.add_space(Spacing::MD);
                 }
@@ -163,7 +158,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                         ui.add_space(Spacing::MD);
                         ui.label(
                             Typography::body("Loading transactions...")
-                                .color(Colors::text_secondary(&ctx))
+                                .color(Colors::text_secondary(&ctx)),
                         );
                     });
                     return;
@@ -179,25 +174,32 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                             ui.add_space(Spacing::XL);
                             ui.label(
                                 Typography::heading_small("No transactions yet")
-                                    .color(Colors::text_primary(&ctx))
+                                    .color(Colors::text_primary(&ctx)),
                             );
                             ui.add_space(Spacing::MD);
                             ui.label(
-                                Typography::body("When you make transactions, they will appear here")
-                                    .color(Colors::text_secondary(&ctx))
+                                Typography::body(
+                                    "When you make transactions, they will appear here",
+                                )
+                                .color(Colors::text_secondary(&ctx)),
                             );
                             ui.add_space(Spacing::LG);
-                            
+
                             ui.horizontal(|ui| {
-                                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                                    if button(ui, "Send BTC", ButtonStyle::Primary).clicked() {
-                                        navigation.navigate_to(View::SendTransaction);
-                                    }
-                                    ui.add_space(Spacing::MD);
-                                    if button(ui, "Receive BTC", ButtonStyle::Secondary).clicked() {
-                                        navigation.navigate_to(View::Receive);
-                                    }
-                                });
+                                ui.with_layout(
+                                    egui::Layout::left_to_right(egui::Align::Center),
+                                    |ui| {
+                                        if button(ui, "Send BTC", ButtonStyle::Primary).clicked() {
+                                            navigation.navigate_to(View::SendTransaction);
+                                        }
+                                        ui.add_space(Spacing::MD);
+                                        if button(ui, "Receive BTC", ButtonStyle::Secondary)
+                                            .clicked()
+                                        {
+                                            navigation.navigate_to(View::Receive);
+                                        }
+                                    },
+                                );
                             });
                             ui.add_space(Spacing::XL);
                         });
@@ -220,7 +222,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     refresh_transactions(ui, app_state);
                 }
             });
-            
+
             ui.add_space(Spacing::LG);
         });
     });
@@ -273,14 +275,14 @@ fn render_transaction_card(
 ) {
     let amount = tx.total_amount_btc();
     let is_positive = amount >= 0.0;
-    
+
     card(ui, |ui| {
         let response = ui.interact(
             ui.available_rect_before_wrap(),
             ui.id().with(&tx.tx_id),
             egui::Sense::click(),
         );
-        
+
         // Hover effect
         if response.hovered() {
             ui.painter().rect_filled(
@@ -293,10 +295,10 @@ fn render_transaction_card(
                 },
             );
         }
-        
+
         ui.vertical(|ui| {
             ui.add_space(Spacing::MD);
-            
+
             // Header row: Status badge and amount
             ui.horizontal(|ui| {
                 // Status badge
@@ -306,7 +308,7 @@ fn render_transaction_card(
                     bitvault_common::types::TransactionStatus::Received => BadgeStyle::Success,
                 };
                 badge(ui, tx.status.as_str(), status_badge);
-                
+
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     // Amount (large, prominent)
                     let amount_str = if is_positive {
@@ -314,15 +316,16 @@ fn render_transaction_card(
                     } else {
                         format!("{:.8} BTC", amount.abs())
                     };
-                    ui.label(
-                        Typography::heading_small(amount_str)
-                            .color(if is_positive { Colors::SUCCESS } else { Colors::ERROR })
-                    );
+                    ui.label(Typography::heading_small(amount_str).color(if is_positive {
+                        Colors::SUCCESS
+                    } else {
+                        Colors::ERROR
+                    }));
                 });
             });
-            
+
             ui.add_space(Spacing::SM);
-            
+
             // Date/time
             let date_str = if tx.timestamp > 0 {
                 if let Some(dt) = Local.timestamp_opt(tx.timestamp, 0).single() {
@@ -333,38 +336,36 @@ fn render_transaction_card(
             } else {
                 "Pending".to_string()
             };
-            ui.label(
-                Typography::body(date_str)
-                    .color(Colors::text_secondary(ctx))
-            );
-            
+            ui.label(Typography::body(date_str).color(Colors::text_secondary(ctx)));
+
             ui.add_space(Spacing::XS);
-            
+
             // Address (truncated, monospace)
             let address_display = if tx.address.len() > 30 {
-                format!("{}...{}", &tx.address[..15], &tx.address[tx.address.len() - 15..])
+                format!(
+                    "{}...{}",
+                    &tx.address[..15],
+                    &tx.address[tx.address.len() - 15..]
+                )
             } else {
                 tx.address.clone()
             };
             ui.label(
                 Typography::caption(address_display)
                     .color(Colors::text_muted(ctx))
-                    .monospace()
+                    .monospace(),
             );
-            
+
             // Description if available
             if let Some(ref desc) = tx.description {
                 if !desc.is_empty() {
                     ui.add_space(Spacing::XS);
-                    ui.label(
-                        Typography::caption(desc)
-                            .color(Colors::text_secondary(ctx))
-                    );
+                    ui.label(Typography::caption(desc).color(Colors::text_secondary(ctx)));
                 }
             }
-            
+
             ui.add_space(Spacing::MD);
-            
+
             // Details button
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -375,10 +376,10 @@ fn render_transaction_card(
                     }
                 });
             });
-            
+
             ui.add_space(Spacing::MD);
         });
-        
+
         if response.clicked() {
             navigation.navigate_to(View::TransactionDetail {
                 txid: tx.tx_id.clone(),

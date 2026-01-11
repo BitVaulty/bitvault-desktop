@@ -1,5 +1,2 @@
 // Data models
-
-pub mod subscription;
-pub mod transaction;
-pub mod vault;
+// Note: Core types are defined in bitvault-common

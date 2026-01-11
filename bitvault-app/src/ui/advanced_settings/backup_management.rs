@@ -136,9 +136,10 @@ pub fn render_backup_management(
                     let button_width = 140.0;
                     let (rect, _) = ui.allocate_exact_size(
                         egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
-                        egui::Sense::click()
+                        egui::Sense::click(),
                     );
-                    let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                    let mut button_ui =
+                        ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
                     if button_ui.button("Cancel").clicked() {
                         pcloud.show_dialog = false;
                         pcloud.email_input.clear();
@@ -146,7 +147,8 @@ pub fn render_backup_management(
                         pcloud.success = false;
                     }
                     button_ui.add_space(10.0);
-                    if button_ui.button("Create Backup").clicked() && !pcloud.email_input.is_empty() {
+                    if button_ui.button("Create Backup").clicked() && !pcloud.email_input.is_empty()
+                    {
                         pcloud.is_uploading = true;
                         pcloud.error = None;
                         pcloud.success = false;

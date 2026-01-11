@@ -72,37 +72,37 @@ pub fn render_pin_setup(
                                 ui.add_space(5.0);
                                 ui.label("Enter a 6-digit PIN to secure your wallet");
                                 ui.add_space(15.0);
-                                
+
                                 // PIN input display
                                 let pin_display = "•".repeat(state.pin.len());
                                 ui.label(egui::RichText::new(pin_display).size(24.0).monospace());
-                            }
+                            },
                         );
-                        
+
                         ui.add_space(15.0);
 
                         // Number pad - centered, all buttons in same UI context for proper tab order
                         let row_width = 190.0;
                         let available_width = ui.available_width();
                         let left_margin = ((available_width - row_width) / 2.0).max(0.0);
-                        
+
                         // Row 1: 1, 2, 3
                         ui.horizontal(|ui| {
                             ui.add_space(left_margin);
                             let button1_response = render_number_button(ui, "1", &mut state.pin);
-                            
+
                             // Auto-focus first button when entering step (only once)
                             if !state.has_auto_focused && state.pin.is_empty() {
                                 button1_response.request_focus();
                                 state.has_auto_focused = true;
                             }
-                            
+
                             ui.add_space(5.0);
                             render_number_button(ui, "2", &mut state.pin);
                             ui.add_space(5.0);
                             render_number_button(ui, "3", &mut state.pin);
                         });
-                        
+
                         ui.add_space(5.0);
                         // Row 2: 4, 5, 6
                         ui.horizontal(|ui| {
@@ -113,7 +113,7 @@ pub fn render_pin_setup(
                             ui.add_space(5.0);
                             render_number_button(ui, "6", &mut state.pin);
                         });
-                        
+
                         ui.add_space(5.0);
                         // Row 3: 7, 8, 9
                         ui.horizontal(|ui| {
@@ -124,7 +124,7 @@ pub fn render_pin_setup(
                             ui.add_space(5.0);
                             render_number_button(ui, "9", &mut state.pin);
                         });
-                        
+
                         ui.add_space(5.0);
                         // Last row: 0, DEL
                         let last_row_width = 125.0;
@@ -139,8 +139,9 @@ pub fn render_pin_setup(
                         // Validate PIN format when 6 digits entered
                         if state.pin.len() == 6 {
                             if !is_valid_pin(&state.pin) {
-                                state.error =
-                                    Some("PIN must contain at least 4 different digits".to_string());
+                                state.error = Some(
+                                    "PIN must contain at least 4 different digits".to_string(),
+                                );
                                 state.pin.clear();
                             } else {
                                 // Move to confirmation step
@@ -160,7 +161,7 @@ pub fn render_pin_setup(
                             |ui| {
                                 ui.add_space(5.0);
                                 ui.label("Re-enter your PIN to confirm");
-                                
+
                                 // Show error if any - use smaller spacing to fit in fixed height
                                 if let Some(ref error) = state.error {
                                     ui.add_space(5.0);
@@ -172,33 +173,34 @@ pub fn render_pin_setup(
                                 // PIN input display
                                 let pin_display = "•".repeat(state.confirm_pin.len());
                                 ui.label(egui::RichText::new(pin_display).size(24.0).monospace());
-                            }
+                            },
                         );
-                        
+
                         ui.add_space(15.0);
 
                         // Number pad - centered, all buttons in same UI context for proper tab order
                         let row_width = 190.0;
                         let available_width = ui.available_width();
                         let left_margin = ((available_width - row_width) / 2.0).max(0.0);
-                        
+
                         // Row 1: 1, 2, 3
                         ui.horizontal(|ui| {
                             ui.add_space(left_margin);
-                            let button1_response = render_number_button(ui, "1", &mut state.confirm_pin);
-                            
+                            let button1_response =
+                                render_number_button(ui, "1", &mut state.confirm_pin);
+
                             // Auto-focus first button when entering confirm step (only once)
                             if !state.has_auto_focused && state.confirm_pin.is_empty() {
                                 button1_response.request_focus();
                                 state.has_auto_focused = true;
                             }
-                            
+
                             ui.add_space(5.0);
                             render_number_button(ui, "2", &mut state.confirm_pin);
                             ui.add_space(5.0);
                             render_number_button(ui, "3", &mut state.confirm_pin);
                         });
-                        
+
                         ui.add_space(5.0);
                         // Row 2: 4, 5, 6
                         ui.horizontal(|ui| {
@@ -209,7 +211,7 @@ pub fn render_pin_setup(
                             ui.add_space(5.0);
                             render_number_button(ui, "6", &mut state.confirm_pin);
                         });
-                        
+
                         ui.add_space(5.0);
                         // Row 3: 7, 8, 9
                         ui.horizontal(|ui| {
@@ -220,7 +222,7 @@ pub fn render_pin_setup(
                             ui.add_space(5.0);
                             render_number_button(ui, "9", &mut state.confirm_pin);
                         });
-                        
+
                         ui.add_space(5.0);
                         // Last row: 0, DEL
                         let last_row_width = 125.0;
@@ -249,7 +251,8 @@ pub fn render_pin_setup(
                                 }
                             } else {
                                 // PINs don't match
-                                state.error = Some("PINs do not match. Please try again.".to_string());
+                                state.error =
+                                    Some("PINs do not match. Please try again.".to_string());
                                 state.pin.clear();
                                 state.confirm_pin.clear();
                                 state.step = PinSetupStep::EnterPin;
@@ -264,9 +267,10 @@ pub fn render_pin_setup(
 }
 
 fn render_number_button(ui: &mut egui::Ui, num: &str, pin: &mut String) -> egui::Response {
-    let button = ui.add_sized([60.0, 60.0], egui::Button::new(
-        egui::RichText::new(num).size(24.0)
-    ));
+    let button = ui.add_sized(
+        [60.0, 60.0],
+        egui::Button::new(egui::RichText::new(num).size(24.0)),
+    );
     if button.clicked() && pin.len() < 6 {
         pin.push_str(num);
     }
@@ -275,9 +279,12 @@ fn render_number_button(ui: &mut egui::Ui, num: &str, pin: &mut String) -> egui:
 
 fn render_del_button(ui: &mut egui::Ui, pin: &mut String) {
     // DEL button - using emoji/Unicode that should work with default fonts
-    let button = ui.add_sized([60.0, 60.0], egui::Button::new(
-        egui::RichText::new("⌫").size(24.0) // Unicode BACKSPACE symbol
-    ));
+    let button = ui.add_sized(
+        [60.0, 60.0],
+        egui::Button::new(
+            egui::RichText::new("⌫").size(24.0), // Unicode BACKSPACE symbol
+        ),
+    );
     if button.clicked() {
         pin.pop();
     }

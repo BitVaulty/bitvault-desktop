@@ -3,15 +3,25 @@
 //! Shows current subscription status and information
 
 use crate::state::{AppState, Navigation};
-use crate::ui::components::{card, badge, button, button_large, BadgeStyle, ButtonStyle, Colors, Spacing, Typography};
+use crate::ui::components::{
+    badge, button, button_large, card, BadgeStyle, ButtonStyle, Colors, Spacing, Typography,
+};
 use eframe::egui;
 
-/// Get the subscription renewal URL
-/// For now, uses the hardcoded annual payment link
-/// TODO: Fetch from remote config in the future
+/// Get the subscription renewal URL for annual payments
+///
+/// Returns the payment link for subscription renewal. Currently uses a static URL
+/// that matches the mobile app's `SubscriptionLinks.annual` configuration.
+///
+/// # Future Enhancement
+/// This URL could be fetched from a remote configuration endpoint to allow
+/// updates without app releases. For now, the static URL is sufficient as
+/// payment links are stable.
+///
+/// # Returns
+/// The Zaprite payment URL for annual subscription renewal
 fn get_subscription_renewal_url() -> String {
-    // Default annual payment link from remote config
-    // This matches the mobile app's SubscriptionLinks.annual
+    // Annual payment link - matches mobile app's SubscriptionLinks.annual
     "https://pay.zaprite.com/pl_81YcHRehEj".to_string()
 }
 
@@ -32,9 +42,7 @@ thread_local! {
 
 pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, _navigation: &mut Navigation) {
     let ctx = ui.ctx().clone();
-    let error_clone = SUBSCRIPTION_STATE.with(|state| {
-        state.borrow().error.clone()
-    });
+    let error_clone = SUBSCRIPTION_STATE.with(|state| state.borrow().error.clone());
     SUBSCRIPTION_STATE.with(|state| {
         let mut state = state.borrow_mut();
 
@@ -59,7 +67,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, _navigation: &mut Nav
                 ui.add_space(Spacing::MD);
                 ui.label(
                     Typography::body("Loading subscription status...")
-                        .color(Colors::text_secondary(&ctx))
+                        .color(Colors::text_secondary(&ctx)),
                 );
             });
             return;
@@ -70,15 +78,9 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, _navigation: &mut Nav
             card(ui, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(Spacing::LG);
-                    ui.label(
-                        Typography::heading_small("Error")
-                            .color(Colors::ERROR)
-                    );
+                    ui.label(Typography::heading_small("Error").color(Colors::ERROR));
                     ui.add_space(Spacing::SM);
-                    ui.label(
-                        Typography::body(error)
-                            .color(Colors::text_secondary(&ctx))
-                    );
+                    ui.label(Typography::body(error).color(Colors::text_secondary(&ctx)));
                     ui.add_space(Spacing::LG);
                     if button(ui, "Retry", ButtonStyle::Primary).clicked() {
                         state.error = None;
@@ -99,7 +101,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, _navigation: &mut Nav
                     ui.add_space(Spacing::LG);
                     ui.label(
                         Typography::body("No subscription data available")
-                            .color(Colors::text_secondary(&ctx))
+                            .color(Colors::text_secondary(&ctx)),
                     );
                     ui.add_space(Spacing::LG);
                 });
@@ -160,12 +162,11 @@ fn render_subscription_info(
     card(ui, |ui| {
         ui.vertical(|ui| {
             ui.add_space(Spacing::LG);
-            
+
             // Header with status badge
             ui.horizontal(|ui| {
                 ui.label(
-                    Typography::heading("Subscription Status")
-                        .color(Colors::text_primary(ctx))
+                    Typography::heading("Subscription Status").color(Colors::text_primary(ctx)),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let badge_style = if subscription.is_valid() {
@@ -182,7 +183,7 @@ fn render_subscription_info(
                     badge(ui, subscription.status_string(), badge_style);
                 });
             });
-            
+
             ui.add_space(Spacing::MD);
             ui.separator();
             ui.add_space(Spacing::MD);
@@ -192,15 +193,11 @@ fn render_subscription_info(
                 // Lifetime indicator
                 if subscription.lifetime {
                     ui.horizontal(|ui| {
-                        ui.label(
-                            egui::RichText::new("✓")
-                                .color(Colors::SUCCESS)
-                                .size(18.0)
-                        );
+                        ui.label(egui::RichText::new("✓").color(Colors::SUCCESS).size(18.0));
                         ui.add_space(Spacing::SM);
                         ui.label(
                             Typography::body("Lifetime Subscription")
-                                .color(Colors::text_primary(ctx))
+                                .color(Colors::text_primary(ctx)),
                         );
                     });
                     ui.add_space(Spacing::SM);
@@ -209,15 +206,11 @@ fn render_subscription_info(
                 // Active indicator
                 if subscription.is_active && !subscription.lifetime {
                     ui.horizontal(|ui| {
-                        ui.label(
-                            egui::RichText::new("✓")
-                                .color(Colors::SUCCESS)
-                                .size(18.0)
-                        );
+                        ui.label(egui::RichText::new("✓").color(Colors::SUCCESS).size(18.0));
                         ui.add_space(Spacing::SM);
                         ui.label(
                             Typography::body("Subscription is active")
-                                .color(Colors::text_primary(ctx))
+                                .color(Colors::text_primary(ctx)),
                         );
                     });
                     ui.add_space(Spacing::SM);
@@ -226,15 +219,11 @@ fn render_subscription_info(
                 // Grace period indicator
                 if subscription.is_in_grace_period() {
                     ui.horizontal(|ui| {
-                        ui.label(
-                            egui::RichText::new("⚠")
-                                .color(Colors::WARNING)
-                                .size(18.0)
-                        );
+                        ui.label(egui::RichText::new("⚠").color(Colors::WARNING).size(18.0));
                         ui.add_space(Spacing::SM);
                         ui.label(
                             Typography::body("Subscription in grace period (7 days)")
-                                .color(Colors::WARNING)
+                                .color(Colors::WARNING),
                         );
                     });
                     ui.add_space(Spacing::SM);
@@ -246,27 +235,23 @@ fn render_subscription_info(
                         ui.horizontal(|ui| {
                             ui.label(
                                 Typography::body("Days remaining:")
-                                    .color(Colors::text_secondary(ctx))
+                                    .color(Colors::text_secondary(ctx)),
                             );
                             ui.add_space(Spacing::SM);
                             ui.label(
                                 Typography::body(format!("{}", days))
                                     .color(Colors::text_primary(ctx))
-                                    .strong()
+                                    .strong(),
                             );
                         });
                         ui.add_space(Spacing::SM);
                     } else if days == 0 {
                         ui.horizontal(|ui| {
-                            ui.label(
-                                egui::RichText::new("⚠")
-                                    .color(Colors::WARNING)
-                                    .size(18.0)
-                            );
+                            ui.label(egui::RichText::new("⚠").color(Colors::WARNING).size(18.0));
                             ui.add_space(Spacing::SM);
                             ui.label(
                                 Typography::body("Subscription expires today")
-                                    .color(Colors::WARNING)
+                                    .color(Colors::WARNING),
                             );
                         });
                         ui.add_space(Spacing::SM);
@@ -281,13 +266,12 @@ fn render_subscription_info(
                         ui.add_space(Spacing::SM);
                         ui.horizontal(|ui| {
                             ui.label(
-                                Typography::body("Paid until:")
-                                    .color(Colors::text_secondary(ctx))
+                                Typography::body("Paid until:").color(Colors::text_secondary(ctx)),
                             );
                             ui.add_space(Spacing::SM);
                             ui.label(
                                 Typography::body(dt.format("%B %d, %Y").to_string())
-                                    .color(Colors::text_primary(ctx))
+                                    .color(Colors::text_primary(ctx)),
                             );
                         });
                     }
@@ -307,12 +291,25 @@ fn render_subscription_info(
 
     if should_show_renewal {
         let (warning_color, warning_text) = if !subscription.is_valid() {
-            (Colors::ERROR, "Subscription expired. Please renew to continue using the service.".to_string())
+            (
+                Colors::ERROR,
+                "Subscription expired. Please renew to continue using the service.".to_string(),
+            )
         } else if subscription.is_in_grace_period() {
-            (Colors::WARNING, "Subscription in grace period. Consider renewing to avoid service interruption.".to_string())
+            (
+                Colors::WARNING,
+                "Subscription in grace period. Consider renewing to avoid service interruption."
+                    .to_string(),
+            )
         } else if let Some(days) = subscription.days_remaining {
             if days <= 7 && days > 0 {
-                (Colors::WARNING, format!("Subscription expires in {} days. Consider renewing soon.", days))
+                (
+                    Colors::WARNING,
+                    format!(
+                        "Subscription expires in {} days. Consider renewing soon.",
+                        days
+                    ),
+                )
             } else {
                 return; // Don't show warning card
             }
@@ -324,16 +321,9 @@ fn render_subscription_info(
             ui.vertical(|ui| {
                 ui.add_space(Spacing::MD);
                 ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new("⚠")
-                            .color(warning_color)
-                            .size(20.0)
-                    );
+                    ui.label(egui::RichText::new("⚠").color(warning_color).size(20.0));
                     ui.add_space(Spacing::SM);
-                    ui.label(
-                        Typography::body(warning_text)
-                            .color(warning_color)
-                    );
+                    ui.label(Typography::body(warning_text).color(warning_color));
                 });
                 ui.add_space(Spacing::MD);
                 ui.vertical_centered(|ui| {

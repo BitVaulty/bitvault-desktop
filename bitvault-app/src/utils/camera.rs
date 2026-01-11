@@ -31,15 +31,17 @@ impl CameraCapture {
 
         // Try to open the first available camera
         let index = CameraIndex::Index(0);
-        let format = RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
-        
-        let mut camera = Camera::new(index, format)
-            .map_err(|e| format!("Failed to open camera: {}", e))?;
-        
+        let format =
+            RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
+
+        let mut camera =
+            Camera::new(index, format).map_err(|e| format!("Failed to open camera: {}", e))?;
+
         // Open the camera stream
-        camera.open_stream()
+        camera
+            .open_stream()
             .map_err(|e| format!("Failed to start camera stream: {}", e))?;
-        
+
         self.camera = Some(camera);
         Ok(())
     }
@@ -61,12 +63,12 @@ impl CameraCapture {
         }
 
         let camera = self.camera.as_mut()?;
-        
+
         // Capture frame
         match camera.frame() {
             Ok(frame) => {
                 self.last_frame_time = Some(Instant::now());
-                
+
                 // Convert frame to RGB image
                 let image = match frame.decode_image::<RgbFormat>() {
                     Ok(img) => img,
@@ -75,7 +77,7 @@ impl CameraCapture {
                         return None;
                     }
                 };
-                
+
                 // Convert to egui ColorImage
                 let width = image.width() as usize;
                 let height = image.height() as usize;
@@ -108,22 +110,26 @@ impl CameraCapture {
 
     /// Try to scan QR code from the current camera frame
     pub fn scan_qr_from_frame(&mut self) -> Result<String, String> {
-        let camera = self.camera.as_mut()
+        let camera = self
+            .camera
+            .as_mut()
             .ok_or_else(|| "Camera not initialized".to_string())?;
-        
+
         // Capture frame
-        let frame = camera.frame()
+        let frame = camera
+            .frame()
             .map_err(|e| format!("Failed to capture frame: {}", e))?;
-        
+
         // Decode to RGB
-        let image = frame.decode_image::<RgbFormat>()
+        let image = frame
+            .decode_image::<RgbFormat>()
             .map_err(|e| format!("Failed to decode frame: {}", e))?;
-        
+
         // Get dimensions and raw data
         let width = image.width();
         let height = image.height();
         let rgb_data = image.into_raw();
-        
+
         // Decode QR code using the RGB data with known dimensions
         decode_qr_from_rgb(&rgb_data, width, height)
     }

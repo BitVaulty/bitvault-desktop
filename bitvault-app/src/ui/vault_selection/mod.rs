@@ -6,7 +6,9 @@
 //! - Import a vault
 
 use crate::state::{AppState, Navigation};
-use crate::ui::components::{card, badge, button, button_large, BadgeStyle, ButtonStyle, Colors, Spacing, Typography};
+use crate::ui::components::{
+    badge, button, button_large, card, BadgeStyle, ButtonStyle, Colors, Spacing, Typography,
+};
 use crate::ui::pin::render_pin_verification;
 use eframe::egui;
 use serde_json;
@@ -82,7 +84,7 @@ pub fn render(
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.vertical_centered(|ui| {
             ui.add_space(Spacing::XL);
-            
+
             ui.label(
                 Typography::heading("Select Vault")
                     .color(Colors::text_primary(ctx))
@@ -188,12 +190,12 @@ pub fn render(
                         // Get available height and center content vertically
                         let available_height = ui.available_height();
                         let min_content_height = 150.0; // Minimum space for content
-                        
+
                         // Add top spacing to center vertically
                         if available_height > min_content_height {
                             ui.add_space((available_height - min_content_height) / 2.0);
                         }
-                        
+
                         ui.label(
                             Typography::heading_small("No vaults found")
                                 .color(Colors::text_primary(ctx))
@@ -233,11 +235,11 @@ pub fn render(
                     if index > 0 {
                         ui.add_space(Spacing::MD);
                     }
-                    
+
                     let is_selected = state.selected_index == Some(index);
                     let validation_result = vault.validate();
                     let is_valid = validation_result.is_ok();
-                    
+
                     // Card with hover and selection effects
                     let card_response = card(ui, |ui| {
                         let response = ui.interact(
@@ -245,7 +247,7 @@ pub fn render(
                             ui.id().with(index),
                             egui::Sense::click(),
                         );
-                        
+
                         // Selection border
                         if is_selected {
                             ui.painter().rect_stroke(
@@ -254,7 +256,7 @@ pub fn render(
                                 egui::Stroke::new(2.0, Colors::PRIMARY),
                             );
                         }
-                        
+
                         // Hover effect
                         if response.hovered() && !is_selected {
                             ui.painter().rect_filled(
@@ -267,10 +269,10 @@ pub fn render(
                                 },
                             );
                         }
-                        
+
                         ui.vertical(|ui| {
                             ui.add_space(Spacing::MD);
-                            
+
                             // Header row
                             ui.horizontal(|ui| {
                                 // Vault name
@@ -278,7 +280,7 @@ pub fn render(
                                     Typography::heading_small(&vault.name)
                                         .color(Colors::text_primary(ctx))
                                 );
-                                
+
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                     // Status badge
                                     let status_badge = if is_valid {
@@ -296,9 +298,9 @@ pub fn render(
                                         "Error"
                                     };
                                     badge(ui, status_text, status_badge);
-                                    
+
                                     ui.add_space(Spacing::SM);
-                                    
+
                                     // Network badge
                                     let network_badge = match vault.network.as_str() {
                                         "mainnet" => BadgeStyle::Success,
@@ -309,9 +311,9 @@ pub fn render(
                                     badge(ui, &vault.network, network_badge);
                                 });
                             });
-                            
+
                             ui.add_space(Spacing::SM);
-                            
+
                             // Address (truncated)
                             let address_display = if vault.address.len() > 30 {
                                 format!("{}...", &vault.address[0..30])
@@ -323,7 +325,7 @@ pub fn render(
                                     .color(Colors::text_secondary(ctx))
                                     .monospace()
                             );
-                            
+
                             // Created date
                             if let Some(ref created) = vault.created_at.get(0..10) {
                                 ui.add_space(Spacing::XS);
@@ -332,7 +334,7 @@ pub fn render(
                                         .color(Colors::text_muted(ctx))
                                 );
                             }
-                            
+
                             // Show validation error if invalid
                             if !is_valid {
                                 ui.add_space(Spacing::SM);
@@ -346,15 +348,15 @@ pub fn render(
                                     }
                                 }
                             }
-                            
+
                             ui.add_space(Spacing::MD);
                         });
-                        
+
                         if response.clicked() {
                             state.selected_index = Some(index);
                         }
                     });
-                    
+
                     // Add spacing AFTER each card
                     if index < state.vaults.len() - 1 {
                         ui.add_space(Spacing::MD); // Between cards
@@ -365,7 +367,7 @@ pub fn render(
                         ui.add_space(20.0);
                     }
                 }
-                
+
                 // Primary action buttons - only show when there are vaults
                 if !state.vaults.is_empty() {
                     ui.horizontal_centered(|ui| {
@@ -479,7 +481,7 @@ pub fn render(
                 }
             } // closes else block for !vaults.is_empty()
         }); // closes vertical_centered
-        
+
         // Dialogs (outside ScrollArea since they're windows)
         // Rename dialog
         if let Some(index) = state.rename_dialog {

@@ -213,7 +213,7 @@ pub fn render_address_book(
         let button_width = 120.0;
         let (rect, _) = ui.allocate_exact_size(
             egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
-            egui::Sense::click()
+            egui::Sense::click(),
         );
         let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
         if button_ui.button("Refresh").clicked() {
@@ -234,6 +234,7 @@ pub fn render_address_book(
             ctx,
             &mut state.add_address_state,
             &vault_address,
+            app_state.network,
             |_address, _label| {
                 // Address saved - mark for refresh
                 should_refresh = true;

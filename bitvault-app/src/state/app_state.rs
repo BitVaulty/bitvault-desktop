@@ -122,8 +122,16 @@ impl AppState {
                         }
                         needs_repaint = true;
                     }
-                    crate::state::async_commands::AsyncResult::Error(_) => {
-                        // TODO: Handle errors
+                    crate::state::async_commands::AsyncResult::Error(e) => {
+                        // Log the error for debugging
+                        log::error!("Async operation failed: {}", e);
+
+                        // Update vault data to show error state
+                        if let Ok(mut data) = vault_data.lock() {
+                            data.set_error(Some(e));
+                        }
+
+                        needs_repaint = true;
                     }
                 }
             }

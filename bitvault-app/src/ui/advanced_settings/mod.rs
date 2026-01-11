@@ -81,7 +81,10 @@ pub fn render_advanced_settings(
             }
 
             if ui
-                .selectable_label(state.current_tab == AdvancedSettingsTab::Security, "Security")
+                .selectable_label(
+                    state.current_tab == AdvancedSettingsTab::Security,
+                    "Security",
+                )
                 .clicked()
             {
                 state.current_tab = AdvancedSettingsTab::Security;
@@ -130,7 +133,7 @@ fn render_security_settings(ui: &mut egui::Ui) {
         if has_pin {
             ui.label("PIN is currently set.");
             ui.add_space(10.0);
-            
+
             ui.colored_label(
                 egui::Color32::YELLOW,
                 "Warning: Resetting your PIN will remove it completely. You will need to set a new PIN if you want to use PIN protection again."

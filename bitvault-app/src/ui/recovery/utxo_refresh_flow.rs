@@ -56,7 +56,7 @@ impl UtxoRefreshState {
             self.current_step = previous;
             true
         } else {
-            false  // At first step
+            false // At first step
         }
     }
 
@@ -74,17 +74,13 @@ thread_local! {
 
 /// Check if we can go back in the UTXO refresh workflow
 pub fn can_go_back_in_utxo_refresh_workflow() -> bool {
-    REFRESH_STATE.with(|state| {
-        state.borrow().can_go_back_in_workflow()
-    })
+    REFRESH_STATE.with(|state| state.borrow().can_go_back_in_workflow())
 }
 
 /// Go back in the UTXO refresh workflow
 /// Returns true if there was a previous step, false if at first step
 pub fn go_back_in_utxo_refresh_workflow() -> bool {
-    REFRESH_STATE.with(|state| {
-        state.borrow_mut().go_to_previous_step()
-    })
+    REFRESH_STATE.with(|state| state.borrow_mut().go_to_previous_step())
 }
 
 pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navigation) {
@@ -113,7 +109,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     let mut cancel_clicked = false;
                     let mut continue_clicked = false;
                     let mut has_selection = false;
-                    
+
                     if let Some(ref mut selection_state) = state.selection_state {
                         has_selection = selection_state.has_selection();
                         render_utxo_selection(ui, selection_state, RecoveryMode::Refresh);
@@ -123,7 +119,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                             continue_clicked = ui.button("Continue").clicked() && has_selection;
                         });
                     }
-                    
+
                     // Handle navigation outside the borrow
                     if cancel_clicked {
                         // Use step-based navigation for consistency
@@ -226,7 +222,7 @@ fn build_refresh_transaction(
         // Convert selected outpoints from strings to OutPoint
         use bdk::bitcoin::{OutPoint, Txid};
         use std::str::FromStr;
-        
+
         let utxos_to_spend: Result<Vec<OutPoint>, _> = selected_utxos
             .iter()
             .map(|outpoint_str| {

@@ -64,7 +64,7 @@ impl RecoveryState {
             self.current_step = previous;
             true
         } else {
-            false  // At first step
+            false // At first step
         }
     }
 
@@ -82,17 +82,13 @@ thread_local! {
 
 /// Check if we can go back in the recovery workflow
 pub fn can_go_back_in_recovery_workflow() -> bool {
-    RECOVERY_STATE.with(|state| {
-        state.borrow().can_go_back_in_workflow()
-    })
+    RECOVERY_STATE.with(|state| state.borrow().can_go_back_in_workflow())
 }
 
 /// Go back in the recovery workflow
 /// Returns true if there was a previous step, false if at first step
 pub fn go_back_in_recovery_workflow() -> bool {
-    RECOVERY_STATE.with(|state| {
-        state.borrow_mut().go_to_previous_step()
-    })
+    RECOVERY_STATE.with(|state| state.borrow_mut().go_to_previous_step())
 }
 
 pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navigation) {
@@ -121,7 +117,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     let mut cancel_clicked = false;
                     let mut continue_clicked = false;
                     let mut has_selection = false;
-                    
+
                     if let Some(ref mut selection_state) = state.selection_state {
                         render_utxo_selection(ui, selection_state, RecoveryMode::Recovery);
                         ui.add_space(20.0);
@@ -129,15 +125,16 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                         let button_width = 120.0;
                         let (rect, _) = ui.allocate_exact_size(
                             egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
-                            egui::Sense::click()
+                            egui::Sense::click(),
                         );
-                        let mut button_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                        let mut button_ui =
+                            ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
                         cancel_clicked = button_ui.button("Cancel").clicked();
                         button_ui.add_space(10.0);
                         has_selection = selection_state.has_selection();
                         continue_clicked = button_ui.button("Continue").clicked() && has_selection;
                     }
-                    
+
                     // Handle navigation outside the borrow
                     if cancel_clicked {
                         // Use step-based navigation for consistency
@@ -148,7 +145,8 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     }
                     if continue_clicked {
                         if let Some(ref selection_state) = state.selection_state {
-                            state.selected_utxos = selection_state.selected.iter().cloned().collect();
+                            state.selected_utxos =
+                                selection_state.selected.iter().cloned().collect();
                             state.advance_to_step(RecoveryStep::BuildingPreview);
                         }
                     }
@@ -169,7 +167,8 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                                 // Get recipient address (for now, use vault address)
                                 match app_state.vault_data.lock() {
                                     Ok(data) => {
-                                        state.recipient = data.receive_address.clone().unwrap_or_default();
+                                        state.recipient =
+                                            data.receive_address.clone().unwrap_or_default();
                                         state.advance_to_step(RecoveryStep::Signing);
                                     }
                                     Err(_) => {
@@ -234,11 +233,7 @@ fn load_old_utxos(
     }
 }
 
-fn build_recovery_preview(
-    _ui: &mut egui::Ui,
-    app_state: &mut AppState,
-    state: &mut RecoveryState,
-) {
+fn build_recovery_preview(_ui: &mut egui::Ui, app_state: &mut AppState, state: &mut RecoveryState) {
     if let (Some(vault_service), Some(runtime)) =
         (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
     {
@@ -309,11 +304,7 @@ fn render_preview(ui: &mut egui::Ui, preview: &bitvault_common::types::Transacti
     }
 }
 
-fn sign_and_share(
-    _ui: &mut egui::Ui,
-    app_state: &mut AppState,
-    state: &mut RecoveryState,
-) {
+fn sign_and_share(_ui: &mut egui::Ui, app_state: &mut AppState, state: &mut RecoveryState) {
     if let (Some(vault_service), Some(runtime)) =
         (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
     {

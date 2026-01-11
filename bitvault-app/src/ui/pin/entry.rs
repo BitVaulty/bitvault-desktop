@@ -161,7 +161,7 @@ pub fn render_pin_entry(
         let row_width = 190.0;
         let available_width = ui.available_width();
         let left_margin = ((available_width - row_width) / 2.0).max(0.0);
-        
+
         // Row 1: 1, 2, 3
         ui.horizontal(|ui| {
             ui.add_space(left_margin);
@@ -171,7 +171,7 @@ pub fn render_pin_entry(
             ui.add_space(5.0);
             render_number_button(ui, "3", &mut state.pin);
         });
-        
+
         ui.add_space(5.0);
         // Row 2: 4, 5, 6
         ui.horizontal(|ui| {
@@ -182,7 +182,7 @@ pub fn render_pin_entry(
             ui.add_space(5.0);
             render_number_button(ui, "6", &mut state.pin);
         });
-        
+
         ui.add_space(5.0);
         // Row 3: 7, 8, 9
         ui.horizontal(|ui| {
@@ -193,7 +193,7 @@ pub fn render_pin_entry(
             ui.add_space(5.0);
             render_number_button(ui, "9", &mut state.pin);
         });
-        
+
         ui.add_space(5.0);
         // Last row: 0, DEL (centered differently)
         let last_row_width = 125.0;
@@ -214,7 +214,7 @@ pub fn render_pin_entry(
 
             // Validate PIN asynchronously
             let pin_service = PinService::new();
-            
+
             // Check if PIN exists first
             if !pin_service.has_pin() {
                 eprintln!("[PIN] No PIN set, but user entered PIN. This shouldn't happen.");
@@ -303,9 +303,10 @@ pub fn render_pin_entry(
 }
 
 fn render_number_button(ui: &mut egui::Ui, num: &str, pin: &mut String) {
-    let button = ui.add_sized([60.0, 60.0], egui::Button::new(
-        egui::RichText::new(num).size(24.0)
-    ));
+    let button = ui.add_sized(
+        [60.0, 60.0],
+        egui::Button::new(egui::RichText::new(num).size(24.0)),
+    );
     if button.clicked() && pin.len() < 6 {
         pin.push_str(num);
     }
@@ -314,9 +315,12 @@ fn render_number_button(ui: &mut egui::Ui, num: &str, pin: &mut String) {
 fn render_del_button(ui: &mut egui::Ui, pin: &mut String) {
     // DEL button - using emoji/Unicode that should work with default fonts
     // Try backspace emoji or arrow - fallback to text if not supported
-    let button = ui.add_sized([60.0, 60.0], egui::Button::new(
-        egui::RichText::new("⌫").size(24.0) // Unicode BACKSPACE symbol
-    ));
+    let button = ui.add_sized(
+        [60.0, 60.0],
+        egui::Button::new(
+            egui::RichText::new("⌫").size(24.0), // Unicode BACKSPACE symbol
+        ),
+    );
     if button.clicked() {
         pin.pop();
     }

@@ -190,7 +190,7 @@ impl VaultCreationState {
             self.current_step = previous;
             true
         } else {
-            false  // At first step
+            false // At first step
         }
     }
 
@@ -198,7 +198,7 @@ impl VaultCreationState {
     pub fn can_go_back_in_workflow(&self) -> bool {
         !self.step_history.is_empty()
     }
-    
+
     /// Check if the step just changed (for auto-focus)
     /// Returns true only on the first frame after a step change.
     /// Updates previous_step immediately to prevent it from returning true again.
@@ -220,13 +220,13 @@ impl VaultCreationState {
         self.device_role = DeviceRole::default();
         // Don't clear other state - user might want to resume
     }
-    
+
     /// Full reset for starting a new vault creation flow
     /// Call this when user selects a role from role selection
     pub fn reset_for_new_flow(&mut self) {
         // Clear step history
         self.step_history.clear();
-        
+
         // Clear all input state
         self.mnemonic = None;
         self.verified_seed_phrase = false;
@@ -249,7 +249,7 @@ impl VaultCreationState {
         self.import_mnemonic_text.clear();
         self.import_descriptors_qr.clear();
         self.is_importing = false;
-        
+
         // Stop camera if running
         if let Some(ref mut camera) = self.camera_capture {
             camera.stop_capture();
@@ -260,16 +260,16 @@ impl VaultCreationState {
         self.saved_exchange_file = None;
         self.signing_secret_key = None;
         self.recipient_public_key = None;
-        
+
         log::info!("Reset vault creation state for new flow");
     }
-    
+
     /// Clear sensitive data from memory (seed phrases, mnemonics)
     /// Call this after vault creation/import succeeds
     pub fn clear_sensitive_data(&mut self) {
         // Clear the generated mnemonic
         self.mnemonic = None;
-        
+
         // Clear any imported seed phrase text by overwriting with zeros first
         // This helps ensure the data is actually cleared from memory
         let len = self.import_mnemonic_text.len();
@@ -279,13 +279,13 @@ impl VaultCreationState {
             self.import_mnemonic_text.push('\0');
         }
         self.import_mnemonic_text.clear();
-        
+
         // Clear PIN setup state
         self.pin_setup_state = crate::ui::pin::PinSetupState::new();
-        
+
         log::info!("Cleared sensitive vault creation data from memory");
     }
-    
+
     /// Get the next step based on role and current step
     pub fn next_step_for_role(&self) -> Option<VaultCreationStep> {
         match self.device_role {
@@ -295,7 +295,7 @@ impl VaultCreationState {
             DeviceRole::Restore => self.next_step_restore(),
         }
     }
-    
+
     fn next_step_main(&self) -> Option<VaultCreationStep> {
         match self.current_step {
             VaultCreationStep::RoleSelection => Some(VaultCreationStep::NameVault),
@@ -312,7 +312,7 @@ impl VaultCreationState {
             _ => None,
         }
     }
-    
+
     fn next_step_coowner(&self) -> Option<VaultCreationStep> {
         match self.current_step {
             VaultCreationStep::RoleSelection => Some(VaultCreationStep::NameVault),
@@ -328,7 +328,7 @@ impl VaultCreationState {
             _ => None,
         }
     }
-    
+
     fn next_step_view_only(&self) -> Option<VaultCreationStep> {
         match self.current_step {
             VaultCreationStep::RoleSelection => Some(VaultCreationStep::NameVault),
@@ -338,7 +338,7 @@ impl VaultCreationState {
             _ => None,
         }
     }
-    
+
     fn next_step_restore(&self) -> Option<VaultCreationStep> {
         match self.current_step {
             VaultCreationStep::RoleSelection => Some(VaultCreationStep::NameVault),
@@ -359,7 +359,7 @@ pub fn render(
     state: &mut VaultCreationState,
 ) {
     let ctx = ui.ctx().clone();
-    
+
     ui.vertical_centered(|ui| {
         // Render current step (each step handles its own error display)
         match state.current_step {

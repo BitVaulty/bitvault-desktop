@@ -18,6 +18,8 @@ pub struct VaultData {
     pub last_update: Option<std::time::Instant>,
     /// Loading state
     pub is_loading: bool,
+    /// Last error message (if any)
+    pub last_error: Option<String>,
 }
 
 impl VaultData {
@@ -54,6 +56,17 @@ impl VaultData {
     /// Set loading state
     pub fn set_loading(&mut self, loading: bool) {
         self.is_loading = loading;
+    }
+
+    /// Set error message
+    pub fn set_error(&mut self, error: Option<String>) {
+        self.last_error = error;
+        self.is_loading = false;
+    }
+
+    /// Clear error message
+    pub fn clear_error(&mut self) {
+        self.last_error = None;
     }
 
     /// Format balance as BTC string

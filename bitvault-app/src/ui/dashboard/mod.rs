@@ -26,13 +26,13 @@ pub fn render_dashboard(
         ("History", current_tab == 1),
         ("Settings", current_tab == 2),
     ];
-    
+
     // Collect tab clicks first, then apply navigation
     let mut clicked_tab: Option<usize> = None;
     tab_bar(ui, &tabs, |idx| {
         clicked_tab = Some(idx);
     });
-    
+
     if let Some(idx) = clicked_tab {
         navigation.set_dashboard_tab(idx);
     }

@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
+[lib]
+name = "bitvault_app"
+path = "src/lib.rs"
+
 [dependencies]
 # GUI
 eframe = "0.27"

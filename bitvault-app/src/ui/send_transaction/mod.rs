@@ -11,7 +11,9 @@
 mod steps;
 
 use crate::state::{AppState, Navigation};
-use crate::ui::components::{card, badge, button, button_large, BadgeStyle, ButtonStyle, Colors, Spacing, Typography};
+use crate::ui::components::{
+    badge, button, button_large, card, BadgeStyle, ButtonStyle, Colors, Spacing, Typography,
+};
 use crate::ui::hardware_wallet::{render_qr_display, render_qr_scanner};
 use crate::ui::pin::render_pin_verification;
 use eframe::egui;
@@ -87,11 +89,11 @@ pub fn render(
         return; // Don't show transaction form until PIN is verified
     }
     let ctx = ui.ctx().clone();
-    
+
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.vertical_centered(|ui| {
             ui.add_space(Spacing::XL);
-            
+
             ui.label(
                 Typography::heading("Send Bitcoin")
                     .color(Colors::text_primary(&ctx))
@@ -135,7 +137,7 @@ pub fn render(
             card(ui, |ui| {
                 ui.vertical(|ui| {
                     ui.add_space(Spacing::MD);
-                    
+
                     // Recipient address
                     ui.label(
                         Typography::body("Recipient Address")
@@ -179,7 +181,7 @@ pub fn render(
 
                     // Recovery mode
                     ui.checkbox(&mut state.is_recovery, "Recovery Mode");
-                    
+
                     ui.add_space(Spacing::MD);
                 });
             });
@@ -202,17 +204,17 @@ pub fn render(
             // Show preview if available
             if let Some(ref preview) = state.preview {
                 ui.add_space(Spacing::LG);
-                
+
                 card(ui, |ui| {
                     ui.vertical(|ui| {
                         ui.add_space(Spacing::MD);
-                        
+
                         ui.label(
                             Typography::heading_small("Transaction Preview")
                                 .color(Colors::text_primary(&ctx))
                         );
                         ui.add_space(Spacing::MD);
-                        
+
                         // Amount (prominent)
                         ui.horizontal(|ui| {
                             ui.label(
@@ -227,7 +229,7 @@ pub fn render(
                             });
                         });
                         ui.add_space(Spacing::SM);
-                        
+
                         // Fee
                         ui.horizontal(|ui| {
                             ui.label(
@@ -242,7 +244,7 @@ pub fn render(
                             });
                         });
                         ui.add_space(Spacing::SM);
-                        
+
                         // Recipient
                         ui.label(
                             Typography::body("Recipient:")
@@ -254,7 +256,7 @@ pub fn render(
                                 .monospace()
                         );
                         ui.add_space(Spacing::SM);
-                        
+
                         // Description
                         if let Some(ref desc) = preview.description {
                             if !desc.is_empty() {
@@ -269,7 +271,7 @@ pub fn render(
                                 ui.add_space(Spacing::SM);
                             }
                         }
-                        
+
                         // Network badge
                         ui.horizontal(|ui| {
                             ui.label(
@@ -279,13 +281,13 @@ pub fn render(
                             badge(ui, &preview.network, BadgeStyle::Info);
                         });
                         ui.add_space(Spacing::SM);
-                        
+
                         // Date
                         ui.label(
                             Typography::caption(format!("Date: {}", preview.date))
                                 .color(Colors::text_muted(&ctx))
                         );
-                        
+
                         ui.add_space(Spacing::MD);
                     });
                 });
@@ -310,7 +312,7 @@ pub fn render(
             match state.hw_signing_mode {
                 HardwareWalletSigningMode::DisplayingQR => {
                     ui.add_space(Spacing::LG);
-                    
+
                     card(ui, |ui| {
                         ui.vertical_centered(|ui| {
                             ui.add_space(Spacing::MD);
@@ -342,7 +344,7 @@ pub fn render(
                 }
                 HardwareWalletSigningMode::ScanningQR => {
                     ui.add_space(Spacing::LG);
-                    
+
                     card(ui, |ui| {
                         ui.vertical_centered(|ui| {
                             ui.add_space(Spacing::MD);
@@ -372,7 +374,7 @@ pub fn render(
                     // Normal flow
                 }
             }
-            
+
             ui.add_space(Spacing::XL);
         });
     });

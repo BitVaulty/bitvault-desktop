@@ -18,11 +18,7 @@ pub fn create_test_context_light() -> egui::Context {
 
 /// Helper to simulate a click on a UI element
 pub fn simulate_click(ui: &mut egui::Ui, id: egui::Id) -> bool {
-    let response = ui.interact(
-        ui.available_rect_before_wrap(),
-        id,
-        egui::Sense::click(),
-    );
+    let response = ui.interact(ui.available_rect_before_wrap(), id, egui::Sense::click());
     response.clicked()
 }
 

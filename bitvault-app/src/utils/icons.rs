@@ -52,11 +52,17 @@ impl Icon {
             Icon::Delete => ICON_DELETE,
         }
     }
-    
+
     fn cache_key(&self, color: egui::Color32) -> String {
-        format!("{:?}_{:02x}{:02x}{:02x}", self, color.r(), color.g(), color.b())
+        format!(
+            "{:?}_{:02x}{:02x}{:02x}",
+            self,
+            color.r(),
+            color.g(),
+            color.b()
+        )
     }
-    
+
     /// Get a text fallback for the icon
     pub fn as_text(&self) -> &'static str {
         match self {
@@ -78,9 +84,14 @@ lazy_static::lazy_static! {
 }
 
 /// Render an icon as an image
-pub fn icon_image(ctx: &egui::Context, icon: Icon, size: f32, color: egui::Color32) -> Option<egui::Image<'static>> {
+pub fn icon_image(
+    ctx: &egui::Context,
+    icon: Icon,
+    size: f32,
+    color: egui::Color32,
+) -> Option<egui::Image<'static>> {
     let cache_key = icon.cache_key(color);
-    
+
     // Check cache first
     {
         let cache = ICON_CACHE.lock().ok()?;
@@ -88,49 +99,57 @@ pub fn icon_image(ctx: &egui::Context, icon: Icon, size: f32, color: egui::Color
             return Some(egui::Image::new((texture.id(), Vec2::splat(size))));
         }
     }
-    
+
     // Render SVG to texture
     let svg_data = icon.svg_data();
-    
+
     // Replace stroke color in SVG
     let color_hex = format!("#{:02x}{:02x}{:02x}", color.r(), color.g(), color.b());
-    let colored_svg = svg_data.replace("stroke=\"currentColor\"", &format!("stroke=\"{}\"", color_hex));
-    
+    let colored_svg = svg_data.replace(
+        "stroke=\"currentColor\"",
+        &format!("stroke=\"{}\"", color_hex),
+    );
+
     // Use resvg to render SVG
     let opt = usvg::Options::default();
     let tree = usvg::Tree::from_str(&colored_svg, &opt).ok()?;
-    
+
     let pixmap_size = (size * 2.0) as u32; // 2x for retina
     let mut pixmap = tiny_skia::Pixmap::new(pixmap_size, pixmap_size)?;
-    
+
     let scale = pixmap_size as f32 / 24.0;
     let rtree = resvg::Tree::from_usvg(&tree);
-    rtree.render(tiny_skia::Transform::from_scale(scale, scale), &mut pixmap.as_mut());
-    
+    rtree.render(
+        tiny_skia::Transform::from_scale(scale, scale),
+        &mut pixmap.as_mut(),
+    );
+
     // Convert to egui texture
-    let pixels: Vec<egui::Color32> = pixmap.pixels().iter().map(|p| {
-        egui::Color32::from_rgba_unmultiplied(p.red(), p.green(), p.blue(), p.alpha())
-    }).collect();
-    
+    let pixels: Vec<egui::Color32> = pixmap
+        .pixels()
+        .iter()
+        .map(|p| egui::Color32::from_rgba_unmultiplied(p.red(), p.green(), p.blue(), p.alpha()))
+        .collect();
+
     let color_image = egui::ColorImage {
         size: [pixmap_size as usize, pixmap_size as usize],
         pixels,
     };
-    
+
     let texture = ctx.load_texture(&cache_key, color_image, egui::TextureOptions::LINEAR);
-    
+
     // Cache it
     if let Ok(mut cache) = ICON_CACHE.lock() {
         cache.insert(cache_key, texture.clone());
     }
-    
+
     Some(egui::Image::new((texture.id(), Vec2::splat(size))))
 }
 
 /// Show an icon button
 pub fn icon_button(ui: &mut egui::Ui, icon: Icon, size: f32) -> egui::Response {
     let color = ui.style().visuals.text_color();
-    
+
     if let Some(image) = icon_image(ui.ctx(), icon, size, color) {
         ui.add(egui::ImageButton::new(image))
     } else {

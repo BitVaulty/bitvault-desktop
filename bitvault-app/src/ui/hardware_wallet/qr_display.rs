@@ -84,9 +84,10 @@ pub fn render_qr_display(
                 let button_width = 100.0;
                 let (rect, _) = ui.allocate_exact_size(
                     egui::Vec2::new(button_width * 2.0 + 10.0, 30.0),
-                    egui::Sense::click()
+                    egui::Sense::click(),
                 );
-                let mut nav_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                let mut nav_ui =
+                    ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
                 if nav_ui.button("Previous").clicked() && state.current_part > 0 {
                     state.current_part -= 1;
                 }

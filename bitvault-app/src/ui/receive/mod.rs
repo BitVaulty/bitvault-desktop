@@ -6,7 +6,9 @@
 //! - Copy and share buttons
 
 use crate::state::{AppState, Navigation};
-use crate::ui::components::{card, badge, button, button_large, BadgeStyle, ButtonStyle, Colors, Spacing, Typography};
+use crate::ui::components::{
+    badge, button, button_large, card, BadgeStyle, ButtonStyle, Colors, Spacing, Typography,
+};
 use crate::utils::qr::generate_qr_image;
 use eframe::egui;
 
@@ -39,8 +41,7 @@ pub fn render(
             if !app_state.is_vault_loaded() {
                 card(ui, |ui| {
                     ui.label(
-                        Typography::body("No vault loaded")
-                            .color(Colors::text_secondary(ctx))
+                        Typography::body("No vault loaded").color(Colors::text_secondary(ctx)),
                     );
                 });
                 ui.add_space(Spacing::MD);
@@ -50,32 +51,26 @@ pub fn render(
                 return;
             }
 
-            ui.label(
-                Typography::heading("Receive Bitcoin")
-                    .color(Colors::text_primary(ctx))
-            );
+            ui.label(Typography::heading("Receive Bitcoin").color(Colors::text_primary(ctx)));
             ui.add_space(Spacing::SM);
             ui.label(
                 Typography::body("Scan the QR code or copy the address to receive Bitcoin")
-                    .color(Colors::text_secondary(ctx))
+                    .color(Colors::text_secondary(ctx)),
             );
             ui.add_space(Spacing::LG);
 
-        RECEIVE_STATE.with(|state| {
-            let mut state = state.borrow_mut();
+            RECEIVE_STATE.with(|state| {
+                let mut state = state.borrow_mut();
 
-            // Load address if not loaded
-            if state.address.is_none() && !state.is_loading {
-                load_address(ui, app_state, &mut state);
-            }
+                // Load address if not loaded
+                if state.address.is_none() && !state.is_loading {
+                    load_address(ui, app_state, &mut state);
+                }
 
                 // Show error if any
                 if let Some(ref error) = state.error {
                     card(ui, |ui| {
-                        ui.label(
-                            Typography::body(error)
-                                .color(Colors::ERROR)
-                        );
+                        ui.label(Typography::body(error).color(Colors::ERROR));
                     });
                     ui.add_space(Spacing::MD);
                 }
@@ -87,7 +82,7 @@ pub fn render(
                         ui.add_space(Spacing::MD);
                         ui.label(
                             Typography::body("Loading address...")
-                                .color(Colors::text_secondary(ctx))
+                                .color(Colors::text_secondary(ctx)),
                         );
                     });
                     return;
@@ -110,13 +105,13 @@ pub fn render(
                     card(ui, |ui| {
                         ui.vertical_centered(|ui| {
                             ui.add_space(Spacing::MD);
-                            
+
                             // Display QR code (re-read after potential update)
                             let qr_texture_opt = state.qr_image.clone();
                             if let Some(ref qr_texture) = qr_texture_opt {
                                 ui.image((qr_texture.id(), egui::Vec2::new(300.0, 300.0)));
                             }
-                            
+
                             ui.add_space(Spacing::MD);
                         });
                     });
@@ -127,22 +122,22 @@ pub fn render(
                     card(ui, |ui| {
                         ui.vertical(|ui| {
                             ui.add_space(Spacing::MD);
-                            
+
                             ui.label(
                                 Typography::body("BTC Deposit Address")
-                                    .color(Colors::text_secondary(ctx))
+                                    .color(Colors::text_secondary(ctx)),
                             );
                             ui.add_space(Spacing::SM);
-                            
+
                             // Address text (selectable, monospace)
                             ui.label(
                                 Typography::body(address)
                                     .color(Colors::text_primary(ctx))
-                                    .monospace()
+                                    .monospace(),
                             );
-                            
+
                             ui.add_space(Spacing::MD);
-                            
+
                             // Copy button
                             if copied {
                                 ui.vertical_centered(|ui| {
@@ -156,7 +151,7 @@ pub fn render(
                                     }
                                 });
                             }
-                            
+
                             ui.add_space(Spacing::MD);
                         });
                     });
@@ -164,10 +159,7 @@ pub fn render(
                     ui.add_space(Spacing::LG);
                 } else {
                     card(ui, |ui| {
-                        ui.label(
-                            Typography::body("Failed to load address")
-                                .color(Colors::ERROR)
-                        );
+                        ui.label(Typography::body("Failed to load address").color(Colors::ERROR));
                     });
                 }
 
@@ -176,7 +168,7 @@ pub fn render(
                 if button(ui, "Back", ButtonStyle::Secondary).clicked() {
                     navigation.go_back();
                 }
-                
+
                 ui.add_space(Spacing::XL);
             });
         });
