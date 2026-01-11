@@ -63,15 +63,22 @@ pub fn render_pin_setup(
             ui.vertical_centered(|ui| {
                 match state.step {
                     PinSetupStep::EnterPin => {
-                        // Heading removed - already shown in render_set_pin
-                        ui.add_space(5.0);
-                        ui.label("Enter a 6-digit PIN to secure your wallet");
-                        ui.add_space(15.0);
-
-                        // PIN input display
-                        let pin_display = "•".repeat(state.pin.len());
-                        ui.label(egui::RichText::new(pin_display).size(24.0).monospace());
-
+                        // Fixed height container to ensure consistent numpad positioning
+                        let content_height = 79.0; // Total height: 5 + 20 (label) + 15 + 24 (PIN) + 15
+                        ui.allocate_ui_with_layout(
+                            egui::Vec2::new(ui.available_width(), content_height),
+                            egui::Layout::top_down(egui::Align::Center),
+                            |ui| {
+                                ui.add_space(5.0);
+                                ui.label("Enter a 6-digit PIN to secure your wallet");
+                                ui.add_space(15.0);
+                                
+                                // PIN input display
+                                let pin_display = "•".repeat(state.pin.len());
+                                ui.label(egui::RichText::new(pin_display).size(24.0).monospace());
+                            }
+                        );
+                        
                         ui.add_space(15.0);
 
                         // Number pad - centered, all buttons in same UI context for proper tab order
@@ -144,21 +151,30 @@ pub fn render_pin_setup(
                         }
                     }
                     PinSetupStep::ConfirmPin => {
-                        ui.heading("Confirm PIN");
-                        ui.add_space(5.0);
-                        ui.label("Re-enter your PIN to confirm");
-                        ui.add_space(15.0);
+                        // Fixed height container to ensure consistent numpad positioning
+                        // Same height as EnterPin step (79px)
+                        let content_height = 79.0;
+                        ui.allocate_ui_with_layout(
+                            egui::Vec2::new(ui.available_width(), content_height),
+                            egui::Layout::top_down(egui::Align::Center),
+                            |ui| {
+                                ui.add_space(5.0);
+                                ui.label("Re-enter your PIN to confirm");
+                                
+                                // Show error if any - use smaller spacing to fit in fixed height
+                                if let Some(ref error) = state.error {
+                                    ui.add_space(5.0);
+                                    ui.colored_label(egui::Color32::RED, error);
+                                } else {
+                                    ui.add_space(15.0);
+                                }
 
-                        // Show error if any
-                        if let Some(ref error) = state.error {
-                            ui.colored_label(egui::Color32::RED, error);
-                            ui.add_space(10.0);
-                        }
-
-                        // PIN input display
-                        let pin_display = "•".repeat(state.confirm_pin.len());
-                        ui.label(egui::RichText::new(pin_display).size(24.0).monospace());
-
+                                // PIN input display
+                                let pin_display = "•".repeat(state.confirm_pin.len());
+                                ui.label(egui::RichText::new(pin_display).size(24.0).monospace());
+                            }
+                        );
+                        
                         ui.add_space(15.0);
 
                         // Number pad - centered, all buttons in same UI context for proper tab order
