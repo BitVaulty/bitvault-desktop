@@ -79,7 +79,9 @@ pub struct BitVaultApp {
     is_authenticated: bool, // Whether user has entered PIN
     needs_pin_setup: bool, // True if PIN needs to be set (doesn't exist yet)
     cached_logo_texture: Option<egui::TextureHandle>, // Cache texture handle to keep it alive
-    cached_logo_rect: Option<egui::Rect>, // Cache logo rect - calculated once, never changes
+    cached_logo_rect: Option<egui::Rect>, // Cache logo rect - recalculated on window resize
+    last_screen_size: Option<egui::Vec2>, // Track screen size for resize detection
+    last_pixels_per_point: Option<f32>, // Track DPI for screen change detection
 }
 
 impl BitVaultApp {
@@ -200,6 +202,8 @@ impl BitVaultApp {
             is_authenticated,
             cached_logo_texture: None,
             cached_logo_rect: None,
+            last_screen_size: None,
+            last_pixels_per_point: None,
         }
     }
 
@@ -211,6 +215,30 @@ impl BitVaultApp {
 
 impl eframe::App for BitVaultApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Check for screen size or DPI changes FIRST (before any rendering)
+        // This handles window moves between monitors with different scaling
+        let screen_rect = ctx.screen_rect();
+        let current_screen_size = screen_rect.size();
+        let current_ppp = ctx.pixels_per_point();
+        
+        let size_changed = self.last_screen_size.map_or(false, |last_size| {
+            (last_size.x - current_screen_size.x).abs() > 1.0 
+                || (last_size.y - current_screen_size.y).abs() > 1.0
+        });
+        
+        let ppp_changed = self.last_pixels_per_point.map_or(false, |last_ppp| {
+            (last_ppp - current_ppp).abs() > 0.01
+        });
+        
+        if size_changed || ppp_changed {
+            self.cached_logo_rect = None;
+            // Request repaint to apply new scaling immediately
+            ctx.request_repaint();
+        }
+        
+        self.last_screen_size = Some(current_screen_size);
+        self.last_pixels_per_point = Some(current_ppp);
+        
         // Process async commands and results
         self.app_state.process_async(Some(ctx));
 
@@ -250,7 +278,7 @@ impl eframe::App for BitVaultApp {
             
             // Draw logo if we have cached texture
             if let Some(ref logo_texture) = self.cached_logo_texture {
-                // Calculate rect ONCE - size logo to fit within top bar with margins
+                // Calculate rect - recalculated when window resizes
                 let logo_rect = *self.cached_logo_rect.get_or_insert_with(|| {
                     // Get top bar height and calculate logo size to fit with margins
                     let top_bar_height = available_rect.height();

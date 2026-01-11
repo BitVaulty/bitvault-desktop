@@ -12,6 +12,7 @@ thread_local! {
 
 /// Generate a QR code image from text and return as egui texture
 /// Uses caching to avoid regenerating the same QR codes
+/// Generates at high resolution for crisp display
 pub fn generate_qr_image(ctx: &egui::Context, text: &str) -> Option<egui::TextureHandle> {
     // Check cache first
     let cache_key = format!("qr_{}", text);
@@ -28,28 +29,40 @@ pub fn generate_qr_image(ctx: &egui::Context, text: &str) -> Option<egui::Textur
         let qr = QrCode::with_error_correction_level(text.as_bytes(), EcLevel::M).ok()?;
 
         // Get QR code dimensions
-        let size = qr.width();
+        let qr_size = qr.width();
+        
+        // Scale factor: each QR module becomes this many pixels
+        // Higher = crisper when displayed large
+        let scale = 8;
+        let img_size = qr_size * scale;
 
         // Create image buffer (white background, black QR code)
-        let mut img = RgbaImage::new(size as u32, size as u32);
+        let mut img = RgbaImage::new(img_size as u32, img_size as u32);
 
         // Fill with white background
         for pixel in img.pixels_mut() {
             *pixel = Rgba([255, 255, 255, 255]);
         }
 
-        // Draw QR code (black modules)
-        for y in 0..size {
-            for x in 0..size {
-                if qr[(x, y)] == Color::Dark {
-                    let pixel = img.get_pixel_mut(x as u32, y as u32);
-                    *pixel = Rgba([0, 0, 0, 255]);
+        // Draw QR code (black modules) - scaled up
+        for qr_y in 0..qr_size {
+            for qr_x in 0..qr_size {
+                if qr[(qr_x, qr_y)] == Color::Dark {
+                    // Fill a scale x scale block of pixels
+                    for dy in 0..scale {
+                        for dx in 0..scale {
+                            let px = (qr_x * scale + dx) as u32;
+                            let py = (qr_y * scale + dy) as u32;
+                            let pixel = img.get_pixel_mut(px, py);
+                            *pixel = Rgba([0, 0, 0, 255]);
+                        }
+                    }
                 }
             }
         }
 
         // Convert to egui ColorImage
-        let size_array = [size, size];
+        let size_array = [img_size, img_size];
         let pixels: Vec<egui::Color32> = img
             .pixels()
             .map(|p| egui::Color32::from_rgba_unmultiplied(p[0], p[1], p[2], p[3]))
@@ -61,8 +74,9 @@ pub fn generate_qr_image(ctx: &egui::Context, text: &str) -> Option<egui::Textur
         };
 
         // Create texture with unique ID
+        // Use NEAREST filtering for crisp edges (no blurring)
         let texture_id = format!("qr_{}_{}", cache_key, cache.len());
-        let texture = ctx.load_texture(&texture_id, color_image, egui::TextureOptions::LINEAR);
+        let texture = ctx.load_texture(&texture_id, color_image, egui::TextureOptions::NEAREST);
 
         // Cache the texture
         cache.insert(cache_key, texture.clone());

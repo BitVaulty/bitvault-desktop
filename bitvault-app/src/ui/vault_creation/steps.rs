@@ -548,13 +548,11 @@ pub fn render_verify_seed_phrase(ui: &mut egui::Ui, state: &mut VaultCreationSta
         // Store checkbox state before rendering to detect if Enter toggled it
         let checkbox_state_before = state.verified_seed_phrase;
         
-        // Use horizontal layout to add spacing between checkbox and label
-        let checkbox_response = ui.horizontal(|ui| {
-            let checkbox_response = ui.checkbox(&mut state.verified_seed_phrase, "");
-            ui.add_space(Spacing::SM); // Add margin between checkbox and label
-            ui.label("I have written down my seed phrase and stored it securely");
-            checkbox_response // Return the checkbox response
-        }).inner;
+        // Temporarily increase icon_spacing for more gap between checkbox and label
+        let old_icon_spacing = ui.spacing().icon_spacing;
+        ui.spacing_mut().icon_spacing = 12.0;
+        let checkbox_response = ui.checkbox(&mut state.verified_seed_phrase, "I have written down my seed phrase and stored it securely");
+        ui.spacing_mut().icon_spacing = old_icon_spacing;
         
         // Auto-focus checkbox on step change
         if state.step_just_changed(VaultCreationStep::VerifySeedPhrase) {
@@ -853,11 +851,10 @@ pub fn render_scan_coowner_keys(ui: &mut egui::Ui, ctx: &egui::Context, state: &
 /// Co-owner device: Display own keys for main device
 pub fn render_display_own_keys(ui: &mut egui::Ui, ctx: &egui::Context, state: &mut VaultCreationState) {
     ui.heading("Share Your Keys");
-    ui.add_space(Spacing::MD);
+    ui.add_space(Spacing::SM);
 
-    ui.label("Share this key data with the main device owner.");
-    ui.label("They will enter it on their device to link you as co-owner.");
-    ui.add_space(Spacing::LG);
+    ui.label("Share this with the main device to link as co-owner.");
+    ui.add_space(Spacing::MD);
 
     // Generate keys text if not already done
     if state.my_keys_text.is_none() {
@@ -883,19 +880,30 @@ pub fn render_display_own_keys(ui: &mut egui::Ui, ctx: &egui::Context, state: &m
     if let Some(ref keys_text) = state.my_keys_text {
         // Show QR code
         if let Some(qr_texture) = crate::utils::qr::generate_qr_image(ctx, keys_text) {
-            ui.image((qr_texture.id(), egui::Vec2::new(200.0, 200.0)));
-            ui.add_space(Spacing::MD);
+            ui.image((qr_texture.id(), egui::Vec2::new(280.0, 280.0)));
+            ui.add_space(Spacing::SM);
         }
 
-        // Copy button
-        if button(ui, "Copy Key Data", ButtonStyle::Secondary).clicked() {
-            ui.ctx().copy_text(keys_text.clone());
-        }
-
-        ui.add_space(Spacing::SM);
-
-        // Save to file (encrypted)
-        if button(ui, "Save to File", ButtonStyle::Secondary).clicked() {
+        // Copy and Save buttons on same row, centered
+        let mut save_clicked = false;
+        ui.horizontal(|ui| {
+            // Calculate centering offset
+            let button_width = 140.0 * 2.0 + Spacing::XS; // Two buttons + spacing
+            let available = ui.available_width();
+            if available > button_width {
+                ui.add_space((available - button_width) / 2.0);
+            }
+            if button(ui, "Copy", ButtonStyle::Secondary).clicked() {
+                ui.ctx().copy_text(keys_text.clone());
+            }
+            ui.add_space(Spacing::XS);
+            if button(ui, "Save to File", ButtonStyle::Secondary).clicked() {
+                save_clicked = true;
+            }
+        });
+        
+        // Handle save outside the horizontal block
+        if save_clicked {
             if let Some(path) = rfd::FileDialog::new()
                 .set_file_name("coowner_keys.txt")
                 .save_file()
@@ -917,9 +925,6 @@ pub fn render_display_own_keys(ui: &mut egui::Ui, ctx: &egui::Context, state: &m
                                             Ok(()) => {
                                                 state.saved_key_file = Some(path.clone());
                                                 state.error = None;
-                                                ui.ctx().output_mut(|o| {
-                                                    o.copied_text = format!("Saved to: {}", path.display());
-                                                });
                                             }
                                             Err(e) => {
                                                 state.error = Some(format!("Failed to save file: {}", e));
@@ -943,51 +948,36 @@ pub fn render_display_own_keys(ui: &mut egui::Ui, ctx: &egui::Context, state: &m
             }
         }
         
-        // Security warning
-        ui.add_space(Spacing::SM);
-        ui.colored_label(
-            egui::Color32::from_rgb(255, 200, 0),
-            "⚠ Security: This file contains sensitive cryptographic keys. Delete it after use."
-        );
-
-        ui.add_space(Spacing::MD);
-
-        // Show truncated text
-        ui.collapsing("Show Key Data", |ui| {
-            ui.monospace(keys_text);
-        });
-        
-        // Offer secure deletion if file was saved
+        // Offer secure deletion if file was saved (compact inline)
         if let Some(ref file_path) = state.saved_key_file {
             if file_path.exists() {
-                ui.add_space(Spacing::MD);
+                ui.add_space(Spacing::XS);
                 let file_path_clone = file_path.clone();
                 ui.horizontal(|ui| {
-                    ui.label(format!("Saved file: {}", file_path_clone.display()));
-                    if button(ui, "🗑️ Delete", ButtonStyle::Danger).clicked() {
+                    ui.label("✓ Saved");
+                    if button(ui, "Delete", ButtonStyle::Danger).clicked() {
                         match secure_delete_file(&file_path_clone) {
                             Ok(()) => {
                                 state.saved_key_file = None;
-                                ui.ctx().output_mut(|o| {
-                                    o.copied_text = "File securely deleted".to_string();
-                                });
                             }
                             Err(e) => {
-                                state.error = Some(format!("Failed to delete file: {}", e));
+                                state.error = Some(format!("Failed to delete: {}", e));
                             }
                         }
                     }
                 });
             }
         }
+        
+        // Security warning (more compact)
+        ui.add_space(Spacing::XS);
+        ui.colored_label(
+            egui::Color32::from_rgb(255, 200, 0),
+            "⚠ Delete file after sharing"
+        );
     }
 
-    ui.add_space(Spacing::XL);
-    
-    ui.colored_label(
-        egui::Color32::from_rgb(100, 149, 237),
-        "💡 Tip: Wait for the main device to scan your keys before continuing."
-    );
+    ui.add_space(Spacing::MD);
 
     if button_large(ui, "I've Shared My Keys").clicked() {
         if let Some(next) = state.next_step_for_role() {
@@ -995,7 +985,7 @@ pub fn render_display_own_keys(ui: &mut egui::Ui, ctx: &egui::Context, state: &m
         }
     }
 
-    ui.add_space(Spacing::MD);
+    ui.add_space(Spacing::SM);
     if button(ui, "← Back", ButtonStyle::Text).clicked() {
         state.go_to_previous_step();
     }
