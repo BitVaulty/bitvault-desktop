@@ -70,4 +70,5 @@ bitvault-common = { path = "../../bitvault-common", features = ["keyring-storage
 # Testing
 tempfile = "3.10"
 tokio-test = "0.4"
+mockito = "1.2"
 
