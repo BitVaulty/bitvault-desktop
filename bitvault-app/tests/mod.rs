@@ -17,3 +17,5 @@ mod services_test;
 mod telegram_service_test;
 mod tx_storage_test;
 mod vault_service_test;
+mod convenience_service_integration_test;#[cfg(test)]
+mod mocks;
