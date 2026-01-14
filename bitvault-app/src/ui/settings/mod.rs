@@ -466,6 +466,23 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
             ui.separator();
             ui.add_space(10.0);
 
+            // Secret Notifications section
+            ui.label(egui::RichText::new("Secret Notifications").heading());
+            ui.add_space(10.0);
+
+            if app_state.is_vault_loaded() {
+                if ui.button("Configure Telegram Notifications").clicked() {
+                    navigation.navigate_to(crate::state::View::SecretNotification);
+                }
+                ui.label("Enable Telegram notifications for vault activity");
+            } else {
+                ui.label("Load a vault to configure notifications");
+            }
+
+            ui.add_space(20.0);
+            ui.separator();
+            ui.add_space(10.0);
+
             // Subscription section
             ui.label(egui::RichText::new("Subscription").heading());
             ui.add_space(10.0);

@@ -316,6 +316,10 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                 navigation.navigate_to(crate::state::View::Settings);
             }
 
+            if ui.button("Notifications").clicked() {
+                navigation.navigate_to(crate::state::View::NotificationCenter);
+            }
+
             if ui.button("Address Book").clicked() {
                 navigation.navigate_to(crate::state::View::AddressBook);
             }
