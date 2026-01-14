@@ -10,6 +10,7 @@ use tokio::sync::mpsc;
 pub enum AsyncCommand {
     FetchBalance,
     FetchAddress,
+    RequestTelegramRegistration,
 }
 
 /// Results from async tasks
@@ -17,6 +18,7 @@ pub enum AsyncCommand {
 pub enum AsyncResult {
     Balance { confirmed: u64, available: u64 },
     Address(String),
+    TelegramRegistrationLink(String),
     Error(String),
 }
 
@@ -51,6 +53,11 @@ impl AsyncCommandHandler {
     /// Queue a command to fetch address
     pub fn fetch_address(&mut self) {
         self.pending_commands.push(AsyncCommand::FetchAddress);
+    }
+
+    /// Queue a command to request Telegram registration
+    pub fn request_telegram_registration(&mut self) {
+        self.pending_commands.push(AsyncCommand::RequestTelegramRegistration);
     }
 
     /// Process pending commands (call from UI update loop)
@@ -115,6 +122,16 @@ impl AsyncCommandHandler {
                             )));
                         }
                     }
+                }
+                AsyncCommand::RequestTelegramRegistration => {
+                    // Request Telegram registration link from ConvenienceService
+                    // This requires access to ConvenienceService, which is in AppState
+                    // For now, we'll need to pass convenience_service to process_pending
+                    // or handle this differently
+                    // TODO: Add convenience_service parameter or handle via AppState
+                    let _ = tx.send(AsyncResult::Error(
+                        "Telegram registration not yet implemented in async handler".to_string(),
+                    ));
                 }
             }
         }

@@ -3,10 +3,12 @@ use crate::ui::address_book::{render_address_book, AddressBookState};
 use crate::ui::advanced_settings::{render_advanced_settings, AdvancedSettingsState};
 use crate::ui::dashboard;
 use crate::ui::help::{render_help_and_support, HelpAndSupportState};
+use crate::ui::notification_center::{render as render_notification_center, NotificationCenterState};
 use crate::ui::pin::{render_pin_entry, render_pin_setup, PinEntryState, PinSetupState};
 use crate::ui::receive::render as render_receive;
 use crate::ui::recovery::{render_recovery, render_utxo_refresh};
 use crate::ui::send_transaction::{render as render_send_transaction, SendTransactionState};
+use crate::ui::secret_notification::{render as render_secret_notification, SecretNotificationState};
 use crate::ui::settings::render as render_settings;
 use crate::ui::subscription::render as render_subscription;
 use crate::ui::transaction_detail::render as render_transaction_detail;
@@ -75,6 +77,8 @@ pub struct BitVaultApp {
     pin_entry_state: PinEntryState,
     pin_setup_state: PinSetupState,
     help_and_support_state: HelpAndSupportState,
+    secret_notification_state: SecretNotificationState,
+    notification_center_state: NotificationCenterState,
     address_book_state: AddressBookState,
     advanced_settings_state: AdvancedSettingsState,
     is_authenticated: bool, // Whether user has entered PIN
@@ -194,6 +198,8 @@ impl BitVaultApp {
             send_transaction_state: SendTransactionState::default(),
             pin_entry_state: PinEntryState::new(),
             pin_setup_state: PinSetupState::new(),
+            secret_notification_state: SecretNotificationState::new(),
+            notification_center_state: NotificationCenterState::new(),
             needs_pin_setup,
             help_and_support_state: HelpAndSupportState::new(),
             address_book_state: AddressBookState::default(),
@@ -547,6 +553,32 @@ impl eframe::App for BitVaultApp {
                 }
                 View::Subscription => {
                     render_subscription(ui, &mut self.app_state, &mut self.navigation);
+                }
+                View::SecretNotification => {
+                    render_secret_notification(
+                        ui,
+                        &mut self.app_state,
+                        &mut self.navigation,
+                        &mut self.secret_notification_state,
+                    );
+                }
+                View::NotificationCenter => {
+                    // Fetch notifications on first load
+                    if self.notification_center_state.last_fetch.is_none() {
+                        if let Some(ref vault_service) = self.app_state.vault_service {
+                            if let Some(runtime) = self.app_state.get_runtime() {
+                                runtime.block_on(
+                                    self.notification_center_state.fetch_notifications(vault_service)
+                                );
+                            }
+                        }
+                    }
+                    render_notification_center(
+                        ui,
+                        &mut self.app_state,
+                        &mut self.navigation,
+                        &mut self.notification_center_state,
+                    );
                 }
                 View::PinEntry => {
                     let mut callback = None;

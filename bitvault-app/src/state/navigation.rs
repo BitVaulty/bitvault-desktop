@@ -39,6 +39,10 @@ pub enum View {
     AddressBook,
     /// Advanced Settings
     AdvancedSettings,
+    /// Secret Notifications (Telegram setup)
+    SecretNotification,
+    /// Notification Center
+    NotificationCenter,
 }
 
 /// Navigation state

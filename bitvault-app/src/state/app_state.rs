@@ -133,6 +133,11 @@ impl AppState {
 
                         needs_repaint = true;
                     }
+                    crate::state::async_commands::AsyncResult::TelegramRegistrationLink(link) => {
+                        // Handle Telegram registration link - this should be processed by the UI
+                        log::info!("Received Telegram registration link");
+                        needs_repaint = true;
+                    }
                 }
             }
         }
@@ -184,7 +189,7 @@ impl AppState {
 
     /// List all available vaults
     pub fn list_vaults() -> Result<Vec<bitvault_common::wallet::VaultMetadata>, String> {
-        VaultService::list_vaults()
+        VaultService::<bdk::database::SqliteDatabase>::list_vaults()
     }
 
     /// Initialize vault from an existing VaultService (e.g., after setup_vault)
@@ -356,6 +361,10 @@ async fn process_async_commands(
                         ));
                     }
                 }
+            }
+            crate::state::async_commands::AsyncCommand::RequestTelegramRegistration => {
+                // Telegram registration is handled elsewhere - this is a placeholder
+                log::info!("Telegram registration requested");
             }
         }
     }
