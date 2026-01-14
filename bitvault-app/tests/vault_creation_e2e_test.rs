@@ -306,8 +306,8 @@ async fn test_vault_creation_time_delay_validation() {
 #[tokio::test]
 async fn test_vault_listing() {
     // Test: Vaults can be listed
-    // This tests the VaultService::list_vaults() method
-    let result = VaultService::list_vaults();
+    // This tests the VaultService::<bdk::database::SqliteDatabase>::list_vaults() method
+    let result = VaultService::<bdk::database::SqliteDatabase>::list_vaults();
     
     // Should not panic - may return empty list if no vaults exist
     assert!(result.is_ok(), "list_vaults should not error");

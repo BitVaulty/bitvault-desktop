@@ -10,7 +10,70 @@
 
 use bitvault_common::wallet::{VaultMetadata, VaultService};
 use bdk::bitcoin::Network;
+use bdk::keys::bip39::Mnemonic;
+use bitvault_common::derivation::{build_all_descriptors, get_owner_keys};
 use tempfile::TempDir;
+
+/// Helper to create a valid test descriptor from test mnemonics
+fn get_test_descriptor(network: Network) -> Result<String, String> {
+    use bitvault_common::derivation::build_vault_descriptor;
+    
+    // Create different mnemonics for owner, coowner, and convenience
+    let owner_mnemonic_str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    let coowner_mnemonic_str = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
+    let convenience_mnemonic_str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
+    
+    let owner_mnemonic: Mnemonic = owner_mnemonic_str
+        .parse()
+        .map_err(|e| format!("Failed to parse owner mnemonic: {}", e))?;
+    let coowner_mnemonic: Mnemonic = coowner_mnemonic_str
+        .parse()
+        .map_err(|e| format!("Failed to parse coowner mnemonic: {}", e))?;
+    let convenience_mnemonic: Mnemonic = convenience_mnemonic_str
+        .parse()
+        .map_err(|e| format!("Failed to parse convenience mnemonic: {}", e))?;
+    
+    // Derive keys
+    let owner_keys = get_owner_keys(&owner_mnemonic)
+        .map_err(|e| format!("Failed to derive owner keys: {}", e))?;
+    let coowner_keys = get_owner_keys(&coowner_mnemonic)
+        .map_err(|e| format!("Failed to derive coowner keys: {}", e))?;
+    let convenience_keys = get_owner_keys(&convenience_mnemonic)
+        .map_err(|e| format!("Failed to derive convenience keys: {}", e))?;
+    
+    let timelock = 144; // Minimum timelock (1 day)
+    
+    // Build descriptor directly for the specific network
+    // This ensures all keys are from the same network (mainnet or testnet)
+    let (owner_net_keys, coowner_net_keys, convenience_key) = match network {
+        Network::Bitcoin => (
+            &owner_keys.mainnet,
+            &coowner_keys.mainnet,
+            &convenience_keys.mainnet.owner_key1,
+        ),
+        _ => (
+            &owner_keys.testnet,
+            &coowner_keys.testnet,
+            &convenience_keys.testnet.owner_key1,
+        ),
+    };
+    
+    let descriptor = build_vault_descriptor(
+        &owner_net_keys.owner_key1,
+        &owner_net_keys.owner_key2,
+        &coowner_net_keys.owner_key1,
+        &coowner_net_keys.owner_key2,
+        convenience_key,
+        timelock,
+    )
+    .map_err(|e| format!("Failed to build descriptor: {}", e))?;
+    
+    if descriptor.is_empty() {
+        return Err("Generated descriptor is empty".to_string());
+    }
+    
+    Ok(descriptor)
+}
 
 /// Helper to create a test vault with a temporary database
 async fn create_test_vault(
@@ -19,11 +82,7 @@ async fn create_test_vault(
     temp_dir: &TempDir,
 ) -> Result<(VaultService, VaultMetadata), String> {
     // Create a test descriptor
-    let descriptor = match network {
-        Network::Bitcoin => "wsh(multi(2,tpub1,tpub2))",
-        Network::Testnet => "wsh(multi(2,tpub1,tpub2))",
-        _ => "wsh(multi(2,tpub1,tpub2))",
-    };
+    let descriptor = get_test_descriptor(network)?;
 
     // Create database path in temp directory
     let db_path = temp_dir.path().join(format!("{}.db", name));
@@ -31,7 +90,7 @@ async fn create_test_vault(
     // Create vault service
     let mut vault_service = VaultService::new(network);
     vault_service
-        .initialize_wallet(descriptor, Some(db_path.to_str().unwrap().to_string()), None)
+        .initialize_wallet(&descriptor, Some(db_path.to_str().unwrap().to_string()), None)
         .await
         .map_err(|e| format!("Failed to initialize wallet: {}", e))?;
 
@@ -41,13 +100,14 @@ async fn create_test_vault(
         .await
         .map_err(|e| format!("Failed to get receive address: {}", e))?;
 
-    // Create metadata
-    let metadata = VaultMetadata::new(
+    // Create metadata with descriptor
+    let mut metadata = VaultMetadata::new(
         name.to_string(),
         network,
         address.clone(),
         db_path.to_str().unwrap().to_string(),
     );
+    metadata.descriptor = Some(descriptor.clone());
 
     // Save metadata
     metadata
@@ -89,7 +149,7 @@ async fn test_vault_listing() {
         .unwrap();
 
     // List all vaults
-    let vaults = VaultService::list_vaults().unwrap();
+    let vaults = VaultService::<bdk::database::SqliteDatabase>::list_vaults().unwrap();
 
     // Verify both vaults are in the list
     let vault1_found = vaults.iter().any(|v| v.address == metadata1.address);
@@ -157,7 +217,7 @@ async fn test_network_specific_vault_isolation() {
         .unwrap();
 
     // List all vaults
-    let vaults = VaultService::list_vaults().unwrap();
+    let vaults = VaultService::<bdk::database::SqliteDatabase>::list_vaults().unwrap();
 
     // Verify both vaults are listed
     let mainnet_found = vaults.iter().any(|v| v.address == mainnet_metadata.address);
@@ -208,13 +268,14 @@ async fn test_vault_metadata_with_descriptor() {
         .await
         .unwrap();
 
-    // Set descriptor
-    metadata.descriptor = Some("wsh(multi(2,tpub1,tpub2))".to_string());
+    // Set descriptor (using the generated descriptor from the vault)
+    let test_descriptor = get_test_descriptor(Network::Testnet).unwrap();
+    metadata.descriptor = Some(test_descriptor.clone());
     metadata.save().unwrap();
 
     // Load and verify descriptor
     let loaded = VaultMetadata::load(&metadata.address).unwrap();
-    assert_eq!(loaded.descriptor, Some("wsh(multi(2,tpub1,tpub2))".to_string()));
+    assert_eq!(loaded.descriptor, Some(test_descriptor));
 }
 
 #[tokio::test]
@@ -229,7 +290,7 @@ async fn test_vault_listing_filters_orphaned_metadata() {
     std::fs::remove_file(&metadata.database_path).unwrap();
 
     // List vaults - should handle orphaned metadata gracefully
-    let vaults = VaultService::list_vaults().unwrap();
+    let vaults = VaultService::<bdk::database::SqliteDatabase>::list_vaults().unwrap();
 
     // The orphaned vault might or might not be in the list depending on implementation
     // This test verifies the listing doesn't crash
