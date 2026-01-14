@@ -27,6 +27,10 @@ secp256k1 = { workspace = true }
 bip39 = "2.0"
 rand = "0.8"
 
+# Shared library dependency
+# CI uses git, local dev uses path override via .cargo/config.toml
+bitvault-common = { git = "https://github.com/BitVaulty/bitvault-common.git", branch = "dev", features = ["keyring-storage"] }
+
 # UR/QR
 ur = "0.4.1"
 qrcode = "0.14"
@@ -60,11 +64,17 @@ log = "0.4"
 dirs = "5.0.1"
 toml = "0.8"
 
-# Shared library dependency
-# For local development (current):
-bitvault-common = { path = "../../bitvault-common", features = ["keyring-storage"] }
-# For cross-repo use, switch to git dependency:
-# bitvault-common = { git = "https://github.com/BitVaulty/bitvault-common.git", branch = "dev", features = ["keyring-storage"] }
+# Platform-specific dependencies
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.52", features = [
+    "Security_Credentials_UI",
+    "Foundation",
+] }
+
+# macOS dependencies for biometric authentication
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.5"
+objc2-foundation = "0.2"
 
 [dev-dependencies]
 # Testing
