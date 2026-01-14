@@ -4,6 +4,9 @@
 **/*.rs.bk
 *.pdb
 
+# Local cargo config (contains path overrides for local development)
+.cargo/
+
 # Cargo
 # Note: Cargo.lock should be committed for applications (bitvault-app)
 # but not for libraries. We keep it for the app.
