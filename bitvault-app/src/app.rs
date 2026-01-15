@@ -125,7 +125,7 @@ impl BitVaultApp {
 
         // Ensure panel backgrounds use system theme (not gray)
         // Don't override - let egui use default system theme
-        let mut style = (*cc.egui_ctx.style()).clone();
+        let style = (*cc.egui_ctx.style()).clone();
         // Only adjust if we need to - for now use defaults
         cc.egui_ctx.set_style(style);
 
@@ -133,54 +133,47 @@ impl BitVaultApp {
         egui_extras::install_image_loaders(&cc.egui_ctx);
         // Try to load network from settings, default to Testnet
         let initial_network = {
-            let settings_manager = match crate::settings::SettingsManager::new() {
-                Ok(sm) => sm,
-                Err(e) => {
-                    eprintln!("Failed to create settings manager: {}, using defaults", e);
-                    // Try one more time, but if it fails again, we'll panic (this shouldn't happen)
-                    crate::settings::SettingsManager::new().unwrap_or_else(|e2| {
-                        eprintln!(
-                            "Critical: Failed to create settings manager twice: {}, {}",
-                            e, e2
-                        );
-                        panic!("Cannot initialize settings manager");
-                    })
-                }
-            };
-
-            if let Ok(Some(network_str)) = settings_manager.get_network() {
-                match network_str.as_str() {
-                    "mainnet" => bdk::bitcoin::Network::Bitcoin,
-                    "testnet" => bdk::bitcoin::Network::Testnet,
-                    "signet" => bdk::bitcoin::Network::Signet,
-                    "regtest" => bdk::bitcoin::Network::Regtest,
-                    _ => bdk::bitcoin::Network::Testnet,
+            // Try to create settings manager, but continue with defaults if it fails
+            if let Ok(settings_manager) = crate::settings::SettingsManager::new() {
+                if let Ok(Some(network_str)) = settings_manager.get_network() {
+                    match network_str.as_str() {
+                        "mainnet" => bdk::bitcoin::Network::Bitcoin,
+                        "testnet" => bdk::bitcoin::Network::Testnet,
+                        "signet" => bdk::bitcoin::Network::Signet,
+                        "regtest" => bdk::bitcoin::Network::Regtest,
+                        _ => bdk::bitcoin::Network::Testnet,
+                    }
+                } else {
+                    bdk::bitcoin::Network::Testnet
                 }
             } else {
+                eprintln!("Warning: Failed to initialize settings manager. Using default network (Testnet).");
+                eprintln!("Some settings features may be unavailable, but the app will continue to function.");
                 bdk::bitcoin::Network::Testnet
             }
         };
 
-        let app_state = match AppState::new(initial_network) {
-            Ok(state) => state,
-            Err(e) => {
-                eprintln!("Failed to initialize app state with saved network: {}", e);
-                // Fallback to default if settings fail
-                match AppState::new(bdk::bitcoin::Network::Testnet) {
-                    Ok(state) => state,
-                    Err(e2) => {
-                        eprintln!("CRITICAL: Failed to initialize app state even with default network: {}", e2);
-                        eprintln!("This indicates a serious system error. The application may not function correctly.");
-                        eprintln!(
-                            "Attempting to continue anyway - some features may be unavailable."
-                        );
-                        // This should never happen, but if it does, we'll panic with a clear message
-                        // rather than silently failing or using unsafe unwrap
-                        panic!("FATAL: AppState initialization failed completely. This indicates a critical system error that prevents the application from starting. Error: {}", e2);
-                    }
-                }
-            }
-        };
+        // Initialize app state with graceful error handling
+        let app_state = AppState::new(initial_network).unwrap_or_else(|e| {
+            eprintln!("Warning: Failed to initialize app state with saved network: {}", e);
+            eprintln!("Attempting fallback with default network (Testnet)...");
+            
+            // Try with default network as fallback
+            AppState::new(bdk::bitcoin::Network::Testnet).unwrap_or_else(|e2| {
+                eprintln!("CRITICAL: Failed to initialize app state even with default network: {}", e2);
+                eprintln!("This usually indicates a system permissions issue (cannot access config directory).");
+                eprintln!("Please check that the application has write permissions to: ~/.config/bitvault/");
+                eprintln!("Attempting to continue with degraded functionality...");
+                
+                // Try fallback method
+                AppState::new_without_settings(bdk::bitcoin::Network::Testnet).unwrap_or_else(|e3| {
+                    eprintln!("FATAL: Cannot initialize application. Error: {}", e3);
+                    eprintln!("Application will exit. Please check system permissions and try again.");
+                    // Exit gracefully instead of panicking
+                    std::process::exit(1);
+                })
+            })
+        });
 
         // Always require PIN setup/entry - show PIN screen on startup
         // If PIN exists, show entry screen; if not, show setup screen
@@ -255,11 +248,11 @@ impl eframe::App for BitVaultApp {
 
                 // Get screen rect ONCE - this is TRULY stable and doesn't change with mouse
                 let screen_rect = ctx.screen_rect();
-                let screen_center_x = screen_rect.center().x;
+                let _screen_center_x = screen_rect.center().x;
 
                 // Get the clip rect for the top bar - this is the actual drawing area
                 let clip_rect = ui.clip_rect();
-                let top_bar_y = clip_rect.min.y + clip_rect.height() / 2.0;
+                let _top_bar_y = clip_rect.min.y + clip_rect.height() / 2.0;
 
                 // Background for top bar
                 let available_rect = ui.available_rect_before_wrap();

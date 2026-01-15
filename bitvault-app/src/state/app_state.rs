@@ -59,6 +59,32 @@ impl AppState {
         })
     }
 
+    /// Create a new app state without settings manager (fallback for initialization failures)
+    /// This creates a minimal state with default values, but some features may be unavailable
+    pub fn new_without_settings(network: Network) -> Result<Self, String> {
+        // Try to create settings manager, but use defaults if it fails
+        let settings_manager = match SettingsManager::new() {
+            Ok(sm) => sm,
+            Err(e) => {
+                eprintln!("Warning: Could not create settings manager in fallback: {}", e);
+                return Err(format!("Cannot create app state even with fallback: {}", e));
+            }
+        };
+
+        Ok(Self {
+            vault_service: None,
+            network,
+            has_vault: false,
+            vault_data: Arc::new(std::sync::Mutex::new(VaultData::new())),
+            runtime: None,
+            async_handler: None,
+            settings_manager,
+            currency: Currency::USD,
+            theme: AppTheme::System,
+            notification_service: Arc::new(NotificationService::new()),
+        })
+    }
+
     /// Set the runtime for async operations
     pub fn set_runtime(&mut self, runtime: tokio::runtime::Runtime) {
         self.runtime = Some(runtime);
