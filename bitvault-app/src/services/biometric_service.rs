@@ -1,9 +1,18 @@
 //! Biometric Authentication Service
 //!
 //! Platform-specific biometric authentication:
-//! - Windows: Windows Hello (face recognition, fingerprint, PIN)
-//! - macOS: Touch ID, Face ID
+//! - Windows: ✅ Windows Hello (face recognition, fingerprint, PIN) - FULLY IMPLEMENTED
+//! - macOS: ⚠️ Touch ID, Face ID - AVAILABILITY CHECK ONLY (authentication not yet implemented)
 //! - Linux: Not supported (falls back to PIN)
+//!
+//! # Implementation Status
+//!
+//! - **Windows Hello**: Fully functional - can authenticate users
+//! - **macOS Touch ID/Face ID**: 
+//!   - ✅ Availability detection works
+//!   - ❌ Actual authentication prompt not yet implemented
+//!   - Requires Objective-C block callback support which is not available in objc2
+//!   - Users must use PIN entry on macOS
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -164,7 +173,7 @@ impl BiometricService {
 
     /// Authenticate using biometrics
     /// Returns BiometricResult indicating success or failure
-    pub async fn authenticate(&self, reason: &str) -> BiometricResult {
+    pub async fn authenticate(&self, _reason: &str) -> BiometricResult {
         if !self.is_enabled().await {
             return BiometricResult::NotAvailable;
         }
@@ -317,24 +326,23 @@ impl BiometricService {
                 // Create NSString for reason
                 let reason_nsstring = NSString::from_str(&reason_string);
 
-                // For synchronous evaluation, we use evaluatePolicy:localizedReason:reply:
-                // which requires a block. Since block2 may have compatibility issues,
-                // we'll use a simpler approach with evaluateAccessControl on Sonoma+
-                // or fall back to a placeholder for older systems.
+                // macOS biometric authentication implementation status:
+                // 
+                // LIMITATION: Full Touch ID/Face ID authentication requires calling
+                // `evaluatePolicy:localizedReason:reply:` with an Objective-C block callback.
+                // The objc2 crate does not currently provide stable block handling for callbacks.
                 //
-                // For production, this should use dispatch_semaphore or run on main thread
-                // with proper block handling.
-                
-                // Simplified approach: Just check availability (already did) and return success
-                // Real implementation would require block2 or dispatch handling
+                // CURRENT STATUS: This implementation checks if biometrics are available
+                // and enrolled, but cannot trigger the actual authentication prompt without
+                // proper block support. The availability check works correctly.
+                //
+                // WORKAROUND: Users on macOS must use PIN entry instead of biometrics
+                // until proper block callback support is available in objc2 or we switch
+                // to a different approach (e.g., C interop or Swift bridge).
+                //
+                // For now, return NotAvailable to indicate the feature is not fully functional.
+                // This prevents the UI from showing a broken biometric button.
                 let _: () = msg_send![context, release];
-                
-                // For now, if we got this far, biometrics are available
-                // A full implementation would call evaluatePolicy:localizedReason:reply:
-                // with a block callback. Without block2, we return a simulated success
-                // that indicates the system supports biometrics.
-                //
-                // TODO: Implement full authentication with block2 when available
                 let _ = tx.send(BiometricResult::NotAvailable);
             }
         });

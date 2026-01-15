@@ -10,7 +10,7 @@ use bip39::{Language, Mnemonic};
 use bitvault_common::key_exchange;
 use bitvault_common::utils::TimeDelay;
 use eframe::egui;
-use secp256k1::{PublicKey, Secp256k1, SecretKey};
+// Note: secp256k1 types removed - not currently used in this module
 use std::fs;
 use std::io::{Seek, Write};
 use std::path::Path;

@@ -114,8 +114,8 @@ impl KeyService {
     /// Get all backup infos for a network
     /// Equivalent to Swift's getAllVaultsInfo
     pub fn get_all_vaults_info(&self, network: &str) -> Result<Vec<BackupInfo>, KeyServiceError> {
-        let prefix = format!("backupInfo_{}_", network);
-        let mut results = Vec::new();
+        let _prefix = format!("backupInfo_{}_", network);
+        let results = Vec::new();
 
         // Note: keyring doesn't support listing all keys directly
         // This is a limitation - we'd need to maintain a separate index

@@ -108,15 +108,15 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                 UtxoRefreshStep::SelectingUtxos => {
                     let mut cancel_clicked = false;
                     let mut continue_clicked = false;
-                    let mut has_selection = false;
+                    let mut _has_selection = false;
 
                     if let Some(ref mut selection_state) = state.selection_state {
-                        has_selection = selection_state.has_selection();
+                        _has_selection = selection_state.has_selection();
                         render_utxo_selection(ui, selection_state, RecoveryMode::Refresh);
                         ui.add_space(20.0);
                         ui.horizontal(|ui| {
                             cancel_clicked = ui.button("Cancel").clicked();
-                            continue_clicked = ui.button("Continue").clicked() && has_selection;
+                            continue_clicked = ui.button("Continue").clicked() && _has_selection;
                         });
                     }
 
