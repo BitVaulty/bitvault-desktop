@@ -1,9 +1,9 @@
 //! Vault creation step implementations
 
 use crate::state::{AppState, Navigation, View};
-use crate::ui::components::{button, button_large, ButtonStyle, Spacing};
+use crate::ui::components::{button, button_large, ButtonStyle, Colors, Spacing};
 use crate::ui::pin::render_pin_setup;
-use crate::ui::vault_creation::{DeviceRole, VaultCreationState, VaultCreationStep};
+use crate::ui::vault_creation::{DeviceRole, HardwareWalletType, VaultCreationState, VaultCreationStep};
 use crate::utils::icons::{icon_image, Icon};
 use base64::{engine::general_purpose, Engine};
 use bip39::{Language, Mnemonic};
@@ -11,6 +11,7 @@ use bitvault_common::key_exchange;
 use bitvault_common::utils::TimeDelay;
 use eframe::egui;
 // Note: secp256k1 types removed - not currently used in this module
+use std::collections::HashSet;
 use std::fs;
 use std::io::{Seek, Write};
 use std::path::Path;
@@ -337,6 +338,131 @@ pub fn render_role_selection(
         }
     });
 
+    ui.add_space(Spacing::MD);
+
+    // Row 3: Single Device Vaults (Seed+HW and HW+HW)
+    ui.horizontal(|ui| {
+        ui.add_space(left_margin);
+
+        // Option 5: Single Device (Seed + Hardware Wallet)
+        let card5_rect = ui.allocate_ui_with_layout(
+            egui::vec2(card_width, card_height),
+            egui::Layout::top_down(egui::Align::Center),
+            |ui| {
+                egui::Frame::group(ui.style())
+                    .inner_margin(egui::Margin::same(12.0))
+                    .show(ui, |ui| {
+                        ui.set_min_size(egui::vec2(card_width - 24.0, card_height - 24.0));
+                        ui.vertical(|ui| {
+                            ui.horizontal(|ui| {
+                                if let Some(img) =
+                                    icon_image(ui.ctx(), Icon::Plus, icon_size, icon_color)
+                                {
+                                    ui.add(img);
+                                }
+                                ui.strong("Single Device");
+                            });
+                            ui.add_space(Spacing::XS);
+                            ui.label(egui::RichText::new("Seed + Hardware Wallet").small());
+                            ui.add_space(Spacing::SM);
+                            ui.label("One device with seed + HW.");
+                            ui.add_space(Spacing::MD);
+                            ui.label(
+                                egui::RichText::new("→ Set Up Single Device")
+                                    .color(ui.style().visuals.hyperlink_color),
+                            );
+                        });
+                    });
+            },
+        );
+        let card5_response = ui.interact(
+            card5_rect.response.rect,
+            ui.id().with("card5"),
+            egui::Sense::click(),
+        );
+        let card5_keyboard = card5_response.has_focus()
+            && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
+
+        if card5_response.has_focus() {
+            let painter = ui.painter();
+            let outline_rect = card5_response.rect.expand(2.0);
+            painter.rect_stroke(
+                outline_rect,
+                8.0,
+                egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 149, 237)),
+            );
+        }
+
+        if card5_response.clicked() || card5_keyboard {
+            state.reset_for_new_flow();
+            state.device_role = DeviceRole::SingleDeviceSeedHW;
+            state.advance_to_step(VaultCreationStep::NameVault);
+        }
+        if card5_response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+
+        ui.add_space(Spacing::MD);
+
+        // Option 6: Single Device (Hardware Wallet + Hardware Wallet)
+        let card6_rect = ui.allocate_ui_with_layout(
+            egui::vec2(card_width, card_height),
+            egui::Layout::top_down(egui::Align::Center),
+            |ui| {
+                egui::Frame::group(ui.style())
+                    .inner_margin(egui::Margin::same(12.0))
+                    .show(ui, |ui| {
+                        ui.set_min_size(egui::vec2(card_width - 24.0, card_height - 24.0));
+                        ui.vertical(|ui| {
+                            ui.horizontal(|ui| {
+                                if let Some(img) =
+                                    icon_image(ui.ctx(), Icon::Plus, icon_size, icon_color)
+                                {
+                                    ui.add(img);
+                                }
+                                ui.strong("Single Device");
+                            });
+                            ui.add_space(Spacing::XS);
+                            ui.label(egui::RichText::new("HW + Hardware Wallet").small());
+                            ui.add_space(Spacing::SM);
+                            ui.label("One device with 2 HWs.");
+                            ui.add_space(Spacing::MD);
+                            ui.label(
+                                egui::RichText::new("→ Set Up Single Device")
+                                    .color(ui.style().visuals.hyperlink_color),
+                            );
+                        });
+                    });
+            },
+        );
+        let card6_response = ui.interact(
+            card6_rect.response.rect,
+            ui.id().with("card6"),
+            egui::Sense::click(),
+        );
+        let card6_keyboard = card6_response.has_focus()
+            && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
+
+        if card6_response.has_focus() {
+            let painter = ui.painter();
+            let outline_rect = card6_response.rect.expand(2.0);
+            painter.rect_stroke(
+                outline_rect,
+                8.0,
+                egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 149, 237)),
+            );
+        }
+
+        if card6_response.clicked() || card6_keyboard {
+            state.reset_for_new_flow();
+            state.device_role = DeviceRole::SingleDeviceHWHW;
+            state.advance_to_step(VaultCreationStep::NameVault);
+        }
+        if card6_response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+    });
+
     ui.add_space(Spacing::XL);
 
     ui.vertical_centered(|ui| {
@@ -353,6 +479,8 @@ pub fn render_name_vault(ui: &mut egui::Ui, state: &mut VaultCreationState) {
         DeviceRole::Coowner => "Co-owner Setup",
         DeviceRole::ViewOnly => "View-Only Setup",
         DeviceRole::Restore => "Restore from Backup",
+        DeviceRole::SingleDeviceSeedHW => "Single Device Setup (Seed + Hardware Wallet)",
+        DeviceRole::SingleDeviceHWHW => "Single Device Setup (Hardware Wallet + Hardware Wallet)",
     };
 
     ui.vertical_centered(|ui| {
@@ -476,6 +604,30 @@ pub fn render_mnemonic_generation(ui: &mut egui::Ui, state: &mut VaultCreationSt
 
         ui.label("Your seed phrase is the key to your vault.");
         ui.label("It will be generated securely on this device.");
+        ui.add_space(Spacing::MD);
+
+        // Word count selection
+        ui.label("Seed phrase length:");
+        ui.add_space(Spacing::XS);
+        ui.horizontal(|ui| {
+            let word_count_12 = state.mnemonic_word_count == 12;
+            let word_count_24 = state.mnemonic_word_count == 24;
+            
+            if ui.selectable_label(word_count_12, "12 words").clicked() {
+                state.mnemonic_word_count = 12;
+            }
+            if ui.selectable_label(word_count_24, "24 words").clicked() {
+                state.mnemonic_word_count = 24;
+            }
+        });
+        
+        ui.add_space(Spacing::MD);
+        if state.mnemonic_word_count == 24 {
+            ui.label(egui::RichText::new("24 words provide higher security (256 bits of entropy)").small());
+        } else {
+            ui.label(egui::RichText::new("12 words provide standard security (128 bits of entropy)").small());
+        }
+
         ui.add_space(Spacing::XL);
 
         let generate_response = button_large(ui, "Generate Seed Phrase");
@@ -487,10 +639,20 @@ pub fn render_mnemonic_generation(ui: &mut egui::Ui, state: &mut VaultCreationSt
 
         if generate_response.clicked() || generate_keyboard || enter_pressed {
             use rand::RngCore;
-            let mut entropy = [0u8; 16]; // 128 bits for 12 words
-            rand::thread_rng().fill_bytes(&mut entropy);
+            
+            let mnemonic = if state.mnemonic_word_count == 24 {
+                // 24 words require 32 bytes (256 bits) of entropy
+                let mut entropy = [0u8; 32];
+                rand::thread_rng().fill_bytes(&mut entropy);
+                Mnemonic::from_entropy_in(Language::English, &entropy)
+            } else {
+                // 12 words require 16 bytes (128 bits) of entropy
+                let mut entropy = [0u8; 16];
+                rand::thread_rng().fill_bytes(&mut entropy);
+                Mnemonic::from_entropy_in(Language::English, &entropy)
+            };
 
-            match Mnemonic::from_entropy_in(Language::English, &entropy) {
+            match mnemonic {
                 Ok(mnemonic) => {
                     state.mnemonic = Some(mnemonic);
                     state.error = None;
@@ -527,7 +689,9 @@ pub fn render_display_seed_phrase(ui: &mut egui::Ui, state: &mut VaultCreationSt
 
     // Center the seed phrase card
     if let Some(ref mnemonic) = state.mnemonic {
-        let words: Vec<&str> = mnemonic.words().collect();
+        // Use same method as verification to ensure consistency
+        let mnemonic_str = mnemonic.to_string();
+        let words: Vec<&str> = mnemonic_str.split_whitespace().collect();
         let card_width = 380.0;
         let available_width = ui.available_width();
         let left_margin = ((available_width - card_width) / 2.0).max(0.0);
@@ -574,74 +738,554 @@ pub fn render_display_seed_phrase(ui: &mut egui::Ui, state: &mut VaultCreationSt
     });
 }
 
-/// Verify seed phrase
-pub fn render_verify_seed_phrase(ui: &mut egui::Ui, state: &mut VaultCreationState) {
-    ui.vertical_centered(|ui| {
-        ui.heading("Verify Seed Phrase");
-        ui.add_space(Spacing::LG);
-
-        ui.label("Please confirm you have written down your seed phrase.");
-        ui.add_space(Spacing::MD);
-
-        // Store checkbox state before rendering to detect if Enter toggled it
-        let checkbox_state_before = state.verified_seed_phrase;
-
-        // Temporarily increase icon_spacing for more gap between checkbox and label
-        let old_icon_spacing = ui.spacing().icon_spacing;
-        ui.spacing_mut().icon_spacing = 12.0;
-        let checkbox_response = ui.checkbox(
-            &mut state.verified_seed_phrase,
-            "I have written down my seed phrase and stored it securely",
-        );
-        ui.spacing_mut().icon_spacing = old_icon_spacing;
-
-        // Auto-focus checkbox on step change
-        if state.step_just_changed(VaultCreationStep::VerifySeedPhrase) {
-            checkbox_response.request_focus();
-        }
-
-        // Check if Enter was pressed on the checkbox (it will toggle it)
-        let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
-        let checkbox_has_focus = checkbox_response.has_focus();
-        let checkbox_toggled_by_enter = enter_pressed
-            && checkbox_has_focus
-            && checkbox_state_before != state.verified_seed_phrase;
-
-        if let Some(ref error) = state.error {
-            ui.add_space(Spacing::SM);
-            ui.colored_label(egui::Color32::RED, error);
-        }
-
-        ui.add_space(Spacing::XL);
-
-        let continue_response = button_large(ui, "Continue");
-
-        // If Enter toggled the checkbox, move focus to Continue button (simulate Tab)
-        // This happens AFTER the checkbox toggle, so the next Enter will be on Continue button
-        if checkbox_toggled_by_enter {
-            continue_response.request_focus();
-        }
-
-        // Only trigger Continue if Continue button has focus (not when checkbox has focus)
-        // This ensures: first Enter toggles checkbox and moves focus, second Enter triggers Continue
-        let continue_keyboard = continue_response.has_focus()
-            && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
-
-        // IMPORTANT: Only trigger Continue if Continue button has focus
-        // If checkbox was toggled by Enter, don't trigger Continue on the same frame
-        // (we moved focus to Continue, but the next Enter press should trigger it)
-        if continue_response.clicked() || (continue_keyboard && !checkbox_toggled_by_enter) {
-            if state.verified_seed_phrase {
-                state.error = None;
-                if let Some(next) = state.next_step_for_role() {
-                    state.advance_to_step(next);
+/// Render hardware wallet type selection UI consistently across all flows
+/// 
+/// This helper function ensures consistent UX/UI for hardware wallet type selection
+/// in co-owner key scanning, view-only setup, and restore flows.
+fn render_hardware_wallet_type_selection(
+    ui: &mut egui::Ui,
+    state: &mut VaultCreationState,
+    grid_id: &str,
+) {
+    ui.add_space(Spacing::SM);
+    ui.label("Select your hardware wallet type:");
+    ui.add_space(Spacing::XS);
+    
+    // Create a grid of selectable hardware wallet type buttons
+    let mut selected_type = state.selected_hw_type;
+    egui::Grid::new(grid_id)
+        .num_columns(2)
+        .spacing([Spacing::SM, Spacing::SM])
+        .show(ui, |ui| {
+            for hw_type in HardwareWalletType::all_types() {
+                let is_selected = selected_type == Some(hw_type);
+                let button = egui::SelectableLabel::new(is_selected, hw_type.title());
+                
+                if ui.add(button).clicked() {
+                    selected_type = Some(hw_type);
                 }
-            } else {
-                state.error =
-                    Some("Please confirm you have written down your seed phrase".to_string());
+            }
+        });
+    
+    // Update state if selection changed
+    if selected_type != state.selected_hw_type {
+        state.selected_hw_type = selected_type;
+        // Reset scanner when type changes
+        if state.hw_batch_qr_scanner_state.success {
+            state.hw_batch_qr_scanner_state.reset();
+            if state.coowner_keys.is_some() {
+                state.coowner_keys = None;
+            }
+            if !state.import_descriptors_qr.is_empty() {
+                state.import_descriptors_qr.clear();
             }
         }
+    }
+    
+    ui.add_space(Spacing::MD);
+    
+    // Show guidance based on selected type (consistent messaging)
+    if let Some(hw_type) = state.selected_hw_type {
+        if hw_type.uses_multi_part_ur() {
+            ui.colored_label(
+                egui::Color32::from_rgb(255, 200, 0),
+                format!("⚠ {} uses multi-part UR codes. You'll need to scan multiple QR codes in sequence.", hw_type.title())
+            );
+        } else {
+            ui.label(egui::RichText::new(format!("{} uses single-part UR codes.", hw_type.title())).weak());
+        }
+        ui.add_space(Spacing::SM);
+    } else {
+        ui.colored_label(
+            egui::Color32::YELLOW,
+            "⚠ Please select your hardware wallet type above before scanning."
+        );
+        ui.add_space(Spacing::SM);
+    }
+}
 
+/// Helper function to format ordinal numbers (1st, 2nd, 3rd, etc.)
+fn ordinal_number(n: usize) -> String {
+    match n {
+        1 => "1st".to_string(),
+        2 => "2nd".to_string(),
+        3 => "3rd".to_string(),
+        n if n % 10 == 1 && n % 100 != 11 => format!("{}st", n),
+        n if n % 10 == 2 && n % 100 != 12 => format!("{}nd", n),
+        n if n % 10 == 3 && n % 100 != 13 => format!("{}rd", n),
+        n => format!("{}th", n),
+    }
+}
+
+/// Generate random distractor words from BIP39 wordlist
+/// Excludes words that are in the user's mnemonic
+/// 
+/// Safety: BIP39 has 2048 words, so even with 12-word mnemonic, we have 2036+ words available.
+/// This function will always succeed for reasonable count values (e.g., 24 distractors).
+fn generate_distractor_words(exclude_words: &HashSet<&str>, count: usize) -> Vec<String> {
+    let mut distractors = Vec::new();
+    let max_attempts = 1000; // Safety limit to prevent infinite loops
+    let mut attempts = 0;
+    
+    while distractors.len() < count && attempts < max_attempts {
+        attempts += 1;
+        // Generate random mnemonic
+        let entropy: [u8; 16] = rand::random();
+        if let Ok(mnemonic) = Mnemonic::from_entropy(&entropy) {
+            // Extract words and filter
+            for word in mnemonic.words() {
+                if !exclude_words.contains(word) && !distractors.contains(&word.to_string()) {
+                    distractors.push(word.to_string());
+                    if distractors.len() >= count {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    // If we couldn't get enough words (shouldn't happen in practice), return what we have
+    if distractors.len() < count {
+        eprintln!("Warning: Only generated {} distractor words out of {} requested", distractors.len(), count);
+    }
+    
+    distractors
+}
+
+/// Initialize seed phrase verification state
+fn initialize_verification_state(state: &mut VaultCreationState) -> Result<(), String> {
+    use rand::seq::SliceRandom;
+    use rand::thread_rng;
+    
+    let mnemonic = state.mnemonic.as_ref()
+        .ok_or_else(|| "No mnemonic available".to_string())?;
+    
+    // Get words by splitting the mnemonic string to ensure correct order
+    // mnemonic.words() should work too, but splitting is more explicit
+    let mnemonic_str = mnemonic.to_string();
+    let words: Vec<&str> = mnemonic_str.split_whitespace().collect();
+    // Support both 12 and 24 word mnemonics
+    if words.len() != 12 && words.len() != 24 {
+        return Err(format!("Expected 12 or 24 words, got {}", words.len()));
+    }
+    let exclude_words: HashSet<&str> = words.iter().copied().collect();
+    
+    // Create verification indices (0-11, shuffled)
+    let mut indices: Vec<usize> = (0..words.len()).collect();
+    indices.shuffle(&mut thread_rng());
+    state.seed_verification_state.verification_indices = indices;
+    
+    // Generate word choices for each index
+    for &word_idx in &state.seed_verification_state.verification_indices {
+        // Ensure word_idx is valid
+        if word_idx >= words.len() {
+            return Err(format!("Invalid word index: {} (mnemonic has {} words)", word_idx, words.len()));
+        }
+        
+        let correct_word = words[word_idx];
+        let correct_word_str = correct_word.to_string();
+        
+        // Verify correct_word is actually from the mnemonic
+        if !exclude_words.contains(correct_word) {
+            return Err(format!("Word at index {} is not in mnemonic: {}", word_idx, correct_word));
+        }
+        
+        // Generate 2 distractor words
+        let distractors = generate_distractor_words(&exclude_words, 2);
+        
+        // Combine and shuffle - CRITICAL: correct word must be first in the vector before shuffling
+        let mut choices = vec![correct_word_str.clone()];
+        choices.extend(distractors);
+        
+        // Verify correct word is present before shuffling
+        if !choices.iter().any(|w| w == &correct_word_str) {
+            return Err(format!("Correct word {} not in choices before shuffle for index {}", correct_word, word_idx));
+        }
+        
+        choices.shuffle(&mut thread_rng());
+        
+        // Verify correct word is still in choices after shuffling
+        if !choices.iter().any(|w| w == &correct_word_str) {
+            return Err(format!("Correct word {} not found in choices after shuffle for index {}", correct_word, word_idx));
+        }
+        
+        state.seed_verification_state.word_choices.insert(word_idx, choices);
+    }
+    
+    state.seed_verification_state.initialized = true;
+    state.seed_verification_state.current_page = 0; // Start on first page
+    Ok(())
+}
+
+/// Validate current page of seed phrase verification (6 words per page)
+fn validate_current_page(state: &VaultCreationState) -> Result<(), String> {
+    let page_size = 6;
+    let current_page = state.seed_verification_state.current_page;
+    
+    // Determine total word count from mnemonic
+    let total_words = if let Some(ref mnemonic) = state.mnemonic {
+        let mnemonic_str = mnemonic.to_string();
+        mnemonic_str.split_whitespace().count()
+    } else {
+        12 // Fallback
+    };
+    
+    let start_idx = current_page * page_size;
+    let end_idx = ((current_page + 1) * page_size).min(total_words);
+    
+    // Get the word indices for current page
+    let page_indices: Vec<usize> = state.seed_verification_state.verification_indices
+        [start_idx..end_idx]
+        .to_vec();
+    
+    // Check all 6 positions on current page are selected
+    for &word_idx in &page_indices {
+        if !state.seed_verification_state.selected_words.contains_key(&word_idx) {
+            return Err(format!("Please select all {} words on this page", page_size));
+        }
+    }
+    
+    // Verify each selection on current page
+    if let Some(ref mnemonic) = state.mnemonic {
+        let mnemonic_str = mnemonic.to_string();
+        let correct_words: Vec<&str> = mnemonic_str.split_whitespace().collect();
+        
+        for &word_idx in &page_indices {
+            let selected_word = state.seed_verification_state.selected_words.get(&word_idx)
+                .ok_or_else(|| "Word not selected".to_string())?;
+            let correct_word = correct_words.get(word_idx)
+                .ok_or_else(|| format!("Invalid word index: {}", word_idx))?;
+            
+            if *correct_word != selected_word {
+                return Err("One or more words are incorrect. Please try again.".to_string());
+            }
+        }
+        
+        Ok(())
+    } else {
+        Err("No mnemonic available".to_string())
+    }
+}
+
+/// Validate all words (final verification) - supports 12 or 24 words
+fn validate_all_words(state: &VaultCreationState) -> Result<(), String> {
+    // Determine expected word count from mnemonic
+    let expected_count = if let Some(ref mnemonic) = state.mnemonic {
+        let mnemonic_str = mnemonic.to_string();
+        mnemonic_str.split_whitespace().count()
+    } else {
+        // Fallback to state setting
+        state.mnemonic_word_count as usize
+    };
+    
+    // Check all positions selected
+    if state.seed_verification_state.selected_words.len() != expected_count {
+        return Err(format!("Please select all {} words", expected_count));
+    }
+    
+    // Verify each selection
+    if let Some(ref mnemonic) = state.mnemonic {
+        let mnemonic_str = mnemonic.to_string();
+        let correct_words: Vec<&str> = mnemonic_str.split_whitespace().collect();
+        
+        for (index, selected_word) in &state.seed_verification_state.selected_words {
+            let correct_word = correct_words.get(*index)
+                .ok_or_else(|| format!("Invalid word index: {}", index))?;
+            
+            if *correct_word != selected_word {
+                return Err("One or more words are incorrect. Please try again.".to_string());
+            }
+        }
+        
+        Ok(())
+    } else {
+        Err("No mnemonic available".to_string())
+    }
+}
+
+/// Render a single word prompt with 3 toggle buttons
+fn render_word_prompt(
+    ui: &mut egui::Ui,
+    _prompt_idx: usize,
+    word_idx: usize,
+    state: &mut VaultCreationState,
+) {
+    // Get choices and selected word before borrowing
+    let choices = state.seed_verification_state.word_choices.get(&word_idx).cloned();
+    let selected_word = state.seed_verification_state.selected_words.get(&word_idx).cloned();
+    
+    // Horizontal row with center vertical alignment
+    // This ensures label and buttons are on same baseline
+    ui.horizontal(|ui| {
+        // Number label - show actual word position in seed phrase (1-based)
+        // Fixed width area for label to ensure consistent spacing regardless of digit count
+        // Use monospace and format with padding to ensure consistent width
+        let label_text = format!("{:2}.", word_idx + 1); // Right-pad single digits: " 1." vs "12."
+        let label_width = 35.0; // Fixed width for "12." (2 digits + period)
+        
+        // Allocate exact size and render label right-aligned
+        let (rect, _) = ui.allocate_exact_size(
+            egui::Vec2::new(label_width, 36.0), // Fixed width, height matches button
+            egui::Sense::hover(),
+        );
+        
+        // Render label in the allocated rect, right-aligned
+        ui.painter().text(
+            egui::pos2(rect.max.x - 4.0, rect.center().y), // Right-aligned with small margin
+            egui::Align2::RIGHT_CENTER,
+            label_text,
+            egui::TextStyle::Monospace.resolve(ui.style()),
+            ui.visuals().text_color(),
+        );
+        
+        ui.add_space(Spacing::SM);
+        
+        // Three word buttons in a row
+        if let Some(choices) = choices {
+            for word in choices {
+                let is_selected = selected_word.as_ref().map(|w| w == &word).unwrap_or(false);
+                
+                render_toggle_word_button(ui, word, is_selected, word_idx, state);
+                ui.add_space(Spacing::SM); // Space between buttons
+            }
+        }
+    });
+}
+
+/// Render a toggle button for a word choice
+fn render_toggle_word_button(
+    ui: &mut egui::Ui,
+    word: String,
+    is_selected: bool,
+    word_idx: usize,
+    state: &mut VaultCreationState,
+) {
+    
+    // Button styling based on selection state
+    let (bg_color, text_color, border_color) = if is_selected {
+        // Selected: Primary color background, white text
+        (Colors::PRIMARY, egui::Color32::WHITE, Colors::PRIMARY_DARK)
+    } else {
+        // Unselected: Transparent/gray background, normal text
+        let is_dark = ui.style().visuals.dark_mode;
+        let bg = if is_dark { Colors::GRAY_800 } else { Colors::GRAY_100 };
+        (bg, Colors::text_primary(ui.ctx()), Colors::GRAY_400)
+    };
+    
+    // Custom button using egui::Button with custom styling
+    let button = egui::Button::new(
+        egui::RichText::new(&word)
+            .color(text_color)
+            .monospace()
+            .size(14.0)
+    )
+    .fill(bg_color)
+    .min_size(egui::vec2(120.0, 36.0)); // Fixed width, consistent height
+    
+    let response = ui.add(button);
+    
+    // Draw border for selected state
+    if is_selected {
+        ui.painter().rect_stroke(
+            response.rect,
+            6.0, // Corner radius
+            egui::Stroke::new(2.0, border_color),
+        );
+    }
+    
+    // Handle click: toggle selection
+    if response.clicked() {
+        if is_selected {
+            // Deselect
+            state.seed_verification_state.selected_words.remove(&word_idx);
+        } else {
+            // Select (this replaces any previous selection for this position)
+            state.seed_verification_state.selected_words.insert(word_idx, word);
+        }
+    }
+    
+    // Hover effect
+    if response.hovered() && !is_selected {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+}
+
+/// Verify seed phrase
+pub fn render_verify_seed_phrase(ui: &mut egui::Ui, state: &mut VaultCreationState) {
+    // Initialize verification state if not already done
+    if !state.seed_verification_state.initialized {
+        if let Err(e) = initialize_verification_state(state) {
+            state.error = Some(e);
+        }
+    }
+    
+    // Header section (centered)
+    ui.vertical_centered(|ui| {
+        ui.heading("Verify Seed Phrase");
+        ui.add_space(Spacing::MD);
+        ui.label("Please verify your seed phrase by selecting the correct word for each position.");
+        ui.add_space(Spacing::LG);
+    });
+
+    // Main content card (centered, similar to seed phrase display)
+    let card_width = 500.0; // Wider than seed phrase card (380.0) to fit 3 buttons
+    let available_width = ui.available_width();
+    let left_margin = ((available_width - card_width) / 2.0).max(0.0);
+
+    ui.horizontal(|ui| {
+        ui.add_space(left_margin);
+        
+            egui::Frame::group(ui.style())
+            .inner_margin(egui::Margin::same(20.0))
+            .show(ui, |ui| {
+                ui.set_width(card_width - 40.0); // Account for margins
+                
+                // Display only current page (6 words at a time)
+                // No scroll area needed - card fits exactly 6 prompts
+                let page_size = 6;
+                let current_page = state.seed_verification_state.current_page;
+                
+                // Determine total word count from mnemonic
+                let total_words = if let Some(ref mnemonic) = state.mnemonic {
+                    let mnemonic_str = mnemonic.to_string();
+                    mnemonic_str.split_whitespace().count()
+                } else {
+                    12 // Fallback
+                };
+                
+                let start_idx = current_page * page_size;
+                let end_idx = ((current_page + 1) * page_size).min(total_words);
+                
+                // Clone indices to avoid borrow checker issues
+                let indices = state.seed_verification_state.verification_indices.clone();
+                let page_indices: Vec<usize> = indices[start_idx..end_idx].to_vec();
+                
+                // Use Grid to explicitly create rows (similar to seed phrase display)
+                egui::Grid::new("word_verification_prompts")
+                    .num_columns(1) // One column - each row is one prompt
+                    .spacing([0.0, Spacing::SM]) // No horizontal spacing, vertical spacing between rows
+                    .show(ui, |ui| {
+                        // Render only current page (6 prompts)
+                        for (local_idx, word_idx) in page_indices.iter().enumerate() {
+                            let global_prompt_idx = start_idx + local_idx;
+                            render_word_prompt(ui, global_prompt_idx, *word_idx, state);
+                            ui.end_row(); // Explicitly end each row
+                        }
+                    });
+            });
+    });
+
+    ui.add_space(Spacing::XL);
+
+    // Footer section (centered)
+    ui.vertical_centered(|ui| {
+        // Error message area - always reserve space to prevent layout shift
+        // Reserve space for error message (SM spacing + 2 lines of text + MD spacing)
+        let error_area_height = 60.0; // Fixed height for error area
+        
+        ui.allocate_ui_with_layout(
+            egui::Vec2::new(ui.available_width(), error_area_height),
+            egui::Layout::top_down(egui::Align::Center),
+            |ui| {
+                if let Some(ref error) = state.error {
+                    ui.add_space(Spacing::SM);
+                    ui.colored_label(egui::Color32::RED, error);
+                    ui.add_space(Spacing::MD);
+                }
+                // If no error, this area is empty but still takes up space
+            },
+        );
+        
+        // Button text changes based on page
+        // Determine total pages based on word count
+        let total_words = if let Some(ref mnemonic) = state.mnemonic {
+            let mnemonic_str = mnemonic.to_string();
+            mnemonic_str.split_whitespace().count()
+        } else {
+            12 // Fallback
+        };
+        let page_size = 6;
+        let total_pages = (total_words + page_size - 1) / page_size; // Ceiling division
+        let is_last_page = state.seed_verification_state.current_page == (total_pages - 1);
+        let button_text = if is_last_page { "Continue" } else { "Next" };
+        
+        // Continue/Next button
+        let continue_response = button_large(ui, button_text);
+        let continue_keyboard = continue_response.has_focus()
+            && ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space));
+        
+        if continue_response.clicked() || continue_keyboard {
+            // Validate current page
+            match validate_current_page(state) {
+                Ok(()) => {
+                    state.error = None;
+                    
+                    // If not last page, advance to next page
+                    if !is_last_page {
+                        state.seed_verification_state.current_page += 1;
+                    } else {
+                        // Last page - validate all words and proceed
+                        match validate_all_words(state) {
+                            Ok(()) => {
+                                state.error = None;
+                                if let Some(next) = state.next_step_for_role() {
+                                    state.advance_to_step(next);
+                                }
+                            }
+                            Err(e) => {
+                                state.error = Some(e);
+                                // Reset current page selections and regenerate choices
+                                let page_size = 6;
+                                let current_page = state.seed_verification_state.current_page;
+                                
+                                // Determine total word count
+                                let total_words = if let Some(ref mnemonic) = state.mnemonic {
+                                    let mnemonic_str = mnemonic.to_string();
+                                    mnemonic_str.split_whitespace().count()
+                                } else {
+                                    12 // Fallback
+                                };
+                                
+                                let start_idx = current_page * page_size;
+                                let end_idx = ((current_page + 1) * page_size).min(total_words);
+                                let indices = &state.seed_verification_state.verification_indices[start_idx..end_idx];
+                                
+                                for &word_idx in indices {
+                                    state.seed_verification_state.selected_words.remove(&word_idx);
+                                }
+                                
+                                if let Err(err) = initialize_verification_state(state) {
+                                    state.error = Some(err);
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    state.error = Some(e);
+                    // Reset current page selections only
+                    let page_size = 6;
+                    let current_page = state.seed_verification_state.current_page;
+                    
+                    // Determine total word count
+                    let total_words = if let Some(ref mnemonic) = state.mnemonic {
+                        let mnemonic_str = mnemonic.to_string();
+                        mnemonic_str.split_whitespace().count()
+                    } else {
+                        12 // Fallback
+                    };
+                    
+                    let start_idx = current_page * page_size;
+                    let end_idx = ((current_page + 1) * page_size).min(total_words);
+                    let indices = &state.seed_verification_state.verification_indices[start_idx..end_idx];
+                    
+                    for &word_idx in indices {
+                        state.seed_verification_state.selected_words.remove(&word_idx);
+                    }
+                }
+            }
+        }
+        
         ui.add_space(Spacing::MD);
         if button(ui, "← Back", ButtonStyle::Text).clicked() {
             state.go_to_previous_step();
@@ -684,14 +1328,284 @@ pub fn render_scan_coowner_keys(
     ctx: &egui::Context,
     state: &mut VaultCreationState,
 ) {
-    ui.heading("Get Co-owner's Keys");
+    // Different heading and instructions based on device role
+    match state.device_role {
+        DeviceRole::SingleDeviceSeedHW => {
+            ui.heading("Scan Hardware Wallet Keys");
+            ui.add_space(Spacing::MD);
+            ui.label("Scan your hardware wallet's account QR code to add it as co-owner.");
+        }
+        DeviceRole::SingleDeviceHWHW => {
+            if !state.scanning_second_hw && state.first_hw_keys.is_none() {
+                ui.heading("Scan First Hardware Wallet");
+                ui.add_space(Spacing::MD);
+                ui.label("Scan the first hardware wallet's account QR code (this will be the owner).");
+            } else {
+                ui.heading("Scan Second Hardware Wallet");
+                ui.add_space(Spacing::MD);
+                ui.label("Scan the second hardware wallet's account QR code (this will be the co-owner).");
+            }
+        }
+        _ => {
+            ui.heading("Get Co-owner's Keys");
+            ui.add_space(Spacing::MD);
+            ui.label("First, have your co-owner complete their setup and share their keys.");
+            ui.label("Then scan the QR code from their device or paste the key data.");
+        }
+    }
     ui.add_space(Spacing::MD);
+    
+    // Check if hardware wallet mode is active
+    let hw_mode_active = !state.hw_batch_qr_scanner_state.scanned_parts.is_empty() 
+        || state.hw_batch_qr_scanner_state.pending_file_selection
+        || state.hw_batch_qr_scanner_state.is_scanning
+        || state.selected_hw_type.is_some();
+    
+    // Toggle between seed phrase and hardware wallet modes (only for regular 2-device setup)
+    if state.device_role != DeviceRole::SingleDeviceSeedHW && state.device_role != DeviceRole::SingleDeviceHWHW {
+        ui.horizontal(|ui| {
+            ui.label("Co-owner type:");
+            let seed_selected = !hw_mode_active;
+            let hw_selected = hw_mode_active;
+            
+            if ui.selectable_label(seed_selected, "Seed Phrase").clicked() && hw_mode_active {
+                // Switch to seed phrase mode
+                state.hw_batch_qr_scanner_state.reset();
+                state.selected_hw_type = None;
+                state.coowner_keys = None;
+            }
+            if ui.selectable_label(hw_selected, "Hardware Wallet").clicked() && !hw_mode_active {
+                // Switch to hardware wallet mode
+                if state.is_scanning_qr {
+                    if let Some(ref mut camera) = state.camera_capture {
+                        camera.stop_capture();
+                    }
+                    state.is_scanning_qr = false;
+                }
+                state.hw_batch_qr_scanner_state = crate::ui::hardware_wallet::BatchQrScannerState::default();
+            }
+        });
+    }
+    
+    if hw_mode_active {
+        // Hardware wallet scanning mode
+        ui.add_space(Spacing::MD);
+        ui.separator();
+        ui.add_space(Spacing::SM);
+        
+        ui.heading("Scan Hardware Wallet QR");
+        
+        // Hardware wallet type selection (using consistent helper)
+        render_hardware_wallet_type_selection(ui, state, "hw_type_selection_coowner");
+        
+        // Show progress
+        if !state.hw_batch_qr_scanner_state.scanned_parts.is_empty() {
+            ui.label(format!("Scanned {} part(s)", state.hw_batch_qr_scanner_state.scanned_parts.len()));
+            ui.add_space(Spacing::SM);
+        }
+        
+        // File selection for QR code image (only enabled if hardware wallet type is selected)
+        let can_scan = state.selected_hw_type.is_some();
+        if can_scan {
+            if button(ui, "Select QR Code Image File", ButtonStyle::Secondary).clicked() {
+                state.hw_batch_qr_scanner_state.pending_file_selection = true;
+            }
+        } else {
+            // Show disabled button appearance
+            ui.add_enabled(false, egui::Button::new("Select QR Code Image File"));
+            ui.label(egui::RichText::new("Select a hardware wallet type above to enable scanning").weak());
+        }
+        
+        // Handle file selection
+        if state.hw_batch_qr_scanner_state.pending_file_selection && can_scan {
+            state.hw_batch_qr_scanner_state.pending_file_selection = false;
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("Image files", &["png", "jpg", "jpeg", "gif", "bmp"])
+                .pick_file()
+            {
+                state.hw_batch_qr_scanner_state.selected_file = Some(path);
+            }
+        }
+        
+        // Show selected file and scan button
+        if let Some(ref file_path) = state.hw_batch_qr_scanner_state.selected_file {
+            ui.add_space(Spacing::SM);
+            ui.label(format!("Selected: {}", file_path.display()));
+            ui.add_space(Spacing::XS);
+            
+            let file_path_clone = file_path.clone();
+            if button(ui, "Scan QR Code from File", ButtonStyle::Primary).clicked() {
+                match crate::utils::qr::decode_qr_from_file(&file_path_clone) {
+                    Ok(decoded) => {
+                        match state.hw_batch_qr_scanner_state.process_scanned_part(decoded) {
+                                Ok(is_complete) => {
+                                if is_complete {
+                                    // Hardware wallet QR scanned successfully
+                                    // Parse the decoded UR as AccountDescriptor and convert to CoownerKeys
+                                    if let Some(ref decoded_base64) = state.hw_batch_qr_scanner_state.decoded_psbt {
+                                        // The decoded_psbt field contains base64-encoded CBOR bytes from multi-part UR
+                                        // Decode base64 and parse AccountDescriptor from CBOR bytes
+                                        use base64::{engine::general_purpose, Engine as _};
+                                        match general_purpose::STANDARD.decode(decoded_base64) {
+                                            Ok(cbor_bytes) => {
+                                                match bitvault_common::ur::parse_account_descriptor_from_cbor_bytes(&cbor_bytes) {
+                                                    Ok(account_desc) => {
+                                                        match bitvault_common::ur::convert_account_descriptor_to_coowner_keys(&account_desc) {
+                                                            Ok(coowner_keys) => {
+                                                                // For HW+HW single device, handle first vs second HW
+                                                                if state.device_role == DeviceRole::SingleDeviceHWHW && !state.scanning_second_hw {
+                                                                    // First HW scanned - store it and prepare for second HW
+                                                                    state.first_hw_keys = Some(coowner_keys);
+                                                                    state.first_hw_type = state.selected_hw_type; // Store first HW type
+                                                                    state.scanning_second_hw = true;
+                                                                    state.hw_batch_qr_scanner_state.reset(); // Reset scanner for second HW
+                                                                    state.selected_hw_type = None; // Allow selecting different HW type for second
+                                                                    state.error = None;
+                                                                    // Stay on same step to scan second HW
+                                                                } else {
+                                                                    // Regular case or second HW in HW+HW mode
+                                                                    state.coowner_keys = Some(coowner_keys);
+                                                                    state.coowner_pubkeys = state.hw_batch_qr_scanner_state.scanned_parts.join("\n");
+                                                                    state.hw_batch_qr_scanner_state.selected_file = None;
+                                                                    state.error = None;
+                                                                    // Auto-advance to next step
+                                                                    if let Some(next) = state.next_step_for_role() {
+                                                                        state.advance_to_step(next);
+                                                                    }
+                                                                }
+                                                            }
+                                                            Err(e) => {
+                                                                let error_msg = format!(
+                                                                    "Failed to convert hardware wallet keys: {}\n\nThis may happen if:\n- The hardware wallet keys don't have the required derivation paths (m/48'/0'/0'/2'/0/0, etc.)\n- The QR code data is incomplete or corrupted\n\nPlease try scanning again or verify your hardware wallet is configured correctly.",
+                                                                    e
+                                                                );
+                                                                state.error = Some(error_msg);
+                                                            }
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        let error_msg = format!(
+                                                            "Failed to parse hardware wallet AccountDescriptor: {}\n\nThe QR code may not be from a hardware wallet account export, or the data format is invalid.\n\nPlease ensure you're scanning the correct QR code from your hardware wallet.",
+                                                            e
+                                                        );
+                                                        state.error = Some(error_msg);
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                state.error = Some(format!(
+                                                    "Failed to decode QR code data: {}\n\nPlease try scanning the QR code again.",
+                                                    e
+                                                ));
+                                            }
+                                        }
+                                    } else {
+                                        state.error = Some(
+                                            "No decoded QR data available.\n\nThis may indicate the QR code scanning didn't complete properly. Please try scanning again.".to_string()
+                                        );
+                                    }
+                                } else {
+                                    // More parts needed - clear file selection for next scan
+                                    state.hw_batch_qr_scanner_state.selected_file = None;
+                                    state.error = None;
+                                }
+                            }
+                            Err(e) => {
+                                state.error = Some(e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        state.error = Some(format!("Failed to decode QR code: {}", e));
+                    }
+                }
+            }
+        }
+        
+        // Show success message
+        if state.hw_batch_qr_scanner_state.success {
+            ui.add_space(Spacing::MD);
+            ui.colored_label(egui::Color32::GREEN, "✓ Hardware wallet QR codes scanned successfully!");
+        }
+        
+        // Show errors (support multi-line)
+        if let Some(ref error) = state.hw_batch_qr_scanner_state.error {
+            ui.add_space(Spacing::SM);
+            // Split error by newlines and display each line
+            for line in error.lines() {
+                ui.colored_label(egui::Color32::RED, line);
+            }
+        }
+        
+        // Show state.error as well (for conversion errors)
+        if let Some(ref error) = state.error {
+            ui.add_space(Spacing::SM);
+            // Display multi-line error messages
+            for line in error.lines() {
+                ui.colored_label(egui::Color32::RED, line);
+            }
+        }
+        
+        ui.add_space(Spacing::MD);
+        ui.separator();
+        ui.add_space(Spacing::MD);
+        
+        // Continue button when hardware wallet QR is scanned
+        if state.hw_batch_qr_scanner_state.success {
+            // For HW+HW mode, check if we're waiting for second HW
+            if state.device_role == DeviceRole::SingleDeviceHWHW && state.first_hw_keys.is_some() && state.coowner_keys.is_none() {
+                // First HW scanned, waiting for second HW - scanner was reset
+                ui.label(egui::RichText::new("First hardware wallet scanned! Now scan the second hardware wallet above.").color(egui::Color32::GREEN));
+            } else {
+                // Verify we have coowner keys from conversion (or first_hw_keys for HW+HW)
+                let can_continue = state.coowner_keys.is_some() 
+                    || (state.device_role == DeviceRole::SingleDeviceHWHW && state.first_hw_keys.is_some() && state.coowner_keys.is_some());
+                
+                if can_continue {
+                    let button_text = if state.device_role == DeviceRole::SingleDeviceHWHW && state.first_hw_keys.is_some() && state.coowner_keys.is_some() {
+                        "Continue"
+                    } else if state.device_role == DeviceRole::SingleDeviceSeedHW {
+                        "Continue"
+                    } else {
+                        "Continue"
+                    };
+                    let continue_response = button_large(ui, button_text);
+                    if continue_response.clicked() {
+                        // Hardware wallet keys are ready
+                        state.error = None;
+                        if let Some(next) = state.next_step_for_role() {
+                            state.advance_to_step(next);
+                        }
+                    }
+                } else {
+                    // Show processing state or error
+                    ui.spinner();
+                    ui.label("Processing hardware wallet keys...");
+                    if state.error.is_some() {
+                        ui.add_space(Spacing::SM);
+                        ui.label("If this takes too long, try scanning again.");
+                    }
+                }
+            }
+        } else {
+            // Option to switch back to seed phrase mode (only for regular 2-device setup)
+            if state.device_role != DeviceRole::SingleDeviceSeedHW && state.device_role != DeviceRole::SingleDeviceHWHW {
+                if button(ui, "← Use Seed Phrase Co-owner Instead", ButtonStyle::Text).clicked() {
+                    state.hw_batch_qr_scanner_state.reset();
+                    state.selected_hw_type = None;
+                    state.coowner_keys = None;
+                    state.error = None;
+                }
+            }
+        }
+        
+        // Don't show seed phrase scanning UI in hardware wallet mode
+        return;
+    }
 
-    ui.label("First, have your co-owner complete their setup and share their keys.");
-    ui.label("Then scan the QR code from their device or paste the key data.");
     ui.add_space(Spacing::LG);
 
-    // Webcam scanning option - centered
+    // Webcam scanning option - centered (seed phrase co-owner mode)
     ui.vertical_centered(|ui| {
         if state.is_scanning_qr {
             if button(ui, "Stop Scanning", ButtonStyle::Secondary).clicked() {
@@ -880,19 +1794,32 @@ pub fn render_scan_coowner_keys(
         if state.coowner_pubkeys.trim().is_empty() {
             state.error = Some("Please scan, paste, or load the co-owner's key data".to_string());
         } else {
-            // Validate the keys by decoding as CoownerKeys
+            // Try to decode as CoownerKeys (seed phrase co-owner)
             match bitvault_common::ur::decode_qr_data::<bitvault_common::derivation::CoownerKeys>(
                 &state.coowner_pubkeys,
             ) {
                 Ok(keys) => {
+                    // Valid CoownerKeys format (seed phrase co-owner)
                     state.coowner_keys = Some(keys);
                     state.error = None;
                     if let Some(next) = state.next_step_for_role() {
                         state.advance_to_step(next);
                     }
                 }
-                Err(e) => {
-                    state.error = Some(format!("Invalid key data: {}", e));
+                Err(_) => {
+                    // Not CoownerKeys format - might be hardware wallet UR format
+                    // Check if it starts with "ur:" (UR format)
+                    if state.coowner_pubkeys.trim().starts_with("ur:") {
+                        // Hardware wallet UR format - backend will parse AccountDescriptor
+                        // For now, mark coowner_keys as None - backend will handle conversion
+                        state.coowner_keys = None;
+                        state.error = None;
+                        if let Some(next) = state.next_step_for_role() {
+                            state.advance_to_step(next);
+                        }
+                    } else {
+                        state.error = Some("Invalid key data format. Expected CoownerKeys JSON or Hardware Wallet UR format.".to_string());
+                    }
                 }
             }
         }
@@ -1397,6 +2324,8 @@ pub fn render_create_vault(
         DeviceRole::Coowner => "Join Vault",
         DeviceRole::ViewOnly => "Set Up View-Only",
         DeviceRole::Restore => "Restore Vault",
+        DeviceRole::SingleDeviceSeedHW => "Create Single Device Vault",
+        DeviceRole::SingleDeviceHWHW => "Create Single Device Vault",
     };
 
     ui.heading(action_text);
@@ -1404,14 +2333,13 @@ pub fn render_create_vault(
 
     if state.is_creating {
         ui.spinner();
-        ui.label(format!(
-            "{}...",
-            if state.device_role == DeviceRole::Main {
-                "Creating vault"
-            } else {
-                "Joining vault"
-            }
-        ));
+        let status_text = match state.device_role {
+            DeviceRole::Main => "Creating vault",
+            DeviceRole::SingleDeviceSeedHW => "Creating single device vault",
+            DeviceRole::SingleDeviceHWHW => "Creating single device vault",
+            _ => "Joining vault",
+        };
+        ui.label(format!("{}...", status_text));
         return;
     }
 
@@ -1422,14 +2350,14 @@ pub fn render_create_vault(
         state.time_delay_days, state.time_delay_hours
     ));
     ui.label(format!("Email: {}", state.email));
-    ui.label(format!(
-        "Role: {}",
-        if state.device_role == DeviceRole::Main {
-            "Main Device"
-        } else {
-            "Co-owner"
-        }
-    ));
+    let role_display = match state.device_role {
+        DeviceRole::Main => "Main Device",
+        DeviceRole::Coowner => "Co-owner",
+        DeviceRole::SingleDeviceSeedHW => "Single Device (Seed + HW)",
+        DeviceRole::SingleDeviceHWHW => "Single Device (HW + HW)",
+        _ => "Unknown",
+    };
+    ui.label(format!("Role: {}", role_display));
 
     ui.add_space(Spacing::XL);
 
@@ -1447,7 +2375,21 @@ pub fn render_create_vault(
             return;
         }
 
-        if state.email.trim().is_empty() || !state.email.contains('@') {
+        // Validate email format (basic validation)
+        let email = state.email.trim();
+        if email.is_empty() {
+            state.error = Some("Please enter an email address".to_string());
+            state.is_creating = false;
+            return;
+        }
+        if !email.contains('@') || !email.contains('.') || email.len() < 5 {
+            state.error = Some("Please enter a valid email address (e.g., name@example.com)".to_string());
+            state.is_creating = false;
+            return;
+        }
+        // Check that @ is not at the start or end
+        let at_pos = email.find('@').unwrap();
+        if at_pos == 0 || at_pos == email.len() - 1 {
             state.error = Some("Please enter a valid email address".to_string());
             state.is_creating = false;
             return;
@@ -1459,16 +2401,46 @@ pub fn render_create_vault(
             return;
         }
 
-        if state.coowner_pubkeys.trim().is_empty() && state.coowner_keys.is_none() {
-            state.error = Some("Co-owner keys are required".to_string());
-            state.is_creating = false;
-            return;
+        // Validate based on role
+        match state.device_role {
+            DeviceRole::SingleDeviceSeedHW => {
+                // Need mnemonic and hardware wallet keys
+                if state.mnemonic.is_none() {
+                    state.error = Some("Seed phrase is required".to_string());
+                    state.is_creating = false;
+                    return;
+                }
+                if state.coowner_keys.is_none() && state.coowner_pubkeys.trim().is_empty() {
+                    state.error = Some("Hardware wallet keys are required".to_string());
+                    state.is_creating = false;
+                    return;
+                }
+            }
+            DeviceRole::SingleDeviceHWHW => {
+                // Need both hardware wallets
+                if state.first_hw_keys.is_none() {
+                    state.error = Some("First hardware wallet keys are required".to_string());
+                    state.is_creating = false;
+                    return;
+                }
+                if state.coowner_keys.is_none() && state.coowner_pubkeys.trim().is_empty() {
+                    state.error = Some("Second hardware wallet keys are required".to_string());
+                    state.is_creating = false;
+                    return;
+                }
+            }
+            _ => {
+                // Regular 2-device setup
+                if state.coowner_pubkeys.trim().is_empty() && state.coowner_keys.is_none() {
+                    state.error = Some("Co-owner keys are required".to_string());
+                    state.is_creating = false;
+                    return;
+                }
+            }
         }
 
         // Create/join vault
-        if let (Some(mnemonic), Some(runtime)) =
-            (state.mnemonic.as_ref(), app_state.runtime.as_ref())
-        {
+        if let Some(runtime) = app_state.runtime.as_ref() {
             let time_delay = TimeDelay {
                 days: state.time_delay_days,
                 hours: state.time_delay_hours,
@@ -1480,29 +2452,145 @@ pub fn render_create_vault(
             let auth_code = state.auth_code.clone();
             let runtime_handle = runtime.handle().clone();
 
+            // Prepare data for single device vaults (validation outside async block)
+            let hw_keys_string_opt = match state.device_role {
+                DeviceRole::SingleDeviceSeedHW => {
+                    // Convert hardware wallet keys to JSON string
+                    if let Some(ref hw_keys) = state.coowner_keys {
+                        match serde_json::to_string(hw_keys) {
+                            Ok(s) => Some(s),
+                            Err(e) => {
+                                state.error = Some(format!("Failed to serialize HW keys: {}", e));
+                                state.is_creating = false;
+                                return;
+                            }
+                        }
+                    } else if !coowner_pubkeys.trim().is_empty() {
+                        Some(coowner_pubkeys.clone())
+                    } else {
+                        None
+                    }
+                }
+                DeviceRole::SingleDeviceHWHW => {
+                    // Will be handled separately
+                    None
+                }
+                _ => None,
+            };
+
+            let first_hw_string_opt = match state.device_role {
+                DeviceRole::SingleDeviceHWHW => {
+                    if let Some(ref first_hw_keys) = state.first_hw_keys {
+                        match serde_json::to_string(first_hw_keys) {
+                            Ok(s) => Some(s),
+                            Err(e) => {
+                                state.error = Some(format!("Failed to serialize first HW keys: {}", e));
+                                state.is_creating = false;
+                                return;
+                            }
+                        }
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
+
+            let second_hw_string_opt = match state.device_role {
+                DeviceRole::SingleDeviceHWHW => {
+                    if let Some(ref second_hw_keys) = state.coowner_keys {
+                        match serde_json::to_string(second_hw_keys) {
+                            Ok(s) => Some(s),
+                            Err(e) => {
+                                state.error = Some(format!("Failed to serialize second HW keys: {}", e));
+                                state.is_creating = false;
+                                return;
+                            }
+                        }
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
+
             let result = runtime.block_on(async {
                 let mut vault_service = bitvault_common::wallet::VaultService::new(network);
 
-                let qr_result = vault_service
-                    .setup_vault(
-                        mnemonic,
-                        &coowner_pubkeys,
-                        time_delay,
-                        &vault_name,
-                        &email,
-                        &auth_code,
-                    )
-                    .await;
+                match state.device_role {
+                    DeviceRole::SingleDeviceSeedHW => {
+                        let mnemonic = state.mnemonic.as_ref().unwrap(); // Already validated
+                        let hw_keys_string = hw_keys_string_opt.as_ref().unwrap(); // Already validated
+                        let hw_type_str = state.selected_hw_type
+                            .map(|t| t.title().to_string())
+                            .unwrap_or_else(|| "Unknown".to_string());
+                        
+                        vault_service
+                            .setup_single_device_vault_seed_hw(
+                                mnemonic,
+                                hw_keys_string,
+                                time_delay,
+                                &vault_name,
+                                &email,
+                                &auth_code,
+                                &hw_type_str,
+                            )
+                            .await
+                            .map(|_| (None, vault_service)) // Single device doesn't return QR data
+                    }
+                    DeviceRole::SingleDeviceHWHW => {
+                        let first_hw_string = first_hw_string_opt.as_ref().unwrap(); // Already validated
+                        let second_hw_string = second_hw_string_opt.as_ref().unwrap(); // Already validated
+                        let first_hw_type_str = state.first_hw_type
+                            .map(|t| t.title().to_string())
+                            .unwrap_or_else(|| "Unknown".to_string());
+                        let second_hw_type_str = state.selected_hw_type
+                            .map(|t| t.title().to_string())
+                            .unwrap_or_else(|| "Unknown".to_string());
 
-                match qr_result {
-                    Ok(qr) => Ok((qr, vault_service)),
-                    Err(e) => Err(e),
+                        vault_service
+                            .setup_single_device_vault_hw_hw(
+                                first_hw_string,
+                                second_hw_string,
+                                time_delay,
+                                &vault_name,
+                                &email,
+                                &auth_code,
+                                &first_hw_type_str,
+                                &second_hw_type_str,
+                            )
+                            .await
+                            .map(|_| (None, vault_service)) // Single device doesn't return QR data
+                    }
+                    _ => {
+                        // Regular 2-device setup
+                        let mnemonic = state.mnemonic.as_ref().unwrap(); // Already validated
+
+                        let qr_result = vault_service
+                            .setup_vault(
+                                mnemonic,
+                                &coowner_pubkeys,
+                                time_delay,
+                                &vault_name,
+                                &email,
+                                &auth_code,
+                            )
+                            .await;
+
+                        match qr_result {
+                            Ok(qr) => Ok((Some(qr), vault_service)),
+                            Err(e) => Err(e),
+                        }
+                    }
                 }
             });
 
             match result {
                 Ok((exchange_data, vault_service)) => {
-                    state.exchange_data_output = Some(exchange_data);
+                    // Exchange data is only returned for 2-device setups
+                    if let Some(qr_data) = exchange_data {
+                        state.exchange_data_output = Some(qr_data);
+                    }
 
                     if let Err(e) = runtime_handle.block_on(async {
                         app_state.initialize_vault_from_service(vault_service).await
@@ -1522,12 +2610,20 @@ pub fn render_create_vault(
 
                     state.is_creating = false;
 
-                    // Main device shows exchange data, co-owner goes to completed
-                    if state.device_role == DeviceRole::Main {
-                        state.advance_to_step(VaultCreationStep::DisplayExchangeData);
-                    } else {
-                        state.advance_to_step(VaultCreationStep::Completed);
-                        navigation.navigate_to(View::Dashboard { tab: 0 });
+                    // Single device vaults go directly to completed (no exchange data needed)
+                    // Main device shows exchange data for 2-device setups, co-owner goes to completed
+                    match state.device_role {
+                        DeviceRole::Main => {
+                            state.advance_to_step(VaultCreationStep::DisplayExchangeData);
+                        }
+                        DeviceRole::SingleDeviceSeedHW | DeviceRole::SingleDeviceHWHW => {
+                            state.advance_to_step(VaultCreationStep::Completed);
+                            navigation.navigate_to(View::Dashboard { tab: 0 });
+                        }
+                        _ => {
+                            state.advance_to_step(VaultCreationStep::Completed);
+                            navigation.navigate_to(View::Dashboard { tab: 0 });
+                        }
                     }
                 }
                 Err(e) => {
@@ -1720,13 +2816,142 @@ pub fn render_scan_descriptor_view_only(ui: &mut egui::Ui, state: &mut VaultCrea
     ui.heading("View-Only Setup");
     ui.add_space(Spacing::MD);
 
-    ui.label("Scan or paste the descriptor from your mobile device.");
+    ui.label("Scan or paste the descriptor from your mobile device or hardware wallet.");
     ui.add_space(Spacing::SM);
 
     ui.colored_label(
         egui::Color32::from_rgb(100, 149, 237),
         "This will let you monitor your vault without signing capability.",
     );
+    ui.add_space(Spacing::MD);
+
+    // Option: Hardware Wallet or Mobile Device
+    ui.horizontal(|ui| {
+        ui.label("Source:");
+        let hw_mode = !state.hw_batch_qr_scanner_state.scanned_parts.is_empty() 
+            || state.hw_batch_qr_scanner_state.pending_file_selection
+            || state.hw_batch_qr_scanner_state.is_scanning;
+        if ui.selectable_label(hw_mode, "Hardware Wallet").clicked() && !hw_mode {
+            state.hw_batch_qr_scanner_state = crate::ui::hardware_wallet::BatchQrScannerState::default();
+            state.import_descriptors_qr.clear();
+        }
+        if ui.selectable_label(!hw_mode, "Mobile Device").clicked() && hw_mode {
+            state.hw_batch_qr_scanner_state.reset();
+        }
+    });
+
+    if !state.hw_batch_qr_scanner_state.scanned_parts.is_empty() 
+        || state.hw_batch_qr_scanner_state.pending_file_selection
+        || state.hw_batch_qr_scanner_state.is_scanning {
+        // Hardware wallet QR scanning mode
+        ui.add_space(Spacing::MD);
+        ui.separator();
+        ui.add_space(Spacing::SM);
+        
+        ui.heading("Scan Hardware Wallet Descriptor");
+        
+        // Hardware wallet type selection (using consistent helper)
+        render_hardware_wallet_type_selection(ui, state, "hw_type_selection_view_only");
+        
+        ui.label("Scan QR code(s) from your hardware wallet:");
+        ui.add_space(Spacing::SM);
+        
+        // Show progress
+        if !state.hw_batch_qr_scanner_state.scanned_parts.is_empty() {
+            ui.label(format!("Scanned {} part(s)", state.hw_batch_qr_scanner_state.scanned_parts.len()));
+            ui.add_space(Spacing::SM);
+        }
+        
+        // File selection for QR code image (only enabled if hardware wallet type is selected)
+        let can_scan = state.selected_hw_type.is_some();
+        if can_scan {
+            if button(ui, "Select QR Code Image File", ButtonStyle::Secondary).clicked() {
+                state.hw_batch_qr_scanner_state.pending_file_selection = true;
+            }
+        } else {
+            // Show disabled button appearance
+            ui.add_enabled(false, egui::Button::new("Select QR Code Image File"));
+            ui.label(egui::RichText::new("Select a hardware wallet type above to enable scanning").weak());
+        }
+        
+        // Handle file selection
+        if state.hw_batch_qr_scanner_state.pending_file_selection {
+            state.hw_batch_qr_scanner_state.pending_file_selection = false;
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("Image files", &["png", "jpg", "jpeg", "gif", "bmp"])
+                .pick_file()
+            {
+                state.hw_batch_qr_scanner_state.selected_file = Some(path);
+            }
+        }
+        
+        // Show selected file and scan button
+        if let Some(ref file_path) = state.hw_batch_qr_scanner_state.selected_file {
+            ui.add_space(Spacing::SM);
+            ui.label(format!("Selected: {}", file_path.display()));
+            ui.add_space(Spacing::XS);
+            
+            let file_path_clone = file_path.clone();
+            if button(ui, "Scan QR Code from File", ButtonStyle::Primary).clicked() {
+                match crate::utils::qr::decode_qr_from_file(&file_path_clone) {
+                    Ok(decoded) => {
+                        match state.hw_batch_qr_scanner_state.process_scanned_part(decoded) {
+                            Ok(is_complete) => {
+                                if is_complete {
+                                    // Hardware wallet descriptor QR scanned successfully
+                                    // Decode UR to get descriptor data
+                                    if let Ok(Some(_message_bytes)) = bitvault_common::ur::decode_ur_part(
+                                        &state.hw_batch_qr_scanner_state.scanned_parts.join("\n")
+                                    ) {
+                                        // Try to parse as AccountDescriptor
+                                        match bitvault_common::ur::parse_crypto_account(
+                                            &state.hw_batch_qr_scanner_state.scanned_parts[0]
+                                        ) {
+                                            Ok(_account_desc) => {
+                                                // Store UR parts - backend will handle conversion
+                                                state.import_descriptors_qr = state.hw_batch_qr_scanner_state.scanned_parts.join("\n");
+                                                state.hw_batch_qr_scanner_state.selected_file = None;
+                                                state.error = None;
+                                            }
+                                            Err(e) => {
+                                                state.error = Some(format!("Failed to parse hardware wallet descriptor: {}", e));
+                                            }
+                                        }
+                                    } else {
+                                        // Store raw UR parts for backend processing
+                                        state.import_descriptors_qr = state.hw_batch_qr_scanner_state.scanned_parts.join("\n");
+                                        state.hw_batch_qr_scanner_state.selected_file = None;
+                                        state.error = None;
+                                    }
+                                } else {
+                                    // More parts needed
+                                    state.hw_batch_qr_scanner_state.selected_file = None;
+                                    state.error = None;
+                                }
+                            }
+                            Err(e) => {
+                                state.error = Some(e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        state.error = Some(format!("Failed to decode QR code: {}", e));
+                    }
+                }
+            }
+        }
+        
+        // Show success/error
+        if state.hw_batch_qr_scanner_state.success {
+            ui.add_space(Spacing::SM);
+            ui.colored_label(egui::Color32::GREEN, "✓ Hardware wallet descriptor scanned!");
+        }
+        
+        ui.add_space(Spacing::MD);
+        ui.separator();
+        ui.add_space(Spacing::MD);
+    }
+
     ui.add_space(Spacing::LG);
 
     ui.label("Paste the descriptor configuration:");
@@ -1831,7 +3056,7 @@ pub fn render_view_only_complete(
                     runtime.block_on(async {
                         let mut vault_service = bitvault_common::wallet::VaultService::new(network);
                         vault_service
-                            .import_vault(&dummy_mnemonic, &descriptors_qr, &vault_name, false)
+                            .import_vault(&dummy_mnemonic, &descriptors_qr, &vault_name, false, None)
                             .await
                             .map_err(|e| format!("Setup failed: {}", e))?;
 
@@ -1984,15 +3209,135 @@ pub fn render_enter_seed_phrase(ui: &mut egui::Ui, state: &mut VaultCreationStat
 pub fn render_scan_descriptor_restore(
     ui: &mut egui::Ui,
     app_state: &mut AppState,
-    navigation: &mut Navigation,
+    _navigation: &mut Navigation,
     state: &mut VaultCreationState,
 ) {
     ui.heading("Restore from Backup");
     ui.add_space(Spacing::MD);
 
-    ui.label("Now enter the descriptor configuration from your mobile device.");
+    ui.label("Now enter the descriptor configuration from your mobile device or hardware wallet.");
     ui.add_space(Spacing::SM);
     ui.label("On your mobile, go to Settings → Export Vault Descriptor.");
+    ui.add_space(Spacing::MD);
+
+    // Option: Hardware Wallet or Mobile Device
+    ui.horizontal(|ui| {
+        ui.label("Source:");
+        let hw_mode = !state.hw_batch_qr_scanner_state.scanned_parts.is_empty() 
+            || state.hw_batch_qr_scanner_state.pending_file_selection
+            || state.hw_batch_qr_scanner_state.is_scanning;
+        if ui.selectable_label(hw_mode, "Hardware Wallet").clicked() && !hw_mode {
+            state.hw_batch_qr_scanner_state = crate::ui::hardware_wallet::BatchQrScannerState::default();
+            state.import_descriptors_qr.clear();
+        }
+        if ui.selectable_label(!hw_mode, "Mobile Device").clicked() && hw_mode {
+            state.hw_batch_qr_scanner_state.reset();
+        }
+    });
+
+    if !state.hw_batch_qr_scanner_state.scanned_parts.is_empty() 
+        || state.hw_batch_qr_scanner_state.pending_file_selection
+        || state.hw_batch_qr_scanner_state.is_scanning {
+        // Hardware wallet QR scanning mode
+        ui.add_space(Spacing::MD);
+        ui.separator();
+        ui.add_space(Spacing::SM);
+        
+        ui.heading("Scan Hardware Wallet Descriptor");
+        
+        // Hardware wallet type selection (using consistent helper)
+        render_hardware_wallet_type_selection(ui, state, "hw_type_selection_restore");
+        
+        ui.label("Scan QR code(s) from your hardware wallet:");
+        ui.add_space(Spacing::SM);
+        
+        // Show progress
+        if !state.hw_batch_qr_scanner_state.scanned_parts.is_empty() {
+            ui.label(format!("Scanned {} part(s)", state.hw_batch_qr_scanner_state.scanned_parts.len()));
+            ui.add_space(Spacing::SM);
+        }
+        
+        // File selection for QR code image (only enabled if hardware wallet type is selected)
+        let can_scan = state.selected_hw_type.is_some();
+        if can_scan {
+            if button(ui, "Select QR Code Image File", ButtonStyle::Secondary).clicked() {
+                state.hw_batch_qr_scanner_state.pending_file_selection = true;
+            }
+        } else {
+            // Show disabled button appearance
+            ui.add_enabled(false, egui::Button::new("Select QR Code Image File"));
+            ui.label(egui::RichText::new("Select a hardware wallet type above to enable scanning").weak());
+        }
+        
+        // Handle file selection
+        if state.hw_batch_qr_scanner_state.pending_file_selection {
+            state.hw_batch_qr_scanner_state.pending_file_selection = false;
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("Image files", &["png", "jpg", "jpeg", "gif", "bmp"])
+                .pick_file()
+            {
+                state.hw_batch_qr_scanner_state.selected_file = Some(path);
+            }
+        }
+        
+        // Show selected file and scan button
+        if let Some(ref file_path) = state.hw_batch_qr_scanner_state.selected_file {
+            ui.add_space(Spacing::SM);
+            ui.label(format!("Selected: {}", file_path.display()));
+            ui.add_space(Spacing::XS);
+            
+            let file_path_clone = file_path.clone();
+            if button(ui, "Scan QR Code from File", ButtonStyle::Primary).clicked() {
+                match crate::utils::qr::decode_qr_from_file(&file_path_clone) {
+                    Ok(decoded) => {
+                        match state.hw_batch_qr_scanner_state.process_scanned_part(decoded) {
+                            Ok(is_complete) => {
+                                if is_complete {
+                                    // Hardware wallet descriptor QR scanned successfully
+                                    // Store UR parts for backend processing
+                                    state.import_descriptors_qr = state.hw_batch_qr_scanner_state.scanned_parts.join("\n");
+                                    state.hw_batch_qr_scanner_state.selected_file = None;
+                                    state.error = None;
+                                } else {
+                                    // More parts needed
+                                    state.hw_batch_qr_scanner_state.selected_file = None;
+                                    state.error = None;
+                                }
+                            }
+                            Err(e) => {
+                                state.error = Some(e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        state.error = Some(format!("Failed to decode QR code: {}", e));
+                    }
+                }
+            }
+        }
+        
+        // Show success/error
+        if state.hw_batch_qr_scanner_state.success {
+            ui.add_space(Spacing::SM);
+            ui.colored_label(egui::Color32::GREEN, "✓ Hardware wallet descriptor scanned!");
+            
+            // If hardware wallet descriptor was scanned, ask if this is a single device vault
+            ui.add_space(Spacing::MD);
+            ui.separator();
+            ui.add_space(Spacing::SM);
+            ui.label("Is this a single device vault (Seed + Hardware Wallet)?");
+            ui.label(egui::RichText::new("If your vault uses a seed phrase on this device plus a hardware wallet, select the hardware wallet type below.").small().weak());
+            ui.add_space(Spacing::SM);
+            
+            // Hardware wallet type selection for single device detection
+            render_hardware_wallet_type_selection(ui, state, "hw_type_selection_restore_single_device");
+        }
+        
+        ui.add_space(Spacing::MD);
+        ui.separator();
+        ui.add_space(Spacing::MD);
+    }
+
     ui.add_space(Spacing::LG);
 
     ui.label("Paste the descriptor configuration:");
@@ -2060,11 +3405,25 @@ pub fn render_scan_descriptor_restore(
             let network = app_state.network;
             let runtime_handle = runtime.handle().clone();
 
+            // Determine if this is a single device vault (seed+HW) based on hardware wallet type selection
+            let hw_type_opt = if state.hw_batch_qr_scanner_state.success && state.selected_hw_type.is_some() {
+                // Hardware wallet descriptor was scanned and type selected - likely single device vault
+                state.selected_hw_type.map(|t| t.title().to_string())
+            } else {
+                None
+            };
+
             let result: Result<(bitvault_common::wallet::VaultService, String), String> = runtime
                 .block_on(async {
                     let mut vault_service = bitvault_common::wallet::VaultService::new(network);
                     vault_service
-                        .import_vault(&mnemonic, &descriptors_qr, &vault_name, false)
+                        .import_vault(
+                            &mnemonic,
+                            &descriptors_qr,
+                            &vault_name,
+                            false,
+                            hw_type_opt.as_deref(),
+                        )
                         .await
                         .map_err(|e| format!("Restore failed: {}", e))?;
 

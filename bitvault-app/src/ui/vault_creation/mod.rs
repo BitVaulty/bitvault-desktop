@@ -28,6 +28,75 @@ mod steps;
 use crate::state::{AppState, Navigation};
 use bip39::Mnemonic;
 use eframe::egui;
+use std::collections::HashMap;
+
+/// Hardware wallet types supported
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HardwareWalletType {
+    Jade,
+    JadePlus,
+    Keystone,
+    Passport, // Foundation Passport
+    SeedSigner,
+    BitBox02,
+    LedgerNanoX,
+    ColdCardQ,
+}
+
+impl HardwareWalletType {
+    pub fn title(&self) -> &'static str {
+        match self {
+            HardwareWalletType::Jade => "Jade",
+            HardwareWalletType::JadePlus => "Jade Plus",
+            HardwareWalletType::Keystone => "Keystone",
+            HardwareWalletType::Passport => "Foundation Passport",
+            HardwareWalletType::SeedSigner => "Seed Signer",
+            HardwareWalletType::BitBox02 => "BitBox02",
+            HardwareWalletType::LedgerNanoX => "Ledger Nano X",
+            HardwareWalletType::ColdCardQ => "ColdCard Q",
+        }
+    }
+
+    /// Returns true if this hardware wallet uses multi-part UR codes
+    pub fn uses_multi_part_ur(&self) -> bool {
+        matches!(
+            self,
+            HardwareWalletType::Jade
+                | HardwareWalletType::JadePlus
+                | HardwareWalletType::Passport
+                | HardwareWalletType::SeedSigner
+        )
+    }
+
+    /// Get guidance message for this hardware wallet type
+    pub fn guidance_message(&self) -> &'static str {
+        if self.uses_multi_part_ur() {
+            "This hardware wallet uses multi-part UR codes. Scan each QR code in sequence."
+        } else {
+            "This hardware wallet uses single-part UR codes. Scan the complete QR code."
+        }
+    }
+
+    /// Get list of all supported hardware wallet types
+    pub fn all_types() -> Vec<HardwareWalletType> {
+        vec![
+            HardwareWalletType::Jade,
+            HardwareWalletType::JadePlus,
+            HardwareWalletType::Keystone,
+            HardwareWalletType::Passport,
+            HardwareWalletType::SeedSigner,
+            HardwareWalletType::BitBox02,
+            HardwareWalletType::LedgerNanoX,
+            HardwareWalletType::ColdCardQ,
+        ]
+    }
+}
+
+impl Default for HardwareWalletType {
+    fn default() -> Self {
+        HardwareWalletType::Jade // Default to most common
+    }
+}
 
 /// Device role / setup mode
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -37,6 +106,10 @@ pub enum DeviceRole {
     Coowner,
     ViewOnly,
     Restore,
+    /// Single device vault: Seed phrase + Hardware Wallet
+    SingleDeviceSeedHW,
+    /// Single device vault: Hardware Wallet + Hardware Wallet
+    SingleDeviceHWHW,
 }
 
 /// Vault creation steps
@@ -82,6 +155,21 @@ pub enum VaultCreationStep {
     ScanDescriptorRestore,
 }
 
+/// Seed phrase verification state
+#[derive(Default)]
+pub struct SeedPhraseVerificationState {
+    /// Selected words: Map<word_index (0-11), selected_word>
+    pub selected_words: HashMap<usize, String>,
+    /// Word choices for each position: Map<word_index, Vec<word_options>>
+    pub word_choices: HashMap<usize, Vec<String>>,
+    /// Indices of words being verified (e.g., [0, 3, 6, 9, 1, 4, 7, 10, 2, 5, 8, 11])
+    pub verification_indices: Vec<usize>,
+    /// Whether state has been initialized
+    pub initialized: bool,
+    /// Current page (0 = first 6 words, 1 = next 6 words)
+    pub current_page: usize,
+}
+
 /// Vault creation state
 pub struct VaultCreationState {
     pub current_step: VaultCreationStep,
@@ -92,12 +180,18 @@ pub struct VaultCreationState {
     /// This device's role (main or co-owner)
     pub device_role: DeviceRole,
     pub mnemonic: Option<Mnemonic>,
-    pub verified_seed_phrase: bool,
+    pub seed_verification_state: SeedPhraseVerificationState,
+    /// Word count for mnemonic generation (12 or 24 words)
+    pub mnemonic_word_count: u8, // 12 or 24
     pub time_delay_days: u32,
     pub time_delay_hours: u32,
     /// Co-owner's public keys (text input from co-owner device)
     pub coowner_pubkeys: String,
     pub coowner_keys: Option<bitvault_common::derivation::CoownerKeys>,
+    /// First hardware wallet keys (for HW+HW single device scenario)
+    pub first_hw_keys: Option<bitvault_common::derivation::CoownerKeys>,
+    /// Track which hardware wallet we're scanning in HW+HW mode (false = first, true = second)
+    pub scanning_second_hw: bool,
     /// This device's own keys as text (for sharing with other device)
     pub my_keys_text: Option<String>,
     /// Exchange data from main device (for co-owner flow)
@@ -120,6 +214,12 @@ pub struct VaultCreationState {
     // Camera for QR scanning
     pub camera_capture: Option<crate::utils::camera::CameraCapture>,
     pub is_scanning_qr: bool,
+    /// Selected hardware wallet type (when using hardware wallet as co-owner)
+    pub selected_hw_type: Option<HardwareWalletType>,
+    /// First hardware wallet type (for HW+HW single device scenario)
+    pub first_hw_type: Option<HardwareWalletType>,
+    // Hardware wallet batch QR scanner for multi-part UR codes
+    pub hw_batch_qr_scanner_state: crate::ui::hardware_wallet::BatchQrScannerState,
     // Track saved file paths for secure deletion
     pub saved_key_file: Option<std::path::PathBuf>,
     pub saved_exchange_file: Option<std::path::PathBuf>,
@@ -138,11 +238,14 @@ impl Default for VaultCreationState {
             step_history: Vec::new(),
             device_role: DeviceRole::default(),
             mnemonic: None,
-            verified_seed_phrase: false,
+            seed_verification_state: SeedPhraseVerificationState::default(),
+            mnemonic_word_count: 12, // Default to 12 words (matching mobile)
             time_delay_days: 0,
             time_delay_hours: 24,
             coowner_pubkeys: String::new(),
             coowner_keys: None,
+            first_hw_keys: None,
+            scanning_second_hw: false,
             my_keys_text: None,
             exchange_data_input: String::new(),
             vault_name: String::new(),
@@ -160,6 +263,9 @@ impl Default for VaultCreationState {
             is_importing: false,
             camera_capture: None,
             is_scanning_qr: false,
+            selected_hw_type: None,
+            first_hw_type: None,
+            hw_batch_qr_scanner_state: crate::ui::hardware_wallet::BatchQrScannerState::default(),
             saved_key_file: None,
             saved_exchange_file: None,
             signing_secret_key: None,
@@ -229,11 +335,14 @@ impl VaultCreationState {
 
         // Clear all input state
         self.mnemonic = None;
-        self.verified_seed_phrase = false;
+        self.seed_verification_state = SeedPhraseVerificationState::default();
         self.time_delay_days = 0;
         self.time_delay_hours = 24;
         self.coowner_pubkeys.clear();
         self.coowner_keys = None;
+        self.first_hw_keys = None;
+        self.first_hw_type = None;
+        self.scanning_second_hw = false;
         self.my_keys_text = None;
         self.exchange_data_input.clear();
         self.vault_name.clear();
@@ -293,6 +402,8 @@ impl VaultCreationState {
             DeviceRole::Coowner => self.next_step_coowner(),
             DeviceRole::ViewOnly => self.next_step_view_only(),
             DeviceRole::Restore => self.next_step_restore(),
+            DeviceRole::SingleDeviceSeedHW => self.next_step_single_device_seed_hw(),
+            DeviceRole::SingleDeviceHWHW => self.next_step_single_device_hw_hw(),
         }
     }
 
@@ -346,6 +457,47 @@ impl VaultCreationState {
             VaultCreationStep::EnterSeedPhrase => Some(VaultCreationStep::ScanDescriptorRestore),
             VaultCreationStep::ScanDescriptorRestore => Some(VaultCreationStep::SetPin),
             VaultCreationStep::SetPin => Some(VaultCreationStep::Completed),
+            _ => None,
+        }
+    }
+
+    fn next_step_single_device_seed_hw(&self) -> Option<VaultCreationStep> {
+        match self.current_step {
+            VaultCreationStep::RoleSelection => Some(VaultCreationStep::NameVault),
+            VaultCreationStep::NameVault => Some(VaultCreationStep::SetTimeDelay),
+            VaultCreationStep::SetTimeDelay => Some(VaultCreationStep::MnemonicGeneration),
+            VaultCreationStep::MnemonicGeneration => Some(VaultCreationStep::DisplaySeedPhrase),
+            VaultCreationStep::DisplaySeedPhrase => Some(VaultCreationStep::VerifySeedPhrase),
+            VaultCreationStep::VerifySeedPhrase => Some(VaultCreationStep::SetPin),
+            VaultCreationStep::SetPin => Some(VaultCreationStep::ScanCoownerKeys), // Scan HW keys instead of co-owner keys
+            VaultCreationStep::ScanCoownerKeys => Some(VaultCreationStep::EmailAuth),
+            VaultCreationStep::EmailAuth => Some(VaultCreationStep::CreateVault),
+            VaultCreationStep::CreateVault => Some(VaultCreationStep::Completed),
+            _ => None,
+        }
+    }
+
+    fn next_step_single_device_hw_hw(&self) -> Option<VaultCreationStep> {
+        match self.current_step {
+            VaultCreationStep::RoleSelection => Some(VaultCreationStep::NameVault),
+            VaultCreationStep::NameVault => Some(VaultCreationStep::SetTimeDelay),
+            VaultCreationStep::SetTimeDelay => Some(VaultCreationStep::ScanCoownerKeys), // Scan first HW
+            VaultCreationStep::ScanCoownerKeys => {
+                // After scanning first HW, check if we need to scan second HW
+                if self.first_hw_keys.is_some() && !self.scanning_second_hw {
+                    // First HW scanned, now need second HW - stay on ScanCoownerKeys
+                    None // Will be handled by UI logic - it sets scanning_second_hw and stays on step
+                } else if self.first_hw_keys.is_some() && self.coowner_keys.is_some() {
+                    // Both HWs scanned, proceed to SetPin
+                    Some(VaultCreationStep::SetPin)
+                } else {
+                    // Still scanning first HW or error
+                    None
+                }
+            }
+            VaultCreationStep::SetPin => Some(VaultCreationStep::EmailAuth),
+            VaultCreationStep::EmailAuth => Some(VaultCreationStep::CreateVault),
+            VaultCreationStep::CreateVault => Some(VaultCreationStep::Completed),
             _ => None,
         }
     }
