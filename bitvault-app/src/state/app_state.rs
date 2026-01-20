@@ -159,7 +159,7 @@ impl AppState {
 
                         needs_repaint = true;
                     }
-                    crate::state::async_commands::AsyncResult::TelegramRegistrationLink(link) => {
+                    crate::state::async_commands::AsyncResult::TelegramRegistrationLink(_link) => {
                         // Handle Telegram registration link - this should be processed by the UI
                         log::info!("Received Telegram registration link");
                         needs_repaint = true;
@@ -342,6 +342,7 @@ impl AppState {
 }
 
 /// Process async commands in background task
+#[allow(dead_code)]
 async fn process_async_commands(
     vault_service: Arc<RwLock<VaultService>>,
     mut command_rx: tokio::sync::mpsc::UnboundedReceiver<

@@ -169,7 +169,7 @@ pub fn icon_text(ui: &mut egui::Ui, icon: Icon, text: &str, size: f32) {
 }
 
 /// Create a label with icon prefix (for use in buttons, etc.)
-pub fn icon_label(ctx: &egui::Context, icon: Icon, text: &str, icon_size: f32) -> String {
+pub fn icon_label(_ctx: &egui::Context, icon: Icon, text: &str, _icon_size: f32) -> String {
     // For now, just prepend the text fallback
     // In the future, we could use rich text with embedded images
     format!("{} {}", icon.as_text(), text)

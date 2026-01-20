@@ -1,13 +1,14 @@
 //! QR Code Scanner Component
 //!
 //! Scans QR codes from hardware wallets (for signed PSBTs)
+//! Note: For multi-part UR codes (Jade, Passport), use BatchQrScannerState instead
 
 use crate::state::{AppState, Navigation};
 use crate::utils::qr::decode_qr_from_file;
 use eframe::egui;
 use std::path::PathBuf;
 
-/// State for QR code scanner
+/// State for QR code scanner (legacy - kept for compatibility)
 pub struct QrScannerState {
     pub scanned_parts: Vec<String>,
     pub is_scanning: bool,
@@ -136,6 +137,16 @@ pub fn render_qr_scanner(
         if !state.scanned_parts.is_empty() {
             ui.add_space(10.0);
             ui.label(format!("Scanned {} part(s)", state.scanned_parts.len()));
+        }
+
+        // Show instruction for multi-part UR
+        if state.scanned_parts.is_empty() {
+            ui.add_space(10.0);
+            ui.label("For multi-part UR codes (Jade, Passport):");
+            ui.label("Continue scanning QR codes until all parts are received.");
+        } else if !state.success {
+            ui.add_space(10.0);
+            ui.label("Keep scanning additional QR codes until complete.");
         }
 
         ui.add_space(20.0);

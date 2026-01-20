@@ -14,7 +14,7 @@ use crate::state::{AppState, Navigation};
 use crate::ui::components::{
     badge, button, button_large, card, BadgeStyle, ButtonStyle, Colors, Spacing, Typography,
 };
-use crate::ui::hardware_wallet::{render_qr_display, render_qr_scanner};
+use crate::ui::hardware_wallet::render_qr_display;
 use crate::ui::pin::render_pin_verification;
 use eframe::egui;
 
@@ -35,7 +35,8 @@ pub struct SendTransactionState {
     // Hardware wallet signing state
     pub hw_signing_mode: HardwareWalletSigningMode,
     pub hw_qr_display_state: crate::ui::hardware_wallet::QrDisplayState,
-    pub hw_qr_scanner_state: crate::ui::hardware_wallet::QrScannerState,
+    pub hw_qr_scanner_state: crate::ui::hardware_wallet::QrScannerState, // Legacy single-part scanner
+    pub hw_batch_qr_scanner_state: crate::ui::hardware_wallet::BatchQrScannerState, // Multi-part UR scanner
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -63,6 +64,7 @@ impl Default for SendTransactionState {
             hw_signing_mode: HardwareWalletSigningMode::None,
             hw_qr_display_state: crate::ui::hardware_wallet::QrDisplayState::default(),
             hw_qr_scanner_state: crate::ui::hardware_wallet::QrScannerState::default(),
+            hw_batch_qr_scanner_state: crate::ui::hardware_wallet::BatchQrScannerState::default(),
         }
     }
 }
@@ -335,8 +337,9 @@ pub fn render(
                             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                                 if button(ui, "Hardware Wallet Signed - Scan QR", ButtonStyle::Primary).clicked() {
                                     state.hw_signing_mode = HardwareWalletSigningMode::ScanningQR;
-                                    state.hw_qr_scanner_state =
-                                        crate::ui::hardware_wallet::QrScannerState::default();
+                                    // Reset batch scanner for new scan
+                                    state.hw_batch_qr_scanner_state =
+                                        crate::ui::hardware_wallet::BatchQrScannerState::default();
                                 }
                             });
                         });
@@ -348,21 +351,22 @@ pub fn render(
                     card(ui, |ui| {
                         ui.vertical_centered(|ui| {
                             ui.add_space(Spacing::MD);
-                            render_qr_scanner(
+                            // Use batch scanner for multi-part UR support (Jade, Passport)
+                            crate::ui::hardware_wallet::render_batch_qr_scanner(
                                 ui,
                                 app_state,
                                 navigation,
-                                &mut state.hw_qr_scanner_state,
+                                &mut state.hw_batch_qr_scanner_state,
                                 "Scan Signed PSBT",
-                                "Scan the QR code from your hardware wallet containing the signed PSBT",
+                                "Scan the QR code(s) from your hardware wallet containing the signed PSBT.\nFor multi-part UR (Jade, Passport), scan each QR code in sequence.",
                             );
                             ui.add_space(Spacing::MD);
                         });
                     });
 
-                    // If QR scanner succeeded, decode and send to convenience service
-                    if state.hw_qr_scanner_state.success {
-                        let signed_psbt = state.hw_qr_scanner_state.decoded_psbt.clone();
+                    // If batch QR scanner succeeded, decode and send to convenience service
+                    if state.hw_batch_qr_scanner_state.success {
+                        let signed_psbt = state.hw_batch_qr_scanner_state.decoded_psbt.clone();
                         if let Some(ref psbt) = signed_psbt {
                             steps::send_hardware_wallet_signed_psbt(
                                 ui, app_state, navigation, state, psbt,

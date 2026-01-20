@@ -13,26 +13,26 @@ pub struct BackupManagementState {
 }
 
 #[derive(Default)]
-struct ManualBackupState {
-    is_exporting: bool,
-    error: Option<String>,
-    success_path: Option<String>,
+pub struct ManualBackupState {
+    pub is_exporting: bool,
+    pub error: Option<String>,
+    pub success_path: Option<String>,
 }
 
 #[derive(Default)]
-struct PcloudBackupState {
-    is_uploading: bool,
-    error: Option<String>,
-    success: bool,
-    email_input: String,
-    show_dialog: bool,
+pub struct PcloudBackupState {
+    pub is_uploading: bool,
+    pub error: Option<String>,
+    pub success: bool,
+    pub email_input: String,
+    pub show_dialog: bool,
 }
 
 /// Render backup management view
 pub fn render_backup_management(
     ui: &mut egui::Ui,
     app_state: &mut AppState,
-    navigation: &mut Navigation,
+    _navigation: &mut Navigation,
     state: &mut BackupManagementState,
 ) {
     if !app_state.is_vault_loaded() {

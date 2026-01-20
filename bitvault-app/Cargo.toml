@@ -69,6 +69,8 @@ toml = "0.8"
 windows = { version = "0.52", features = [
     "Security_Credentials_UI",
     "Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 
 # macOS dependencies for biometric authentication

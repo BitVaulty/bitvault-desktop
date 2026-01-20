@@ -209,10 +209,59 @@ impl BitVaultApp {
     pub fn set_runtime(&mut self, runtime: tokio::runtime::Runtime) {
         self.app_state.set_runtime(runtime);
     }
+
+    /// Update screenshot protection based on current sensitive screens
+    fn update_screenshot_protection(&mut self) {
+        use crate::services::screenshot_protection::ScreenshotProtection;
+        use crate::state::View;
+        use crate::ui::vault_creation::VaultCreationStep;
+
+        // Determine if we're on a sensitive screen that should be protected
+        let is_sensitive = match &self.navigation.current_view {
+            View::PinEntry | View::PinSetup => true,
+            View::VaultCreation => {
+                // Check specific vault creation steps that show sensitive data
+                matches!(
+                    self.vault_creation_state.current_step,
+                    VaultCreationStep::DisplaySeedPhrase
+                        | VaultCreationStep::VerifySeedPhrase
+                        | VaultCreationStep::SetPin
+                        | VaultCreationStep::DisplayOwnKeys
+                        | VaultCreationStep::DisplayExchangeData
+                )
+            }
+            _ => false,
+        };
+
+        // Simple approach: enable/disable based on current screen
+        // The API calls are lightweight on Windows, so calling each frame is acceptable
+        // Future optimization: track state to avoid redundant calls
+        if is_sensitive {
+            // Try to enable protection
+            if let Err(e) = ScreenshotProtection::enable() {
+                // Only log if protection is available but failed
+                // Silently ignore "not available" errors (e.g., on Linux)
+                if ScreenshotProtection::is_available() {
+                    log::warn!("Failed to enable screenshot protection: {}", e);
+                }
+            }
+        } else {
+            // Try to disable protection
+            if let Err(e) = ScreenshotProtection::disable() {
+                // Only log if protection was available
+                if ScreenshotProtection::is_available() {
+                    log::debug!("Failed to disable screenshot protection: {}", e);
+                }
+            }
+        }
+    }
 }
 
 impl eframe::App for BitVaultApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Manage screenshot protection based on current sensitive screens
+        self.update_screenshot_protection();
+        
         // Check for screen size or DPI changes FIRST (before any rendering)
         // This handles window moves between monitors with different scaling
         let screen_rect = ctx.screen_rect();

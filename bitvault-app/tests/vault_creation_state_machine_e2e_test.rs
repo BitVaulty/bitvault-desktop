@@ -298,11 +298,17 @@ fn test_vault_creation_state_validation() {
     
     // Test seed phrase verification must pass
     state.advance_to_step(VaultCreationStep::VerifySeedPhrase);
-    assert!(!state.verified_seed_phrase); // Initially false
+    assert!(!state.seed_verification_state.initialized); // Initially false
     
-    // In the actual UI, verification would set this to true
-    state.verified_seed_phrase = true;
-    assert!(state.verified_seed_phrase);
+    // Simulate verification by selecting all correct words
+    // In the actual UI, this would happen through the verification flow
+    if let Some(ref mnemonic) = state.mnemonic {
+        let words: Vec<&str> = mnemonic.words().collect();
+        for (idx, word) in words.iter().enumerate() {
+            state.seed_verification_state.selected_words.insert(idx, word.to_string());
+        }
+        assert_eq!(state.seed_verification_state.selected_words.len(), 12);
+    }
     
     // Test co-owner keys are scanned before vault creation
     state.advance_to_step(VaultCreationStep::ScanCoownerKeys);
@@ -344,13 +350,19 @@ fn test_vault_creation_state_reset() {
     state.time_delay_days = 1;
     state.time_delay_hours = 0;
     state.mnemonic = Some(bdk::keys::bip39::Mnemonic::from_entropy(&[0u8; 16]).unwrap());
-    state.verified_seed_phrase = true;
+    // Simulate verification by selecting all correct words
+    if let Some(ref mnemonic) = state.mnemonic {
+        let words: Vec<&str> = mnemonic.words().collect();
+        for (idx, word) in words.iter().enumerate() {
+            state.seed_verification_state.selected_words.insert(idx, word.to_string());
+        }
+    }
     
     state.reset_for_new_flow();
     
     // Verify all input state is cleared
     assert_eq!(state.mnemonic, None);
-    assert!(!state.verified_seed_phrase);
+    assert!(!state.seed_verification_state.initialized);
     assert_eq!(state.time_delay_days, 0);
     assert_eq!(state.time_delay_hours, 24); // Reset to default
     assert_eq!(state.step_history.len(), 0);

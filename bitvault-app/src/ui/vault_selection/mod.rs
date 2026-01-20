@@ -241,7 +241,7 @@ pub fn render(
                     let is_valid = validation_result.is_ok();
 
                     // Card with hover and selection effects
-                    let card_response = card(ui, |ui| {
+                    let _card_response = card(ui, |ui| {
                         let response = ui.interact(
                             ui.available_rect_before_wrap(),
                             ui.id().with(index),

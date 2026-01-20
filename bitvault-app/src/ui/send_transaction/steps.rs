@@ -6,7 +6,7 @@ use eframe::egui;
 
 /// Build transaction preview
 pub fn build_preview(
-    ui: &mut egui::Ui,
+    _ui: &mut egui::Ui,
     app_state: &mut AppState,
     state: &mut SendTransactionState,
 ) {
@@ -112,7 +112,7 @@ pub fn sign_and_broadcast(
         return;
     }
 
-    if let Some(ref preview) = state.preview {
+    if let Some(ref _preview) = state.preview {
         state.is_signing = true;
         state.error = None;
 

@@ -101,7 +101,7 @@ pub fn decode_qr_from_image(image_data: &[u8]) -> Result<String, String> {
 fn decode_qr_from_dynamic_image(img: &image::DynamicImage) -> Result<String, String> {
     // Convert to RGB8
     let rgb_img = img.to_rgb8();
-    let (width, _height) = rgb_img.dimensions();
+    let (_width, _height) = rgb_img.dimensions();
     let raw_data = rgb_img.into_raw();
 
     decode_qr_from_raw_data(&raw_data)

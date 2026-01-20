@@ -212,7 +212,7 @@ async fn test_vault_creation_step_flow() {
         step_history: Vec::new(),
         device_role: DeviceRole::Main,
         mnemonic: None,
-        verified_seed_phrase: false,
+        seed_verification_state: Default::default(),
         time_delay_days: 0,
         time_delay_hours: 0,
         coowner_pubkeys: String::new(),
