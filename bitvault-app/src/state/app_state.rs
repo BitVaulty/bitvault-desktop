@@ -5,11 +5,13 @@
 //! - Network selection
 //! - UI state (current view, modals, etc.)
 
+use crate::services::key_service::KeyService;
 use crate::services::notification_service::NotificationService;
 use crate::settings::{AppTheme, Currency, SettingsManager};
 use crate::state::async_commands::AsyncCommandHandler;
 use crate::state::vault_data::{SharedVaultData, VaultData};
 use bdk::bitcoin::Network;
+use bdk::keys::bip39::Mnemonic;
 use bitvault_common::wallet::VaultService;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -41,6 +43,12 @@ pub struct AppState {
     /// Convenience service for backend API calls
     #[cfg(feature = "native")]
     pub convenience_service: Option<ConvenienceService>,
+    /// Key service for secure storage (mnemonics, PINs, etc.)
+    pub key_service: KeyService,
+    /// Cached mnemonic for current vault (for signing operations)
+    pub cached_mnemonic: Option<Mnemonic>,
+    /// Telegram registration link (when received from async handler)
+    pub telegram_registration_link: Option<String>,
 }
 
 impl AppState {
@@ -63,6 +71,9 @@ impl AppState {
             notification_service: Arc::new(NotificationService::new()),
             #[cfg(feature = "native")]
             convenience_service: Some(ConvenienceService::new(None)),
+            key_service: KeyService::new(),
+            cached_mnemonic: None,
+            telegram_registration_link: None,
         })
     }
 
@@ -91,6 +102,9 @@ impl AppState {
             notification_service: Arc::new(NotificationService::new()),
             #[cfg(feature = "native")]
             convenience_service: Some(ConvenienceService::new(None)),
+            key_service: KeyService::new(),
+            cached_mnemonic: None,
+            telegram_registration_link: None,
         })
     }
 
@@ -121,6 +135,14 @@ impl AppState {
         let mut needs_repaint = false;
 
         // Process pending commands
+        // Refresh mnemonic if not cached (before borrowing self)
+        if self.cached_mnemonic.is_none() {
+            self.refresh_mnemonic();
+        }
+        
+        // Get mnemonic from cache (before borrowing self)
+        let mnemonic_ref = self.cached_mnemonic.as_ref();
+        
         if let (Some(ref mut handler), Some(vault_service), Some(runtime)) = (
             self.async_handler.as_mut(),
             self.vault_service.as_ref(),
@@ -138,11 +160,7 @@ impl AppState {
             #[cfg(not(feature = "native"))]
             let convenience_service = None::<&bitvault_common::convenience::ConvenienceService>;
             
-            // Get mnemonic from KeyService if available
-            // For now, pass None - mnemonic can be retrieved when needed
-            let mnemonic: Option<&bdk::keys::bip39::Mnemonic> = None;
-            
-            handler.process_pending(vs, rt, convenience_service, mnemonic);
+            handler.process_pending(vs, rt, convenience_service, mnemonic_ref);
             needs_repaint = true;
         }
 
@@ -208,6 +226,9 @@ impl AppState {
         self.vault_service = Some(Arc::new(RwLock::new(vault_service)));
         self.has_vault = true;
 
+        // Refresh mnemonic for the initialized vault
+        self.refresh_mnemonic();
+
         // Restart async processor with new vault service
         self.on_vault_loaded();
 
@@ -224,6 +245,9 @@ impl AppState {
         self.vault_service = Some(Arc::new(RwLock::new(vault_service)));
         self.has_vault = true;
         self.network = metadata.network_to_bdk();
+
+        // Refresh mnemonic for the loaded vault
+        self.refresh_mnemonic();
 
         // Restart async processor with new vault service
         self.on_vault_loaded();
@@ -250,6 +274,9 @@ impl AppState {
 
         self.vault_service = Some(Arc::new(RwLock::new(vault_service)));
         self.has_vault = true;
+
+        // Refresh mnemonic for the initialized vault
+        self.refresh_mnemonic();
 
         // Restart async processor with new vault service
         self.on_vault_loaded();
@@ -292,6 +319,22 @@ impl AppState {
         None
     }
 
+    /// Refresh cached mnemonic from KeyService
+    pub fn refresh_mnemonic(&mut self) {
+        if let Some(metadata) = self.get_current_vault_metadata() {
+            let network_str = &metadata.network; // "mainnet", "testnet", etc.
+            let vault_id = &metadata.address; // Vault address is used as vault_id
+            
+            if let Ok(backup_info) = self.key_service.get_backup_info(vault_id, network_str) {
+                self.cached_mnemonic = backup_info.mnemonic.parse().ok();
+            } else {
+                self.cached_mnemonic = None;
+            }
+        } else {
+            self.cached_mnemonic = None;
+        }
+    }
+
     /// Unload current vault (for switching)
     pub fn unload_vault(&mut self) {
         self.vault_service = None;
@@ -300,6 +343,10 @@ impl AppState {
         if let Ok(mut data) = self.vault_data.lock() {
             *data = crate::state::vault_data::VaultData::new();
         }
+        // Clear cached mnemonic
+        self.cached_mnemonic = None;
+        // Clear Telegram registration link
+        self.telegram_registration_link = None;
     }
 
     /// Update network and reload vault for the new network
@@ -345,6 +392,8 @@ impl AppState {
                         // Initialize vault from the loaded service
                         self.vault_service = Some(Arc::new(RwLock::new(vault_service)));
                         self.has_vault = true;
+                        // Refresh mnemonic after loading vault
+                        self.refresh_mnemonic();
                         self.on_vault_loaded();
                     }
                     Err(e) => {
