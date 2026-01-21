@@ -13,6 +13,8 @@ use bdk::bitcoin::Network;
 use bitvault_common::wallet::VaultService;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+#[cfg(feature = "native")]
+use bitvault_common::convenience::ConvenienceService;
 
 /// Application state
 pub struct AppState {
@@ -36,6 +38,9 @@ pub struct AppState {
     pub theme: AppTheme,
     /// Notification service for desktop notifications
     pub notification_service: Arc<NotificationService>,
+    /// Convenience service for backend API calls
+    #[cfg(feature = "native")]
+    pub convenience_service: Option<ConvenienceService>,
 }
 
 impl AppState {
@@ -56,6 +61,8 @@ impl AppState {
             currency,
             theme,
             notification_service: Arc::new(NotificationService::new()),
+            #[cfg(feature = "native")]
+            convenience_service: Some(ConvenienceService::new(None)),
         })
     }
 
@@ -82,6 +89,8 @@ impl AppState {
             currency: Currency::USD,
             theme: AppTheme::System,
             notification_service: Arc::new(NotificationService::new()),
+            #[cfg(feature = "native")]
+            convenience_service: Some(ConvenienceService::new(None)),
         })
     }
 
@@ -124,7 +133,16 @@ impl AppState {
             let vs: &std::sync::Arc<tokio::sync::RwLock<bitvault_common::wallet::VaultService>> =
                 vault_service;
             let rt: &tokio::runtime::Runtime = runtime;
-            handler.process_pending(vs, rt);
+            #[cfg(feature = "native")]
+            let convenience_service = self.convenience_service.as_ref();
+            #[cfg(not(feature = "native"))]
+            let convenience_service = None::<&bitvault_common::convenience::ConvenienceService>;
+            
+            // Get mnemonic from KeyService if available
+            // For now, pass None - mnemonic can be retrieved when needed
+            let mnemonic: Option<&bdk::keys::bip39::Mnemonic> = None;
+            
+            handler.process_pending(vs, rt, convenience_service, mnemonic);
             needs_repaint = true;
         }
 

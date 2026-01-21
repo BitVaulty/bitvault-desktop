@@ -67,6 +67,8 @@ impl AsyncCommandHandler {
         &mut self,
         vault_service: &std::sync::Arc<tokio::sync::RwLock<bitvault_common::wallet::VaultService>>,
         runtime: &tokio::runtime::Runtime,
+        convenience_service: Option<&bitvault_common::convenience::ConvenienceService>,
+        mnemonic: Option<&bdk::keys::bip39::Mnemonic>,
     ) {
         if self.pending_commands.is_empty() {
             return;
@@ -125,13 +127,53 @@ impl AsyncCommandHandler {
                 }
                 AsyncCommand::RequestTelegramRegistration => {
                     // Request Telegram registration link from ConvenienceService
-                    // This requires access to ConvenienceService, which is in AppState
-                    // For now, we'll need to pass convenience_service to process_pending
-                    // or handle this differently
-                    // TODO: Add convenience_service parameter or handle via AppState
-                    let _ = tx.send(AsyncResult::Error(
-                        "Telegram registration not yet implemented in async handler".to_string(),
-                    ));
+                    if let (Some(convenience_service), Some(mnemonic)) = (convenience_service, mnemonic) {
+                        let cs = convenience_service.clone();
+                        let mn = mnemonic.clone();
+                        let result: std::result::Result<String, String> = runtime.block_on(async {
+                            // Get address and pubkey from vault service
+                            let address = vs.read().await.get_address()
+                                .map_err(|e| format!("Failed to get address: {}", e))?;
+                            
+                            let pubkey = vs.read().await.get_owner_xpub().await
+                                .map_err(|e| format!("Failed to get owner xpub: {}", e))?;
+                            
+                            // Create message with timestamp
+                            let timestamp = chrono::Utc::now().timestamp();
+                            let message = format!("SUBSCRIBE:{}:{}:{}", address, pubkey, timestamp);
+                            
+                            // Get network from vault service
+                            let network = {
+                                let guard = vs.read().await;
+                                guard.network()
+                            };
+                            
+                            // Sign the message
+                            let signature = bitvault_common::wallet::sign_message_for_telegram(
+                                &mn,
+                                &message,
+                                network,
+                            ).map_err(|e| format!("Failed to sign message: {}", e))?;
+                            
+                            // Request Telegram registration
+                            cs.request_telegram_registration(&address, &pubkey, &message, &signature)
+                                .await
+                                .map_err(|e| format!("Failed to request Telegram registration: {}", e))
+                        });
+                        
+                        match result {
+                            Ok(link) => {
+                                let _ = tx.send(AsyncResult::TelegramRegistrationLink(link));
+                            }
+                            Err(e) => {
+                                let _ = tx.send(AsyncResult::Error(e));
+                            }
+                        }
+                    } else {
+                        let _ = tx.send(AsyncResult::Error(
+                            "Telegram registration requires convenience service and mnemonic".to_string(),
+                        ));
+                    }
                 }
             }
         }
