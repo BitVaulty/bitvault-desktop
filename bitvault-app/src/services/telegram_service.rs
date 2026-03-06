@@ -1,15 +1,18 @@
 //! TelegramService - Telegram integration
 //!
 //! Wrapper around ConvenienceService for Telegram notification functionality
+//! API surface used by tests and future Telegram notification UI
 
 use bitvault_common::convenience::{ConvenienceService, ConvenienceServiceError};
 
 /// Telegram service
 /// Equivalent to Swift's TelegramService
+#[allow(dead_code)]
 pub struct TelegramService {
     convenience_service: ConvenienceService,
 }
 
+#[allow(dead_code)]
 impl TelegramService {
     /// Create a new Telegram service
     pub fn new() -> Self {
@@ -120,6 +123,7 @@ impl TelegramService {
 
 /// Errors that can occur during Telegram operations
 #[derive(Debug, thiserror::Error)]
+#[allow(clippy::enum_variant_names)]
 pub enum TelegramServiceError {
     #[error("Network error: {0}")]
     NetworkError(String),

@@ -34,7 +34,9 @@ mod tests {
     fn test_pin_rate_limiting() {
         // Skip on Linux due to keyring eventual consistency issues
         if cfg!(target_os = "linux") {
-            eprintln!("Skipping test - keyring has eventual consistency issues on Linux Secret Service");
+            eprintln!(
+                "Skipping test - keyring has eventual consistency issues on Linux Secret Service"
+            );
             return;
         }
 
@@ -97,7 +99,9 @@ mod tests {
     fn test_pin_constant_time_comparison() {
         // Skip on Linux due to keyring eventual consistency issues
         if cfg!(target_os = "linux") {
-            eprintln!("Skipping test - keyring has eventual consistency issues on Linux Secret Service");
+            eprintln!(
+                "Skipping test - keyring has eventual consistency issues on Linux Secret Service"
+            );
             return;
         }
 
@@ -125,7 +129,10 @@ mod tests {
         }
 
         // Wrong PIN should fail
-        assert!(!pin_service.validate_pin("000000").unwrap(), "Wrong PIN should not validate");
+        assert!(
+            !pin_service.validate_pin("000000").unwrap(),
+            "Wrong PIN should not validate"
+        );
 
         // Reset attempts for cleanup
         pin_service.reset_attempts().unwrap();

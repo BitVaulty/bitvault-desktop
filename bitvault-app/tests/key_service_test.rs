@@ -8,7 +8,7 @@ use bitvault_app::services::key_service::{BackupInfo, KeyService};
 fn create_test_key_service() -> KeyService {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::thread;
-    
+
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let test_id = COUNTER.fetch_add(1, Ordering::SeqCst);
     let thread_id = thread::current().id();
@@ -16,9 +16,14 @@ fn create_test_key_service() -> KeyService {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos(); // Use nanoseconds for better uniqueness
-    // Format thread ID as string (it's not directly displayable)
-    let thread_hash = format!("{:?}", thread_id).replace("ThreadId(", "").replace(")", "");
-    let service_name = format!("com.BitVault.test_{}_{}_{}", timestamp, test_id, thread_hash);
+                     // Format thread ID as string (it's not directly displayable)
+    let thread_hash = format!("{:?}", thread_id)
+        .replace("ThreadId(", "")
+        .replace(")", "");
+    let service_name = format!(
+        "com.BitVault.test_{}_{}_{}",
+        timestamp, test_id, thread_hash
+    );
     KeyService::with_service_name(service_name)
 }
 
@@ -311,10 +316,10 @@ fn test_delete_network() {
     // Try to delete any existing network first
     let _ = key_service.delete_network();
     std::thread::sleep(std::time::Duration::from_millis(50));
-    
+
     // Save the network
     key_service.save_network(&network).unwrap();
-    
+
     // Verify it was saved - retry with exponential backoff for keyring backends with eventual consistency
     let mut loaded_before = key_service.get_network().unwrap();
     let mut retries = 0;
@@ -323,18 +328,19 @@ fn test_delete_network() {
         loaded_before = key_service.get_network().unwrap();
         retries += 1;
     }
-    
+
     // If still not saved after retries, try saving again
     if loaded_before != Some(network.clone()) {
         key_service.save_network(&network).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(100));
         loaded_before = key_service.get_network().unwrap();
     }
-    
+
     assert_eq!(
         loaded_before,
         Some(network.clone()),
-        "Network should be saved before delete test (after {} retries)", retries
+        "Network should be saved before delete test (after {} retries)",
+        retries
     );
 
     // Try to delete - note that keyring delete may not work on all platforms
@@ -498,7 +504,7 @@ fn test_email_persistence() {
     // Delete first to help with platforms that don't overwrite
     let _ = key_service.delete_email();
     std::thread::sleep(std::time::Duration::from_millis(100));
-    
+
     // Retry save with exponential backoff to handle keyring eventual consistency
     let mut save_result = key_service.save_email(&email2);
     let mut retries = 0;

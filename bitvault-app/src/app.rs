@@ -3,12 +3,16 @@ use crate::ui::address_book::{render_address_book, AddressBookState};
 use crate::ui::advanced_settings::{render_advanced_settings, AdvancedSettingsState};
 use crate::ui::dashboard;
 use crate::ui::help::{render_help_and_support, HelpAndSupportState};
-use crate::ui::notification_center::{render as render_notification_center, NotificationCenterState};
+use crate::ui::notification_center::{
+    render as render_notification_center, NotificationCenterState,
+};
 use crate::ui::pin::{render_pin_entry, render_pin_setup, PinEntryState, PinSetupState};
 use crate::ui::receive::render as render_receive;
 use crate::ui::recovery::{render_recovery, render_utxo_refresh};
+use crate::ui::secret_notification::{
+    render as render_secret_notification, SecretNotificationState,
+};
 use crate::ui::send_transaction::{render as render_send_transaction, SendTransactionState};
-use crate::ui::secret_notification::{render as render_secret_notification, SecretNotificationState};
 use crate::ui::settings::render as render_settings;
 use crate::ui::subscription::render as render_subscription;
 use crate::ui::transaction_detail::render as render_transaction_detail;
@@ -68,6 +72,9 @@ fn load_bitvault_logo(ctx: &egui::Context) -> Option<egui::TextureHandle> {
     None
 }
 
+/// GitHub releases URL for desktop app updates
+const DESKTOP_UPDATE_URL: &str = "https://github.com/BitVaulty/bitvault-desktop/releases";
+
 pub struct BitVaultApp {
     app_state: AppState,
     navigation: Navigation,
@@ -83,14 +90,16 @@ pub struct BitVaultApp {
     advanced_settings_state: AdvancedSettingsState,
     is_authenticated: bool, // Whether user has entered PIN
     needs_pin_setup: bool,  // True if PIN needs to be set (doesn't exist yet)
+    /// If true, app is outdated and user must update before using
+    app_update_required: bool,
     cached_logo_texture: Option<egui::TextureHandle>, // Cache texture handle to keep it alive
     cached_logo_rect: Option<egui::Rect>, // Cache logo rect - recalculated on window resize
     last_screen_size: Option<egui::Vec2>, // Track screen size for resize detection
-    last_pixels_per_point: Option<f32>, // Track DPI for screen change detection
+    last_pixels_per_point: Option<f32>,   // Track DPI for screen change detection
 }
 
 impl BitVaultApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, app_update_required: bool) -> Self {
         // Configure fonts - try to add system fonts with better Unicode support
         let mut fonts = egui::FontDefinitions::default();
 
@@ -157,14 +166,14 @@ impl BitVaultApp {
         let app_state = AppState::new(initial_network).unwrap_or_else(|e| {
             eprintln!("Warning: Failed to initialize app state with saved network: {}", e);
             eprintln!("Attempting fallback with default network (Testnet)...");
-            
+
             // Try with default network as fallback
             AppState::new(bdk::bitcoin::Network::Testnet).unwrap_or_else(|e2| {
                 eprintln!("CRITICAL: Failed to initialize app state even with default network: {}", e2);
                 eprintln!("This usually indicates a system permissions issue (cannot access config directory).");
                 eprintln!("Please check that the application has write permissions to: ~/.config/bitvault/");
                 eprintln!("Attempting to continue with degraded functionality...");
-                
+
                 // Try fallback method
                 AppState::new_without_settings(bdk::bitcoin::Network::Testnet).unwrap_or_else(|e3| {
                     eprintln!("FATAL: Cannot initialize application. Error: {}", e3);
@@ -198,6 +207,7 @@ impl BitVaultApp {
             address_book_state: AddressBookState::default(),
             advanced_settings_state: AdvancedSettingsState::default(),
             is_authenticated,
+            app_update_required,
             cached_logo_texture: None,
             cached_logo_rect: None,
             last_screen_size: None,
@@ -261,21 +271,23 @@ impl eframe::App for BitVaultApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Manage screenshot protection based on current sensitive screens
         self.update_screenshot_protection();
-        
+
         // Check for screen size or DPI changes FIRST (before any rendering)
         // This handles window moves between monitors with different scaling
         let screen_rect = ctx.screen_rect();
         let current_screen_size = screen_rect.size();
         let current_ppp = ctx.pixels_per_point();
 
-        let size_changed = self.last_screen_size.map_or(false, |last_size| {
-            (last_size.x - current_screen_size.x).abs() > 1.0
-                || (last_size.y - current_screen_size.y).abs() > 1.0
-        });
+        let size_changed = self
+            .last_screen_size
+            .is_some_and(|last_size| {
+                (last_size.x - current_screen_size.x).abs() > 1.0
+                    || (last_size.y - current_screen_size.y).abs() > 1.0
+            });
 
         let ppp_changed = self
             .last_pixels_per_point
-            .map_or(false, |last_ppp| (last_ppp - current_ppp).abs() > 0.01);
+            .is_some_and(|last_ppp| (last_ppp - current_ppp).abs() > 0.01);
 
         if size_changed || ppp_changed {
             self.cached_logo_rect = None;
@@ -330,7 +342,7 @@ impl eframe::App for BitVaultApp {
                         // Get top bar height and calculate logo size to fit with margins
                         let top_bar_height = available_rect.height();
                         let margin = 8.0; // 8px margin on top and bottom
-                        let max_logo_height = (top_bar_height - margin * 2.0).max(32.0).min(40.0); // Larger logo: min 32px, max 40px
+                        let max_logo_height = (top_bar_height - margin * 2.0).clamp(32.0, 40.0); // Larger logo: min 32px, max 40px
 
                         // Calculate width from aspect ratio
                         let texture_size = logo_texture.size_vec2();
@@ -479,6 +491,29 @@ impl eframe::App for BitVaultApp {
 
         // Main content
         egui::CentralPanel::default().show(ctx, |ui| {
+            // App update required - block all other content
+            if self.app_update_required {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(60.0);
+                    ui.heading("App Update Required");
+                    ui.add_space(16.0);
+                    ui.label(
+                        "Please update to the latest version to continue using BitVault. \
+                         Download the new version from the releases page.",
+                    );
+                    ui.add_space(32.0);
+                    if ui.button("Update Now").clicked() {
+                        ui.output_mut(|o| {
+                            o.open_url = Some(egui::OpenUrl {
+                                url: DESKTOP_UPDATE_URL.to_string(),
+                                new_tab: true,
+                            });
+                        });
+                    }
+                });
+                return;
+            }
+
             // Check if PIN authentication/setup is required
             if !self.is_authenticated {
                 if self.needs_pin_setup {
@@ -490,8 +525,12 @@ impl eframe::App for BitVaultApp {
                         eprintln!("[APP] PIN successfully set");
                         self.is_authenticated = true;
                         self.needs_pin_setup = false;
-                        // Navigate to vault selection after PIN is set
-                        self.navigation.set_view(View::VaultSelection);
+                        // Try to load active vault, or show vault selection
+                        if self.app_state.try_load_active_vault().unwrap_or(false) {
+                            self.navigation.set_view(View::Dashboard { tab: 0 });
+                        } else {
+                            self.navigation.set_view(View::VaultSelection);
+                        }
                     }
                 } else {
                     // Show PIN entry screen if PIN exists
@@ -509,6 +548,9 @@ impl eframe::App for BitVaultApp {
                         self.is_authenticated = true;
                         // Set view without adding to history (PIN entry is not a workflow screen)
                         if self.app_state.is_vault_loaded() {
+                            self.navigation.set_view(View::Dashboard { tab: 0 });
+                        } else if self.app_state.try_load_active_vault().unwrap_or(false) {
+                            // Try to load active vault for current network
                             self.navigation.set_view(View::Dashboard { tab: 0 });
                         } else {
                             self.navigation.set_view(View::VaultSelection);
@@ -610,7 +652,8 @@ impl eframe::App for BitVaultApp {
                         if let Some(ref vault_service) = self.app_state.vault_service {
                             if let Some(runtime) = self.app_state.get_runtime() {
                                 runtime.block_on(
-                                    self.notification_center_state.fetch_notifications(vault_service)
+                                    self.notification_center_state
+                                        .fetch_notifications(vault_service),
                                 );
                             }
                         }

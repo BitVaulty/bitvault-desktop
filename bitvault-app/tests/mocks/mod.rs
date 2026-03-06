@@ -6,7 +6,9 @@
 use serde::{Deserialize, Serialize};
 
 /// Helper to create a mock ConvenienceService with a test base URL
-pub fn create_mock_convenience_service(base_url: String) -> bitvault_common::convenience::ConvenienceService {
+pub fn create_mock_convenience_service(
+    base_url: String,
+) -> bitvault_common::convenience::ConvenienceService {
     bitvault_common::convenience::ConvenienceService::new(Some(base_url))
 }
 
@@ -46,7 +48,10 @@ pub fn create_pubkey_response(pubkey: &str) -> MockPubkeyResponse {
 }
 
 /// Helper to create a successful service response
-pub fn create_service_response(message: Option<String>, txid: Option<String>) -> MockServiceResponse {
+pub fn create_service_response(
+    message: Option<String>,
+    txid: Option<String>,
+) -> MockServiceResponse {
     MockServiceResponse {
         message,
         error: None,

@@ -170,8 +170,10 @@ fn load_old_utxos(
 
         match result {
             Ok(utxos) => {
-                let mut selection_state = UtxoSelectionState::default();
-                selection_state.utxos = utxos;
+                let selection_state = UtxoSelectionState {
+                    utxos,
+                    ..Default::default()
+                };
                 state.selection_state = Some(selection_state);
                 state.advance_to_step(UtxoRefreshStep::SelectingUtxos);
             }

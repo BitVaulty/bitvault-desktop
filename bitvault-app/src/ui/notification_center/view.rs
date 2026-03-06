@@ -1,7 +1,9 @@
 //! Notification Center View
 
 use crate::state::{AppState, Navigation};
-use crate::ui::notification_center::state::{NotificationCenterState, Notification, NotificationType};
+use crate::ui::notification_center::state::{
+    Notification, NotificationCenterState, NotificationType,
+};
 use eframe::egui;
 
 /// Render notification center view
@@ -35,9 +37,11 @@ pub fn render(
                 }
             }
             if let Some(ref last_fetch) = state.last_fetch {
-                ui.label(egui::RichText::new(
-                    format!("Last updated: {}", last_fetch.format("%H:%M:%S"))
-                ).small().weak());
+                ui.label(
+                    egui::RichText::new(format!("Last updated: {}", last_fetch.format("%H:%M:%S")))
+                        .small()
+                        .weak(),
+                );
             }
         });
         ui.add_space(10.0);
@@ -92,22 +96,27 @@ fn render_notification_row(
                     NotificationType::Info => "ℹ️",
                 };
                 ui.label(egui::RichText::new(icon).size(20.0));
-                
+
                 ui.vertical(|ui| {
                     ui.label(egui::RichText::new(&notification.title).strong());
                     ui.label(egui::RichText::new(&notification.body).small());
-                    ui.label(egui::RichText::new(
-                        format!("{}", notification.created_at.format("%Y-%m-%d %H:%M"))
-                    ).small().weak());
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{}",
+                            notification.created_at.format("%Y-%m-%d %H:%M")
+                        ))
+                        .small()
+                        .weak(),
+                    );
                 });
 
                 // Click to view transaction details if it's a transaction
-                if notification.notification_type == NotificationType::Transaction {
-                    if ui.button("View").clicked() {
-                        navigation.navigate_to(crate::state::View::TransactionDetail {
-                            txid: notification.id.clone(),
-                        });
-                    }
+                if notification.notification_type == NotificationType::Transaction
+                    && ui.button("View").clicked()
+                {
+                    navigation.navigate_to(crate::state::View::TransactionDetail {
+                        txid: notification.id.clone(),
+                    });
                 }
             });
         });

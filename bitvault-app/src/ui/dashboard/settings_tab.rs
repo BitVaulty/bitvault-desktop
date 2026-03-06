@@ -174,6 +174,13 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                                                 app_state.load_vault_from_metadata(&metadata),
                                             ) {
                                                 Ok(_) => {
+                                                    // Set as active vault for this network
+                                                    let _ = app_state
+                                                        .settings_manager
+                                                        .set_active_vault(
+                                                            &metadata.network,
+                                                            &metadata.address,
+                                                        );
                                                     // Refresh vault data
                                                     if let Some(ref mut handler) =
                                                         app_state.async_handler

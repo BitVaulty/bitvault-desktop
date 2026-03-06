@@ -83,9 +83,8 @@ impl NotificationCenterState {
                     .collect();
 
                 // Sort by most recent first
-                self.notifications.sort_by(|a, b| {
-                    b.created_at.cmp(&a.created_at)
-                });
+                self.notifications
+                    .sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
                 self.last_fetch = Some(now);
             }

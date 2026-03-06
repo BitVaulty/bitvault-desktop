@@ -63,6 +63,12 @@ pub fn render(
                 match bitvault_common::wallet::VaultMetadata::delete_vault_complete(&vault_address)
                 {
                     Ok(_) => {
+                        // Clear active vault if this was the active one
+                        if let Some(vault) = state.vaults.get(index) {
+                            let _ = app_state
+                                .settings_manager
+                                .clear_active_vault(&vault.network);
+                        }
                         // Remove from list
                         state.vaults.remove(index);
                         state.selected_index = None;
@@ -372,38 +378,41 @@ pub fn render(
                 if !state.vaults.is_empty() {
                     ui.horizontal_centered(|ui| {
                         if button_large(ui, "Load Selected Vault").clicked() {
-                            if let Some(index) = state.selected_index {
-                                if index < state.vaults.len() {
-                                    let metadata = state.vaults[index].clone();
+                            if let Some(start_index) = state.selected_index {
+                                if start_index < state.vaults.len() {
+                                    // Unload current vault if one is loaded
+                                    if app_state.is_vault_loaded() {
+                                        app_state.unload_vault();
+                                    }
 
-                                    // Validate vault before loading
-                                    match metadata.validate() {
-                                        Ok(_) => {
-                                            // Unload current vault if one is loaded
-                                            if app_state.is_vault_loaded() {
-                                                app_state.unload_vault();
+                                    if let Some(ref runtime) = app_state.runtime {
+                                        let handle = runtime.handle().clone();
+                                        let mut loaded = false;
+                                        // Try selected vault first, then others (fallback when current fails)
+                                        for i in 0..state.vaults.len() {
+                                            let index = (start_index + i) % state.vaults.len();
+                                            let metadata = state.vaults[index].clone();
+                                            if metadata.validate().is_err() {
+                                                continue;
                                             }
-
-                                            // Load vault using runtime
-                                            if let Some(ref runtime) = app_state.runtime {
-                                                let handle = runtime.handle().clone();
-                                                match handle.block_on(app_state.load_vault_from_metadata(&metadata)) {
-                                                    Ok(_) => {
-                                                        // Navigate to dashboard
-                                                        navigation.navigate_to(crate::state::View::Dashboard { tab: 0 });
-                                                        // Vault data will be refreshed automatically by async handler
-                                                    }
-                                                    Err(e) => {
-                                                        state.error = Some(format!("Failed to load vault: {}", e));
-                                                    }
+                                            match handle.block_on(app_state.load_vault_from_metadata(&metadata)) {
+                                                Ok(_) => {
+                                                    let _ = app_state.settings_manager.set_active_vault(
+                                                        &metadata.network,
+                                                        &metadata.address,
+                                                    );
+                                                    navigation.navigate_to(crate::state::View::Dashboard { tab: 0 });
+                                                    loaded = true;
+                                                    break;
                                                 }
-                                            } else {
-                                                state.error = Some("Runtime not available".to_string());
+                                                Err(_) => continue,
                                             }
                                         }
-                                        Err(e) => {
-                                            state.error = Some(format!("Cannot load vault: {}", e));
+                                        if !loaded {
+                                            state.error = Some("Failed to load vault. Try another vault.".to_string());
                                         }
+                                    } else {
+                                        state.error = Some("Runtime not available".to_string());
                                     }
                                 }
                             } else {
@@ -465,6 +474,10 @@ pub fn render(
                                     // Delete vault completely (metadata and database)
                                     match bitvault_common::wallet::VaultMetadata::delete_vault_complete(&vault_address) {
                                         Ok(_) => {
+                                            // Clear active vault if this was the active one
+                                            if let Some(vault) = state.vaults.get(index) {
+                                                let _ = app_state.settings_manager.clear_active_vault(&vault.network);
+                                            }
                                             // Remove from list
                                             state.vaults.remove(index);
                                             state.selected_index = None;

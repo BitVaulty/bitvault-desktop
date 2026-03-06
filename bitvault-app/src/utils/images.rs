@@ -99,8 +99,8 @@ pub fn image_to_icon_data(img: &DynamicImage) -> egui::IconData {
 
     egui::IconData {
         rgba: rgba_vec,
-        width: width as u32,
-        height: height as u32,
+        width,
+        height,
     }
 }
 
@@ -120,5 +120,5 @@ pub fn load_icon_data_from_bytes(bytes: &[u8]) -> Option<egui::IconData> {
 /// Replaces path separators and spaces with underscores
 #[allow(dead_code)]
 fn path_to_id(path: &str) -> String {
-    path.replace('/', "_").replace('\\', "_").replace(' ', "_")
+    path.replace(['/', '\\', ' '], "_")
 }

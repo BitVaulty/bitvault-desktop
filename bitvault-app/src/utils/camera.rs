@@ -14,6 +14,12 @@ pub struct CameraCapture {
     frame_interval_ms: u64, // Minimum time between frames (for performance)
 }
 
+impl Default for CameraCapture {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CameraCapture {
     pub fn new() -> Self {
         Self {

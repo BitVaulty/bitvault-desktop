@@ -6,21 +6,22 @@
 //! - View-Only Mode workflow
 //! - Receive Flow workflow
 
-use bitvault_common::wallet::{VaultMetadata, VaultService};
 use bdk::bitcoin::Network;
 use bdk::keys::bip39::Mnemonic;
 use bitvault_common::derivation::{build_all_descriptors, get_owner_keys};
+use bitvault_common::wallet::{VaultMetadata, VaultService};
 use tempfile::TempDir;
 
 /// Helper to create a valid test descriptor from test mnemonics
 fn get_test_descriptor(network: Network) -> Result<String, String> {
     use bitvault_common::derivation::build_vault_descriptor;
-    
+
     // Create different mnemonics for owner, coowner, and convenience
     let owner_mnemonic_str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     let coowner_mnemonic_str = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
-    let convenience_mnemonic_str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
-    
+    let convenience_mnemonic_str =
+        "legal winner thank year wave sausage worth useful legal winner thank yellow";
+
     let owner_mnemonic: Mnemonic = owner_mnemonic_str
         .parse()
         .map_err(|e| format!("Failed to parse owner mnemonic: {}", e))?;
@@ -30,7 +31,7 @@ fn get_test_descriptor(network: Network) -> Result<String, String> {
     let convenience_mnemonic: Mnemonic = convenience_mnemonic_str
         .parse()
         .map_err(|e| format!("Failed to parse convenience mnemonic: {}", e))?;
-    
+
     // Derive keys
     let owner_keys = get_owner_keys(&owner_mnemonic)
         .map_err(|e| format!("Failed to derive owner keys: {}", e))?;
@@ -38,9 +39,9 @@ fn get_test_descriptor(network: Network) -> Result<String, String> {
         .map_err(|e| format!("Failed to derive coowner keys: {}", e))?;
     let convenience_keys = get_owner_keys(&convenience_mnemonic)
         .map_err(|e| format!("Failed to derive convenience keys: {}", e))?;
-    
+
     let timelock = 144; // Minimum timelock (1 day)
-    
+
     // Build descriptor directly for the specific network
     // This ensures all keys are from the same network (mainnet or testnet)
     let (owner_net_keys, coowner_net_keys, convenience_key) = match network {
@@ -55,7 +56,7 @@ fn get_test_descriptor(network: Network) -> Result<String, String> {
             &convenience_keys.testnet.owner_key1,
         ),
     };
-    
+
     let descriptor = build_vault_descriptor(
         &owner_net_keys.owner_key1,
         &owner_net_keys.owner_key2,
@@ -65,11 +66,11 @@ fn get_test_descriptor(network: Network) -> Result<String, String> {
         timelock,
     )
     .map_err(|e| format!("Failed to build descriptor: {}", e))?;
-    
+
     if descriptor.is_empty() {
         return Err("Generated descriptor is empty".to_string());
     }
-    
+
     Ok(descriptor)
 }
 
@@ -84,7 +85,11 @@ async fn create_test_vault_with_metadata(
 
     let mut vault_service = VaultService::new(network);
     vault_service
-        .initialize_wallet(&descriptor, Some(db_path.to_str().unwrap().to_string()), None)
+        .initialize_wallet(
+            &descriptor,
+            Some(db_path.to_str().unwrap().to_string()),
+            None,
+        )
         .await
         .map_err(|e| format!("Failed to initialize wallet: {}", e))?;
 
@@ -100,7 +105,9 @@ async fn create_test_vault_with_metadata(
         db_path.to_str().unwrap().to_string(),
     );
     metadata.descriptor = Some(descriptor.to_string());
-    metadata.save().map_err(|e| format!("Failed to save metadata: {}", e))?;
+    metadata
+        .save()
+        .map_err(|e| format!("Failed to save metadata: {}", e))?;
 
     Ok((vault_service, metadata))
 }
@@ -128,15 +135,18 @@ async fn test_vault_selection_listing() {
     // Verify vaults were created with correct names
     assert_eq!(metadata_a.name, "Vault A");
     assert_eq!(metadata_b.name, "Vault B");
-    
+
     // Both use same descriptor so get same address
     // This is expected for test vaults using same mnemonics
     // Real vaults would use different mnemonics for different addresses
-    
+
     // Verify metadata can be loaded - second one will overwrite first since same address
     // This tests the metadata save/load functionality
     let loaded = VaultMetadata::load(&metadata_b.address).unwrap();
-    assert_eq!(loaded.name, "Vault B", "Second vault should overwrite first with same address");
+    assert_eq!(
+        loaded.name, "Vault B",
+        "Second vault should overwrite first with same address"
+    );
 }
 
 #[tokio::test]
@@ -154,7 +164,7 @@ async fn test_vault_selection_load() {
 
     // Verify vault is loaded
     assert!(loaded_service.is_loaded(), "Vault should be loaded");
-    
+
     // Verify address can be retrieved
     let address = loaded_service.get_new_address().await.unwrap();
     assert!(!address.is_empty(), "Address should be retrievable");
@@ -164,9 +174,10 @@ async fn test_vault_selection_load() {
 async fn test_vault_selection_rename() {
     // Test: Vault selection can rename a vault
     let temp_dir = TempDir::new().unwrap();
-    let (_, mut metadata) = create_test_vault_with_metadata("Original Name", Network::Testnet, &temp_dir)
-        .await
-        .unwrap();
+    let (_, mut metadata) =
+        create_test_vault_with_metadata("Original Name", Network::Testnet, &temp_dir)
+            .await
+            .unwrap();
 
     // Rename vault
     metadata.name = "Renamed Vault".to_string();
@@ -208,7 +219,7 @@ async fn test_vault_selection_filter_orphaned() {
 
     // List vaults - should handle orphaned metadata
     let vaults = VaultService::<bdk::database::SqliteDatabase>::list_vaults().unwrap();
-    
+
     // Depending on implementation, orphaned vaults might be filtered or removed
     // This test verifies the listing doesn't crash
     assert!(true, "Listing should handle orphaned metadata gracefully");
@@ -285,13 +296,13 @@ async fn test_coowner_exchange_key_decoding() {
 #[tokio::test]
 async fn test_coowner_exchange_invalid_data() {
     // Test: Co-owner exchange handles invalid data gracefully
-    use bitvault_common::ur::decode_qr_data;
     use bitvault_common::derivation::CoownerKeys;
+    use bitvault_common::ur::decode_qr_data;
 
     // Try to decode invalid data
     let invalid_data = "invalid_qr_data";
     let result: Result<CoownerKeys, _> = decode_qr_data(invalid_data);
-    
+
     // Should return error for invalid data
     assert!(result.is_err(), "Invalid data should return error");
 }
@@ -304,9 +315,12 @@ async fn test_coowner_exchange_invalid_data() {
 async fn test_view_only_descriptor_parsing() {
     // Test: View-only mode can parse descriptor from QR
     let descriptor = get_test_descriptor(Network::Testnet).unwrap();
-    
+
     // Verify descriptor is valid format (should be wsh for multisig)
-    assert!(descriptor.contains("wsh("), "Descriptor should contain wsh(");
+    assert!(
+        descriptor.contains("wsh("),
+        "Descriptor should contain wsh("
+    );
 }
 
 #[tokio::test]
@@ -319,16 +333,26 @@ async fn test_view_only_vault_creation() {
     // Create view-only vault (no mnemonic needed)
     let mut vault_service = VaultService::new(Network::Testnet);
     vault_service
-        .initialize_wallet(&descriptor, Some(db_path.to_str().unwrap().to_string()), None)
+        .initialize_wallet(
+            &descriptor,
+            Some(db_path.to_str().unwrap().to_string()),
+            None,
+        )
         .await
         .unwrap();
 
     // Verify vault is loaded
-    assert!(vault_service.is_loaded(), "View-only vault should be loaded");
-    
+    assert!(
+        vault_service.is_loaded(),
+        "View-only vault should be loaded"
+    );
+
     // Verify address can be retrieved (view-only can still get addresses)
     let address = vault_service.get_new_address().await.unwrap();
-    assert!(!address.is_empty(), "View-only vault should be able to get address");
+    assert!(
+        !address.is_empty(),
+        "View-only vault should be able to get address"
+    );
 }
 
 #[tokio::test]
@@ -340,7 +364,11 @@ async fn test_view_only_metadata_storage() {
 
     let mut vault_service = VaultService::new(Network::Testnet);
     vault_service
-        .initialize_wallet(&descriptor, Some(db_path.to_str().unwrap().to_string()), None)
+        .initialize_wallet(
+            &descriptor,
+            Some(db_path.to_str().unwrap().to_string()),
+            None,
+        )
         .await
         .unwrap();
 
@@ -368,30 +396,35 @@ async fn test_view_only_metadata_storage() {
 async fn test_receive_address_generation() {
     // Test: Receive flow can generate a new address
     let temp_dir = TempDir::new().unwrap();
-    let (vault_service, _) = create_test_vault_with_metadata("Receive Test", Network::Testnet, &temp_dir)
-        .await
-        .unwrap();
+    let (vault_service, _) =
+        create_test_vault_with_metadata("Receive Test", Network::Testnet, &temp_dir)
+            .await
+            .unwrap();
 
     // Generate new address
     let address = vault_service.get_new_address().await.unwrap();
-    
+
     // Verify address is valid
     assert!(!address.is_empty(), "Address should not be empty");
-    assert!(address.starts_with("tb1") || address.starts_with("bc1"), "Address should be valid format");
+    assert!(
+        address.starts_with("tb1") || address.starts_with("bc1"),
+        "Address should be valid format"
+    );
 }
 
 #[tokio::test]
 async fn test_receive_address_consistency() {
     // Test: Receive flow returns consistent addresses from same vault
     let temp_dir = TempDir::new().unwrap();
-    let (vault_service, _) = create_test_vault_with_metadata("Consistency Test", Network::Testnet, &temp_dir)
-        .await
-        .unwrap();
+    let (vault_service, _) =
+        create_test_vault_with_metadata("Consistency Test", Network::Testnet, &temp_dir)
+            .await
+            .unwrap();
 
     // Get address multiple times
     let address1 = vault_service.get_address().unwrap();
     let address2 = vault_service.get_address().unwrap();
-    
+
     // Stored address should be consistent
     assert_eq!(address1, address2, "Stored address should be consistent");
 }
@@ -400,20 +433,21 @@ async fn test_receive_address_consistency() {
 async fn test_receive_address_new_vs_stored() {
     // Test: Receive flow can get both new and stored addresses
     let temp_dir = TempDir::new().unwrap();
-    let (vault_service, _) = create_test_vault_with_metadata("New vs Stored", Network::Testnet, &temp_dir)
-        .await
-        .unwrap();
+    let (vault_service, _) =
+        create_test_vault_with_metadata("New vs Stored", Network::Testnet, &temp_dir)
+            .await
+            .unwrap();
 
     // Get stored address
     let stored_address = vault_service.get_address().unwrap();
-    
+
     // Get new address
     let new_address = vault_service.get_new_address().await.unwrap();
-    
+
     // Both should be valid
     assert!(!stored_address.is_empty(), "Stored address should be valid");
     assert!(!new_address.is_empty(), "New address should be valid");
-    
+
     // New address might be different from stored (depending on address index)
     // Both should be valid Bitcoin addresses
     assert!(stored_address.starts_with("tb1") || stored_address.starts_with("bc1"));
@@ -424,37 +458,51 @@ async fn test_receive_address_new_vs_stored() {
 async fn test_receive_address_network_specific() {
     // Test: Receive addresses are network-specific
     let temp_dir = TempDir::new().unwrap();
-    
+
     // Create testnet vault
-    let (testnet_service, _) = create_test_vault_with_metadata("Testnet", Network::Testnet, &temp_dir)
-        .await
-        .unwrap();
+    let (testnet_service, _) =
+        create_test_vault_with_metadata("Testnet", Network::Testnet, &temp_dir)
+            .await
+            .unwrap();
     let testnet_address = testnet_service.get_new_address().await.unwrap();
-    
+
     // Create mainnet vault
-    let (mainnet_service, _) = create_test_vault_with_metadata("Mainnet", Network::Bitcoin, &temp_dir)
-        .await
-        .unwrap();
+    let (mainnet_service, _) =
+        create_test_vault_with_metadata("Mainnet", Network::Bitcoin, &temp_dir)
+            .await
+            .unwrap();
     let mainnet_address = mainnet_service.get_new_address().await.unwrap();
-    
+
     // Verify addresses are different
-    assert_ne!(testnet_address, mainnet_address, "Addresses should be different for different networks");
-    
+    assert_ne!(
+        testnet_address, mainnet_address,
+        "Addresses should be different for different networks"
+    );
+
     // Verify address formats match network
-    assert!(testnet_address.starts_with("tb1"), "Testnet address should start with tb1");
-    assert!(mainnet_address.starts_with("bc1"), "Mainnet address should start with bc1");
+    assert!(
+        testnet_address.starts_with("tb1"),
+        "Testnet address should start with tb1"
+    );
+    assert!(
+        mainnet_address.starts_with("bc1"),
+        "Mainnet address should start with bc1"
+    );
 }
 
 #[tokio::test]
 async fn test_receive_flow_error_handling() {
     // Test: Receive flow handles errors gracefully
-    
+
     // Create vault but don't initialize wallet
     let vault_service = VaultService::new(Network::Testnet);
-    
+
     // Try to get address from uninitialized vault
     let result = vault_service.get_new_address().await;
-    
+
     // Should return error
-    assert!(result.is_err(), "Uninitialized vault should return error when getting address");
+    assert!(
+        result.is_err(),
+        "Uninitialized vault should return error when getting address"
+    );
 }

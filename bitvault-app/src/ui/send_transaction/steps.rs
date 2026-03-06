@@ -162,7 +162,6 @@ pub fn sign_and_broadcast(
                             // Show desktop notification
                             let notification_service = app_state.notification_service.clone();
                             let txid_clone = txid.clone();
-                            let amount_btc = amount_btc;
                             if let Some(ref runtime) = app_state.runtime {
                                 let handle = runtime.handle().clone();
                                 handle.spawn(async move {

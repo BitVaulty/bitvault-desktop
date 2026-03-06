@@ -31,8 +31,9 @@ use eframe::egui;
 use std::collections::HashMap;
 
 /// Hardware wallet types supported
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum HardwareWalletType {
+    #[default]
     Jade,
     JadePlus,
     Keystone,
@@ -77,6 +78,35 @@ impl HardwareWalletType {
         }
     }
 
+    /// Device-specific setup instructions (Options → Wallet → Export Xpub, etc.)
+    pub fn instructions(&self) -> &'static [&'static str] {
+        match self {
+            HardwareWalletType::Jade | HardwareWalletType::JadePlus => &[
+                "1. Unlock your device using the app on your phone or PC.",
+                "2. Navigate to: Options → Wallet → Export Xpub",
+                "3. Configure options if needed, then display the QR code.",
+                "4. Scan each QR code in sequence (multi-part).",
+            ],
+            HardwareWalletType::Keystone => &[
+                "1. Unlock your Keystone device.",
+                "2. Go to Settings → Export Public Key (or similar).",
+                "3. Select the account and display the QR code.",
+                "4. Scan the QR code with your camera.",
+            ],
+            HardwareWalletType::Passport | HardwareWalletType::SeedSigner => &[
+                "1. Unlock your device.",
+                "2. Navigate to export/public key option.",
+                "3. Display the QR code(s).",
+                "4. Scan each QR code in sequence.",
+            ],
+            _ => &[
+                "1. Unlock your hardware wallet.",
+                "2. Find the export public key / xpub option in settings.",
+                "3. Display the QR code and scan it.",
+            ],
+        }
+    }
+
     /// Get list of all supported hardware wallet types
     pub fn all_types() -> Vec<HardwareWalletType> {
         vec![
@@ -92,11 +122,6 @@ impl HardwareWalletType {
     }
 }
 
-impl Default for HardwareWalletType {
-    fn default() -> Self {
-        HardwareWalletType::Jade // Default to most common
-    }
-}
 
 /// Device role / setup mode
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -149,6 +174,8 @@ pub enum VaultCreationStep {
     /// View-only setup complete
     ViewOnlyComplete,
     // --- Restore from Backup Flow ---
+    /// Select seed phrase size (12 or 24 words) before entering
+    SelectSeedPhraseSize,
     /// Enter seed phrase from paper backup
     EnterSeedPhrase,
     /// Scan descriptor QR for restore
@@ -208,6 +235,8 @@ pub struct VaultCreationState {
     pub is_creating: bool,
     pub pin_setup_state: crate::ui::pin::PinSetupState,
     // Import-specific fields
+    /// Selected seed phrase size for import (12 or 24)
+    pub import_seed_phrase_size: Option<u8>,
     pub import_mnemonic_text: String,
     pub import_descriptors_qr: String,
     pub is_importing: bool,
@@ -258,6 +287,7 @@ impl Default for VaultCreationState {
             error: None,
             is_creating: false,
             pin_setup_state: crate::ui::pin::PinSetupState::new(),
+            import_seed_phrase_size: None,
             import_mnemonic_text: String::new(),
             import_descriptors_qr: String::new(),
             is_importing: false,
@@ -355,6 +385,7 @@ impl VaultCreationState {
         self.error = None;
         self.is_creating = false;
         self.pin_setup_state = crate::ui::pin::PinSetupState::new();
+        self.import_seed_phrase_size = None;
         self.import_mnemonic_text.clear();
         self.import_descriptors_qr.clear();
         self.is_importing = false;
@@ -453,7 +484,8 @@ impl VaultCreationState {
     fn next_step_restore(&self) -> Option<VaultCreationStep> {
         match self.current_step {
             VaultCreationStep::RoleSelection => Some(VaultCreationStep::NameVault),
-            VaultCreationStep::NameVault => Some(VaultCreationStep::EnterSeedPhrase),
+            VaultCreationStep::NameVault => Some(VaultCreationStep::SelectSeedPhraseSize),
+            VaultCreationStep::SelectSeedPhraseSize => Some(VaultCreationStep::EnterSeedPhrase),
             VaultCreationStep::EnterSeedPhrase => Some(VaultCreationStep::ScanDescriptorRestore),
             VaultCreationStep::ScanDescriptorRestore => Some(VaultCreationStep::SetPin),
             VaultCreationStep::SetPin => Some(VaultCreationStep::Completed),
@@ -565,6 +597,9 @@ pub fn render(
                 steps::render_view_only_complete(ui, app_state, navigation, state);
             }
             // Restore from Backup flow
+            VaultCreationStep::SelectSeedPhraseSize => {
+                steps::render_select_seed_phrase_size(ui, state);
+            }
             VaultCreationStep::EnterSeedPhrase => {
                 steps::render_enter_seed_phrase(ui, state);
             }

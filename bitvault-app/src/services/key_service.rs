@@ -27,11 +27,13 @@ pub struct BackupInfo {
 }
 
 /// Key service for secure storage
-/// Equivalent to Swift's KeyService
+/// Equivalent to Swift's KeyService. Full API for platform/FFI - many methods reserved for future use.
+#[allow(dead_code)]
 pub struct KeyService {
     service_name: String,
 }
 
+#[allow(dead_code)]
 impl KeyService {
     /// Create a new key service with default service name
     pub fn new() -> Self {
@@ -42,7 +44,7 @@ impl KeyService {
 
     /// Create a new key service with a custom service name
     /// This is useful for testing to isolate test data
-    /// 
+    ///
     /// # Note
     /// This function is primarily intended for testing. In production code,
     /// use `KeyService::new()` which uses the standard service name.
@@ -129,15 +131,9 @@ impl KeyService {
     /// Generate seed phrase
     /// Equivalent to Swift's generateSeedPhrase
     pub fn generate_seed_phrase(&self, is_long_phrase: bool) -> Result<String, KeyServiceError> {
-        use bdk::keys::bip39::Mnemonic;
-
-        let mnemonic = if is_long_phrase {
-            Mnemonic::from_entropy(&rand::random::<[u8; 32]>())
-        } else {
-            Mnemonic::from_entropy(&rand::random::<[u8; 16]>())
-        }
-        .map_err(|e| KeyServiceError::GenerationError(e.to_string()))?;
-
+        let word_count = if is_long_phrase { 24 } else { 12 };
+        let mnemonic = bitvault_common::generate_mnemonic(word_count)
+            .map_err(|e| KeyServiceError::GenerationError(e.to_string()))?;
         Ok(mnemonic.to_string())
     }
 
@@ -229,33 +225,6 @@ impl KeyService {
         Ok(())
     }
 
-    /// Save PIN code (encrypted)
-    /// Equivalent to Swift's savePinCode
-    /// Note: PIN encryption is handled by PinService in bitvault-common
-    /// This method stores the encrypted PIN
-    pub fn save_pin_code(&self, encrypted_pin: &str) -> Result<(), KeyServiceError> {
-        let entry = Entry::new(&self.service_name, "pinCode")
-            .map_err(|e| KeyServiceError::StorageError(e.to_string()))?;
-
-        entry
-            .set_password(encrypted_pin)
-            .map_err(|e| KeyServiceError::StorageError(e.to_string()))?;
-
-        Ok(())
-    }
-
-    /// Get PIN code (encrypted)
-    /// Equivalent to Swift's getPinCode
-    pub fn get_pin_code(&self) -> Result<Option<String>, KeyServiceError> {
-        let entry = Entry::new(&self.service_name, "pinCode")
-            .map_err(|e| KeyServiceError::StorageError(e.to_string()))?;
-
-        match entry.get_password() {
-            Ok(value) => Ok(Some(value)),
-            Err(_) => Ok(None),
-        }
-    }
-
     /// Save email
     /// Equivalent to Swift's saveEmail
     pub fn save_email(&self, email: &str) -> Result<(), KeyServiceError> {
@@ -316,6 +285,7 @@ impl KeyService {
 
 /// Errors that can occur during key service operations
 #[derive(Debug, thiserror::Error)]
+#[allow(clippy::enum_variant_names)]
 pub enum KeyServiceError {
     #[error("Storage error: {0}")]
     StorageError(String),

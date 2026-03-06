@@ -247,7 +247,7 @@ pub fn render_pin_entry(
                             }
                             bitvault_common::PinServiceError::DecryptionFailed => {
                                 eprintln!("[PIN_ERROR] Decryption failed - encryption key may be missing or wrong");
-                                format!("Decryption failed. The encryption key may be missing or corrupted. Click 'Reset PIN' below to delete the corrupted PIN and start fresh.")
+                                "Decryption failed. The encryption key may be missing or corrupted. Click 'Reset PIN' below to delete the corrupted PIN and start fresh.".to_string()
                             }
                             bitvault_common::PinServiceError::PinNotFound => {
                                 eprintln!("[PIN_ERROR] PIN not found in storage");

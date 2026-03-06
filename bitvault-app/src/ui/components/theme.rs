@@ -57,12 +57,8 @@ impl Colors {
         }
     }
 
-    pub fn text_muted(ctx: &egui::Context) -> egui::Color32 {
-        if ctx.style().visuals.dark_mode {
-            Self::GRAY_500
-        } else {
-            Self::GRAY_500
-        }
+    pub fn text_muted(_ctx: &egui::Context) -> egui::Color32 {
+        Self::GRAY_500
     }
 
     // Background colors

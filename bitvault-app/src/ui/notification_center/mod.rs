@@ -2,8 +2,8 @@
 //!
 //! UI for displaying application notifications (transactions, alerts, etc.)
 
-mod view;
 mod state;
+mod view;
 
-pub use view::render;
 pub use state::NotificationCenterState;
+pub use view::render;

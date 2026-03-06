@@ -361,13 +361,13 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
 
                 if ui.button("Export Vault").clicked() {
                     // Export vault backup (manual backup ZIP)
-                    if let (Some(ref runtime), Some(ref vault_service)) =
+                    if let (Some(runtime), Some(vault_service)) =
                         (app_state.runtime.as_ref(), app_state.vault_service.as_ref())
                     {
                         // Clone the Arc (cheap operation) - explicit type to help inference
                         let vault_service_clone: std::sync::Arc<
                             tokio::sync::RwLock<bitvault_common::wallet::VaultService>,
-                        > = (*vault_service).clone();
+                        > = vault_service.clone();
                         let rt: &tokio::runtime::Runtime = runtime;
 
                         // Use block_on to export synchronously (acceptable for one-time operation)
@@ -494,6 +494,32 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
             } else {
                 ui.label("Vault must be loaded to view subscription");
             }
+
+            ui.add_space(20.0);
+            ui.separator();
+            ui.add_space(10.0);
+
+            // Legal / Documents section
+            ui.label(egui::RichText::new("Legal").heading());
+            ui.add_space(10.0);
+
+            if ui.button("Terms of Service").clicked() {
+                ui.output_mut(|o| {
+                    o.open_url = Some(egui::OpenUrl {
+                        url: "https://bitvault.sv/terms".to_string(),
+                        new_tab: true,
+                    });
+                });
+            }
+            if ui.button("Privacy Policy").clicked() {
+                ui.output_mut(|o| {
+                    o.open_url = Some(egui::OpenUrl {
+                        url: "https://bitvault.sv/privacy".to_string(),
+                        new_tab: true,
+                    });
+                });
+            }
+            ui.label("View Terms and Privacy Policy in your browser");
 
             ui.add_space(20.0);
             ui.separator();

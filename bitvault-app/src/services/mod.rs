@@ -4,6 +4,7 @@
 pub mod address_book;
 pub mod biometric_service;
 pub mod key_service;
+pub mod network_check;
 pub mod notification_service;
 pub mod pcloud_backup;
 pub mod screenshot_protection;

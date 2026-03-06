@@ -1,3 +1,8 @@
+// VaultService in Arc is used from main thread only; Send/Sync not required for egui
+#![allow(clippy::arc_with_non_send_sync)]
+// Various API surfaces and future-use code
+#![allow(dead_code)]
+
 mod app;
 mod models;
 mod services;
@@ -79,6 +84,28 @@ fn load_app_icon() -> Option<egui::IconData> {
     None
 }
 
+/// Check if current version meets minimum required (semantic versioning)
+fn is_version_at_least(current: &str, minimum: &str) -> bool {
+    let parse = |s: &str| -> Vec<u32> {
+        s.split('.')
+            .filter_map(|p| p.parse::<u32>().ok())
+            .collect::<Vec<_>>()
+    };
+    let current_parts = parse(current);
+    let minimum_parts = parse(minimum);
+    for i in 0..minimum_parts.len().max(current_parts.len()) {
+        let c = current_parts.get(i).copied().unwrap_or(0);
+        let m = minimum_parts.get(i).copied().unwrap_or(0);
+        if c > m {
+            return true;
+        }
+        if c < m {
+            return false;
+        }
+    }
+    true // Equal
+}
+
 fn main() {
     // Initialize logger
     if let Err(e) = SimpleLogger::new().with_level(LevelFilter::Info).init() {
@@ -97,6 +124,36 @@ fn main() {
             std::process::exit(1);
         }
     };
+
+    // Check app version against remote config (don't block on network errors)
+    let is_update_required = rt.block_on(async {
+        // Skip version check if offline (avoid long timeout)
+        if !crate::services::network_check::check_connectivity().await {
+            log::info!("Offline - skipping version check");
+            return false;
+        }
+        let cs = bitvault_common::ConvenienceService::new(None);
+        match cs.get_remote_config().await {
+            Ok(config) => {
+                let current = env!("CARGO_PKG_VERSION");
+                let min_required = &config.app.minimum_version;
+                if !is_version_at_least(current, min_required) {
+                    log::warn!(
+                        "App version {} is below minimum required {}",
+                        current,
+                        min_required
+                    );
+                    true
+                } else {
+                    false
+                }
+            }
+            Err(e) => {
+                log::warn!("Failed to fetch remote config, allowing app to run: {}", e);
+                false
+            }
+        }
+    });
 
     // Try to load app icon
     let icon = load_app_icon();
@@ -124,7 +181,7 @@ fn main() {
         "BitVault",
         native_options,
         Box::new(move |cc| {
-            let mut app = app::BitVaultApp::new(cc);
+            let mut app = app::BitVaultApp::new(cc, is_update_required);
             app.set_runtime(rt);
             Box::new(app)
         }),

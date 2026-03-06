@@ -8,7 +8,7 @@
 //! # Implementation Status
 //!
 //! - **Windows Hello**: Fully functional - can authenticate users
-//! - **macOS Touch ID/Face ID**: 
+//! - **macOS Touch ID/Face ID**:
 //!   - ✅ Availability detection works
 //!   - ❌ Actual authentication prompt not yet implemented
 //!   - Requires Objective-C block callback support which is not available in objc2
@@ -81,22 +81,19 @@ impl BiometricService {
     #[cfg(target_os = "windows")]
     async fn is_windows_hello_available(&self) -> bool {
         use windows::{
-            Security::Credentials::UI::UserConsentVerifier,
-            Foundation::IAsyncOperation,
+            Foundation::IAsyncOperation, Security::Credentials::UI::UserConsentVerifier,
         };
 
         match UserConsentVerifier::CheckAvailabilityAsync() {
-            Ok(operation) => {
-                match operation.get().await {
-                    Ok(availability) => {
-                        matches!(
+            Ok(operation) => match operation.get().await {
+                Ok(availability) => {
+                    matches!(
                             availability,
                             windows::Security::Credentials::UI::UserConsentVerificationAvailability::Available
                         )
-                    }
-                    Err(_) => false,
                 }
-            }
+                Err(_) => false,
+            },
             Err(_) => false,
         }
     }
@@ -121,7 +118,7 @@ impl BiometricService {
             // Create LAContext instance
             let context: *mut objc2::runtime::AnyObject = msg_send![la_context_class, alloc];
             let context: *mut objc2::runtime::AnyObject = msg_send![context, init];
-            
+
             if context.is_null() {
                 return false;
             }
@@ -202,11 +199,11 @@ impl BiometricService {
     async fn authenticate_windows(&self, reason: &str) -> BiometricResult {
         use windows::{
             core::HSTRING,
-            Security::Credentials::UI::{
-                UserConsentVerifier, UserConsentVerificationAvailability,
-                UserConsentVerificationResult,
-            },
             Foundation::IAsyncOperation,
+            Security::Credentials::UI::{
+                UserConsentVerificationAvailability, UserConsentVerificationResult,
+                UserConsentVerifier,
+            },
         };
 
         // Check if Windows Hello is available
@@ -226,24 +223,38 @@ impl BiometricService {
                 let reason_hstring = HSTRING::from(reason);
                 let auth_op = match UserConsentVerifier::RequestVerificationAsync(&reason_hstring) {
                     Ok(op) => op,
-                    Err(_) => return BiometricResult::Failed("Failed to start authentication".to_string()),
+                    Err(_) => {
+                        return BiometricResult::Failed(
+                            "Failed to start authentication".to_string(),
+                        )
+                    }
                 };
 
                 let result = match auth_op.get().await {
                     Ok(res) => res,
-                    Err(_) => return BiometricResult::Failed("Authentication operation failed".to_string()),
+                    Err(_) => {
+                        return BiometricResult::Failed(
+                            "Authentication operation failed".to_string(),
+                        )
+                    }
                 };
 
                 match result {
                     UserConsentVerificationResult::Verified => BiometricResult::Success,
                     UserConsentVerificationResult::Canceled => BiometricResult::Cancelled,
-                    UserConsentVerificationResult::DeviceNotPresent => BiometricResult::NotAvailable,
-                    UserConsentVerificationResult::NotConfiguredForUser => BiometricResult::NotEnrolled,
+                    UserConsentVerificationResult::DeviceNotPresent => {
+                        BiometricResult::NotAvailable
+                    }
+                    UserConsentVerificationResult::NotConfiguredForUser => {
+                        BiometricResult::NotEnrolled
+                    }
                     _ => BiometricResult::Failed("Authentication failed".to_string()),
                 }
             }
             UserConsentVerificationAvailability::DeviceNotPresent => BiometricResult::NotAvailable,
-            UserConsentVerificationAvailability::NotConfiguredForUser => BiometricResult::NotEnrolled,
+            UserConsentVerificationAvailability::NotConfiguredForUser => {
+                BiometricResult::NotEnrolled
+            }
             _ => BiometricResult::NotAvailable,
         }
     }
@@ -307,7 +318,7 @@ impl BiometricService {
 
                 if !can_evaluate {
                     let _: () = msg_send![context, release];
-                    
+
                     if !error.is_null() {
                         let error_code: i64 = msg_send![error, code];
                         let result = match error_code {
@@ -327,7 +338,7 @@ impl BiometricService {
                 let reason_nsstring = NSString::from_str(&reason_string);
 
                 // macOS biometric authentication implementation status:
-                // 
+                //
                 // LIMITATION: Full Touch ID/Face ID authentication requires calling
                 // `evaluatePolicy:localizedReason:reply:` with an Objective-C block callback.
                 // The objc2 crate does not currently provide stable block handling for callbacks.

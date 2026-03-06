@@ -38,7 +38,7 @@ pub fn render(
             // Link received - show it and allow opening
             ui.label("Registration link received!");
             ui.add_space(10.0);
-            
+
             if ui.button("Open Telegram Bot").clicked() {
                 // Open link in browser (similar to subscription renewal)
                 ui.output_mut(|o| {
@@ -48,31 +48,29 @@ pub fn render(
                     });
                 });
             }
-            
+
             ui.add_space(10.0);
-            
+
             // Show link as copyable text
             ui.horizontal(|ui| {
                 ui.label("Link:");
-                ui.selectable_label(false, link);
+                let _ = ui.selectable_label(false, link);
                 if ui.button("Copy").clicked() {
                     ui.output_mut(|o| {
                         o.copied_text = link.clone();
                     });
                 }
             });
-            
+
             // Clear loading state and store link in state for persistence
             state.is_loading = false;
             state.registration_link = Some(link.clone());
-        } else {
-            if ui.button("Open Telegram Bot").clicked() {
-                state.is_loading = true;
-                state.error = None;
-                // Request Telegram registration link via async command
-                if let Some(ref mut handler) = app_state.async_handler {
-                    handler.request_telegram_registration();
-                }
+        } else if ui.button("Open Telegram Bot").clicked() {
+            state.is_loading = true;
+            state.error = None;
+            // Request Telegram registration link via async command
+            if let Some(ref mut handler) = app_state.async_handler {
+                handler.request_telegram_registration();
             }
         }
 

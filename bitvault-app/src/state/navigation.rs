@@ -55,6 +55,12 @@ pub struct Navigation {
     pub navigation_data: Option<String>,
 }
 
+impl Default for Navigation {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Navigation {
     /// Create new navigation state
     pub fn new() -> Self {

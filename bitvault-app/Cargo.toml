@@ -8,6 +8,11 @@ authors.workspace = true
 name = "bitvault_app"
 path = "src/lib.rs"
 
+[features]
+default = ["native"]
+# Native: desktop/mobile with SQLite, HTTP, file system (used by app_state cfg)
+native = []
+
 [dependencies]
 # GUI
 eframe = "0.27"

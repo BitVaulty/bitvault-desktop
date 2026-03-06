@@ -8,21 +8,22 @@
 //! - Network-specific vault isolation
 //! - Multiple vault management
 
-use bitvault_common::wallet::{VaultMetadata, VaultService};
 use bdk::bitcoin::Network;
 use bdk::keys::bip39::Mnemonic;
 use bitvault_common::derivation::{build_all_descriptors, get_owner_keys};
+use bitvault_common::wallet::{VaultMetadata, VaultService};
 use tempfile::TempDir;
 
 /// Helper to create a valid test descriptor from test mnemonics
 fn get_test_descriptor(network: Network) -> Result<String, String> {
     use bitvault_common::derivation::build_vault_descriptor;
-    
+
     // Create different mnemonics for owner, coowner, and convenience
     let owner_mnemonic_str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     let coowner_mnemonic_str = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
-    let convenience_mnemonic_str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
-    
+    let convenience_mnemonic_str =
+        "legal winner thank year wave sausage worth useful legal winner thank yellow";
+
     let owner_mnemonic: Mnemonic = owner_mnemonic_str
         .parse()
         .map_err(|e| format!("Failed to parse owner mnemonic: {}", e))?;
@@ -32,7 +33,7 @@ fn get_test_descriptor(network: Network) -> Result<String, String> {
     let convenience_mnemonic: Mnemonic = convenience_mnemonic_str
         .parse()
         .map_err(|e| format!("Failed to parse convenience mnemonic: {}", e))?;
-    
+
     // Derive keys
     let owner_keys = get_owner_keys(&owner_mnemonic)
         .map_err(|e| format!("Failed to derive owner keys: {}", e))?;
@@ -40,9 +41,9 @@ fn get_test_descriptor(network: Network) -> Result<String, String> {
         .map_err(|e| format!("Failed to derive coowner keys: {}", e))?;
     let convenience_keys = get_owner_keys(&convenience_mnemonic)
         .map_err(|e| format!("Failed to derive convenience keys: {}", e))?;
-    
+
     let timelock = 144; // Minimum timelock (1 day)
-    
+
     // Build descriptor directly for the specific network
     // This ensures all keys are from the same network (mainnet or testnet)
     let (owner_net_keys, coowner_net_keys, convenience_key) = match network {
@@ -57,7 +58,7 @@ fn get_test_descriptor(network: Network) -> Result<String, String> {
             &convenience_keys.testnet.owner_key1,
         ),
     };
-    
+
     let descriptor = build_vault_descriptor(
         &owner_net_keys.owner_key1,
         &owner_net_keys.owner_key2,
@@ -67,11 +68,11 @@ fn get_test_descriptor(network: Network) -> Result<String, String> {
         timelock,
     )
     .map_err(|e| format!("Failed to build descriptor: {}", e))?;
-    
+
     if descriptor.is_empty() {
         return Err("Generated descriptor is empty".to_string());
     }
-    
+
     Ok(descriptor)
 }
 
@@ -90,7 +91,11 @@ async fn create_test_vault(
     // Create vault service
     let mut vault_service = VaultService::new(network);
     vault_service
-        .initialize_wallet(&descriptor, Some(db_path.to_str().unwrap().to_string()), None)
+        .initialize_wallet(
+            &descriptor,
+            Some(db_path.to_str().unwrap().to_string()),
+            None,
+        )
         .await
         .map_err(|e| format!("Failed to initialize wallet: {}", e))?;
 
@@ -163,16 +168,12 @@ async fn test_vault_listing() {
 async fn test_vault_load_from_metadata() {
     // Test: Vault can be loaded from metadata
     let temp_dir = TempDir::new().unwrap();
-    let (original_service, metadata) =
-        create_test_vault("Load Test", Network::Testnet, &temp_dir)
-            .await
-            .unwrap();
-
-    // Get original address
-    let original_address = original_service
-        .get_new_address()
+    let (original_service, metadata) = create_test_vault("Load Test", Network::Testnet, &temp_dir)
         .await
         .unwrap();
+
+    // Get original address
+    let original_address = original_service.get_new_address().await.unwrap();
 
     // Load vault from metadata
     let loaded_service = VaultService::load_vault_from_metadata(&metadata)

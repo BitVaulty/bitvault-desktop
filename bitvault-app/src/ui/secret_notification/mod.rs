@@ -2,8 +2,8 @@
 //!
 //! UI for setting up Telegram secret notifications
 
-mod view;
 mod state;
+mod view;
 
-pub use view::render;
 pub use state::SecretNotificationState;
+pub use view::render;

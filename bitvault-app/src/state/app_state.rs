@@ -12,11 +12,11 @@ use crate::state::async_commands::AsyncCommandHandler;
 use crate::state::vault_data::{SharedVaultData, VaultData};
 use bdk::bitcoin::Network;
 use bdk::keys::bip39::Mnemonic;
+#[cfg(feature = "native")]
+use bitvault_common::convenience::ConvenienceService;
 use bitvault_common::wallet::VaultService;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-#[cfg(feature = "native")]
-use bitvault_common::convenience::ConvenienceService;
 
 /// Application state
 pub struct AppState {
@@ -84,7 +84,10 @@ impl AppState {
         let settings_manager = match SettingsManager::new() {
             Ok(sm) => sm,
             Err(e) => {
-                eprintln!("Warning: Could not create settings manager in fallback: {}", e);
+                eprintln!(
+                    "Warning: Could not create settings manager in fallback: {}",
+                    e
+                );
                 return Err(format!("Cannot create app state even with fallback: {}", e));
             }
         };
@@ -139,10 +142,10 @@ impl AppState {
         if self.cached_mnemonic.is_none() {
             self.refresh_mnemonic();
         }
-        
+
         // Get mnemonic from cache (before borrowing self)
         let mnemonic_ref = self.cached_mnemonic.as_ref();
-        
+
         if let (Some(ref mut handler), Some(vault_service), Some(runtime)) = (
             self.async_handler.as_mut(),
             self.vault_service.as_ref(),
@@ -159,7 +162,7 @@ impl AppState {
             let convenience_service = self.convenience_service.as_ref();
             #[cfg(not(feature = "native"))]
             let convenience_service = None::<&bitvault_common::convenience::ConvenienceService>;
-            
+
             handler.process_pending(vs, rt, convenience_service, mnemonic_ref);
             needs_repaint = true;
         }
@@ -260,6 +263,69 @@ impl AppState {
         VaultService::<bdk::database::SqliteDatabase>::list_vaults()
     }
 
+    /// Try to load the active vault for the current network.
+    /// If active vault fails (DB missing, load error), tries other vaults for the network
+    /// and sets the first working one as active (load working vault when current fails).
+    /// Returns true if vault was loaded, false if no vaults or all loads failed.
+    /// Requires runtime to be set.
+    pub fn try_load_active_vault(&mut self) -> Result<bool, String> {
+        let network_str = match self.network {
+            Network::Bitcoin => "mainnet",
+            Network::Testnet => "testnet",
+            Network::Signet => "signet",
+            Network::Regtest => "regtest",
+            _ => "mainnet",
+        };
+
+        let runtime = match self.runtime.as_ref() {
+            Some(rt) => rt,
+            None => return Ok(false),
+        };
+
+        let all_vaults = Self::list_vaults()?;
+        let vaults_for_network: Vec<_> = all_vaults
+            .into_iter()
+            .filter(|v| v.network == network_str && std::path::Path::new(&v.database_path).exists())
+            .filter(|v| v.validate().is_ok())
+            .collect();
+
+        if vaults_for_network.is_empty() {
+            return Ok(false);
+        }
+
+        // Order: active vault first, then others
+        let mut to_try = vaults_for_network.clone();
+        if let Ok(Some(active_addr)) = self.settings_manager.get_active_vault(network_str) {
+            if let Some(pos) = to_try.iter().position(|v| v.address == active_addr) {
+                let active = to_try.remove(pos);
+                to_try.insert(0, active);
+            }
+        }
+
+        for metadata in to_try {
+            let metadata_clone = metadata.clone();
+            let result = runtime
+                .block_on(async { VaultService::load_vault_from_metadata(&metadata_clone).await });
+
+            if let Ok(vault_service) = result {
+                self.vault_service = Some(Arc::new(RwLock::new(vault_service)));
+                self.has_vault = true;
+                self.refresh_mnemonic();
+                self.on_vault_loaded();
+                // Set as active for next time (including when we fell back from failed active)
+                let _ = self
+                    .settings_manager
+                    .set_active_vault(network_str, &metadata.address);
+                return Ok(true);
+            }
+            log::warn!("Failed to load vault {}: trying next", metadata.address);
+        }
+
+        // All vaults failed - clear active if it was set (it's broken)
+        let _ = self.settings_manager.clear_active_vault(network_str);
+        Ok(false)
+    }
+
     /// Initialize vault from an existing VaultService (e.g., after setup_vault)
     pub async fn initialize_vault_from_service(
         &mut self,
@@ -271,6 +337,21 @@ impl AppState {
                 "VaultService wallet not initialized".to_string(),
             ));
         }
+
+        // Set as active vault for this network before we move vault_service
+        let vault_address = vault_service.get_address().map_err(|e| {
+            bitvault_common::BitVaultError::Config(format!("Failed to get vault address: {}", e))
+        })?;
+        let network_str = match self.network {
+            Network::Bitcoin => "mainnet",
+            Network::Testnet => "testnet",
+            Network::Signet => "signet",
+            Network::Regtest => "regtest",
+            _ => "mainnet",
+        };
+        let _ = self
+            .settings_manager
+            .set_active_vault(network_str, &vault_address);
 
         self.vault_service = Some(Arc::new(RwLock::new(vault_service)));
         self.has_vault = true;
@@ -324,7 +405,7 @@ impl AppState {
         if let Some(metadata) = self.get_current_vault_metadata() {
             let network_str = &metadata.network; // "mainnet", "testnet", etc.
             let vault_id = &metadata.address; // Vault address is used as vault_id
-            
+
             if let Ok(backup_info) = self.key_service.get_backup_info(vault_id, network_str) {
                 self.cached_mnemonic = backup_info.mnemonic.parse().ok();
             } else {
@@ -351,6 +432,7 @@ impl AppState {
 
     /// Update network and reload vault for the new network
     /// If a vault exists for the new network, it will be loaded automatically
+    /// Uses active vault first, then falls back to other vaults if load fails
     /// If no vault exists, the vault will be unloaded and user should see vault selection
     pub fn update_network(&mut self, new_network: Network) -> Result<(), String> {
         // Save network preference
@@ -369,39 +451,46 @@ impl AppState {
         // Unload current vault (it's for the old network)
         self.unload_vault();
 
-        // Try to find and load a vault for the new network
+        // Try to load a vault for the new network
         if let Some(ref runtime) = self.runtime {
-            // List all vaults
             let all_vaults = Self::list_vaults()?;
+            let vaults_for_network: Vec<_> = all_vaults
+                .iter()
+                .filter(|v| {
+                    v.network == network_str && std::path::Path::new(&v.database_path).exists()
+                })
+                .filter(|v| v.validate().is_ok())
+                .cloned()
+                .collect();
 
-            // Find first vault for the new network
-            if let Some(vault_metadata) = all_vaults.iter().find(|v| v.network == network_str) {
-                // Clone metadata to avoid borrowing issues
-                let metadata_clone = vault_metadata.clone();
+            // Try active vault first, then others
+            let mut to_try: Vec<_> = vaults_for_network.clone();
+            if let Ok(Some(active_addr)) = self.settings_manager.get_active_vault(network_str) {
+                // Put active vault first
+                if let Some(pos) = to_try.iter().position(|v| v.address == active_addr) {
+                    let active = to_try.remove(pos);
+                    to_try.insert(0, active);
+                }
+            }
 
-                // Load this vault
+            for metadata in to_try {
+                let metadata_clone = metadata.clone();
                 let result = runtime.block_on(async {
-                    // Create a temporary AppState-like operation
-                    // We need to load the vault, but can't borrow self in async block
-                    // So we'll do it synchronously by creating a new vault service
                     VaultService::load_vault_from_metadata(&metadata_clone).await
                 });
 
-                match result {
-                    Ok(vault_service) => {
-                        // Initialize vault from the loaded service
-                        self.vault_service = Some(Arc::new(RwLock::new(vault_service)));
-                        self.has_vault = true;
-                        // Refresh mnemonic after loading vault
-                        self.refresh_mnemonic();
-                        self.on_vault_loaded();
-                    }
-                    Err(e) => {
-                        return Err(format!("Failed to load vault: {}", e));
-                    }
+                if let Ok(vault_service) = result {
+                    self.vault_service = Some(Arc::new(RwLock::new(vault_service)));
+                    self.has_vault = true;
+                    self.refresh_mnemonic();
+                    self.on_vault_loaded();
+                    // Set as active for next time
+                    let _ = self
+                        .settings_manager
+                        .set_active_vault(network_str, &metadata.address);
+                    return Ok(());
                 }
             }
-            // If no vault found for this network, that's okay - user will see vault selection
         }
 
         Ok(())

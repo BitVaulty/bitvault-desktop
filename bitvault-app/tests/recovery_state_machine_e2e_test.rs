@@ -8,10 +8,7 @@
 //! Note: RecoveryState and UtxoRefreshState are private and stored in thread_local! variables.
 //! Tests focus on public API functions. UtxoSelectionState is tested through its public API.
 
-use bitvault_app::ui::recovery::{
-    go_back_in_recovery_workflow,
-    go_back_in_utxo_refresh_workflow,
-};
+use bitvault_app::ui::recovery::{go_back_in_recovery_workflow, go_back_in_utxo_refresh_workflow};
 use bitvault_common::types::OldUtxo;
 
 // Note: UtxoSelectionState and RecoveryMode are in a private module, so we can't import them directly.
@@ -20,31 +17,37 @@ use bitvault_common::types::OldUtxo;
 #[test]
 fn test_recovery_workflow_back_navigation() {
     // Test: Back navigation in recovery workflow
-    // Recovery workflow: LoadingUtxos → SelectingUtxos → BuildingPreview → 
+    // Recovery workflow: LoadingUtxos → SelectingUtxos → BuildingPreview →
     // PreviewReady → Signing → Sharing → Completed
-    
+
     // Initially, go_back should return false (at first step)
     let went_back = go_back_in_recovery_workflow();
     assert!(!went_back, "Should not be able to go back from first step");
-    
+
     // After going back (if there was a previous step), it should work
     // Since we're at the first step, go_back should return false
     let went_back_again = go_back_in_recovery_workflow();
-    assert!(!went_back_again, "Should still not be able to go back from first step");
+    assert!(
+        !went_back_again,
+        "Should still not be able to go back from first step"
+    );
 }
 
 #[test]
 fn test_utxo_refresh_workflow_back_navigation() {
     // Test: Back navigation in UTXO refresh workflow
     // UTXO refresh workflow: LoadingUtxos → SelectingUtxos → Signing → Sharing → Completed
-    
+
     // Initially, go_back should return false (at first step)
     let went_back = go_back_in_utxo_refresh_workflow();
     assert!(!went_back, "Should not be able to go back from first step");
-    
+
     // After going back (if there was a previous step), it should work
     let went_back_again = go_back_in_utxo_refresh_workflow();
-    assert!(!went_back_again, "Should still not be able to go back from first step");
+    assert!(
+        !went_back_again,
+        "Should still not be able to go back from first step"
+    );
 }
 
 #[test]
@@ -54,10 +57,10 @@ fn test_old_utxo_structure() {
         outpoint: "txid1:0".to_string(),
         amount: 0.001,
     };
-    
+
     assert_eq!(utxo.outpoint, "txid1:0");
     assert_eq!(utxo.amount, 0.001);
-    
+
     // OldUtxo only has these two fields (age_days and confirmed are not part of the struct)
     // The age filtering happens when loading UTXOs from the wallet
 }
@@ -69,12 +72,12 @@ fn test_old_utxo_serialization() {
         outpoint: "txid1:0".to_string(),
         amount: 0.001,
     };
-    
+
     // Serialize
     let json = serde_json::to_string(&utxo).unwrap();
     assert!(json.contains("txid1:0"));
     assert!(json.contains("0.001"));
-    
+
     // Deserialize
     let deserialized: OldUtxo = serde_json::from_str(&json).unwrap();
     assert_eq!(deserialized.outpoint, utxo.outpoint);
@@ -98,13 +101,13 @@ fn test_old_utxo_multiple_utxos() {
             amount: 0.005,
         },
     ];
-    
+
     assert_eq!(utxos.len(), 3);
-    
+
     // Calculate total amount
     let total: f64 = utxos.iter().map(|u| u.amount).sum();
     assert_eq!(total, 0.008); // 0.001 + 0.002 + 0.005
-    
+
     // Verify outpoints are unique
     let outpoints: Vec<&String> = utxos.iter().map(|u| &u.outpoint).collect();
     assert_eq!(outpoints.len(), 3);
@@ -116,20 +119,26 @@ fn test_old_utxo_multiple_utxos() {
 fn test_recovery_workflow_initial_state() {
     // Test: Recovery workflow initial state
     // The workflow should start at LoadingUtxos step
-    
+
     // go_back should return false (no previous step)
     let went_back = go_back_in_recovery_workflow();
-    assert!(!went_back, "Should not be able to go back from initial state");
+    assert!(
+        !went_back,
+        "Should not be able to go back from initial state"
+    );
 }
 
 #[test]
 fn test_utxo_refresh_workflow_initial_state() {
     // Test: UTXO refresh workflow initial state
     // The workflow should start at LoadingUtxos step
-    
+
     // go_back should return false (no previous step)
     let went_back = go_back_in_utxo_refresh_workflow();
-    assert!(!went_back, "Should not be able to go back from initial state");
+    assert!(
+        !went_back,
+        "Should not be able to go back from initial state"
+    );
 }
 
 #[test]
@@ -139,7 +148,7 @@ fn test_old_utxo_outpoint_format() {
         outpoint: "abc123def456:0".to_string(),
         amount: 0.001,
     };
-    
+
     // Outpoint should be in format "txid:vout"
     assert!(utxo.outpoint.contains(':'));
     let parts: Vec<&str> = utxo.outpoint.split(':').collect();
@@ -155,16 +164,16 @@ fn test_old_utxo_amount_precision() {
         outpoint: "tx1:0".to_string(),
         amount: 0.00000001, // 1 satoshi in BTC
     };
-    
+
     assert!(utxo.amount > 0.0);
     assert_eq!(utxo.amount, 0.00000001);
-    
+
     // Test larger amounts
     let large_utxo = OldUtxo {
         outpoint: "tx2:0".to_string(),
         amount: 1.0, // 1 BTC
     };
-    
+
     assert_eq!(large_utxo.amount, 1.0);
 }
 
@@ -172,15 +181,15 @@ fn test_old_utxo_amount_precision() {
 fn test_recovery_workflow_multiple_calls() {
     // Test: Multiple calls to recovery workflow functions
     // Each call should be independent (thread-local state)
-    
+
     // First call
     let went_back1 = go_back_in_recovery_workflow();
     assert!(!went_back1);
-    
+
     // Second call (should still be at initial state)
     let went_back2 = go_back_in_recovery_workflow();
     assert!(!went_back2);
-    
+
     // Both should return false (at initial state)
     assert_eq!(went_back1, went_back2);
 }
@@ -189,15 +198,15 @@ fn test_recovery_workflow_multiple_calls() {
 fn test_utxo_refresh_workflow_multiple_calls() {
     // Test: Multiple calls to UTXO refresh workflow functions
     // Each call should be independent (thread-local state)
-    
+
     // First call
     let went_back1 = go_back_in_utxo_refresh_workflow();
     assert!(!went_back1);
-    
+
     // Second call (should still be at initial state)
     let went_back2 = go_back_in_utxo_refresh_workflow();
     assert!(!went_back2);
-    
+
     // Both should return false (at initial state)
     assert_eq!(went_back1, went_back2);
 }
@@ -215,25 +224,25 @@ fn test_old_utxo_collection_operations() {
             amount: 0.002,
         },
     ];
-    
+
     // Filter by amount
     let large_utxos: Vec<&OldUtxo> = utxos.iter().filter(|u| u.amount >= 0.002).collect();
     assert_eq!(large_utxos.len(), 1);
     assert_eq!(large_utxos[0].outpoint, "tx2:0");
-    
+
     // Find by outpoint
     let found = utxos.iter().find(|u| u.outpoint == "tx1:0");
     assert!(found.is_some());
     assert_eq!(found.unwrap().amount, 0.001);
-    
+
     // Add more UTXOs
     utxos.push(OldUtxo {
         outpoint: "tx3:0".to_string(),
         amount: 0.003,
     });
-    
+
     assert_eq!(utxos.len(), 3);
-    
+
     // Calculate total
     let total: f64 = utxos.iter().map(|u| u.amount).sum();
     assert_eq!(total, 0.006);

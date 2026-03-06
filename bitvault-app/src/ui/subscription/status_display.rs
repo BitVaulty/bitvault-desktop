@@ -170,9 +170,7 @@ fn render_subscription_info(
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let badge_style = if subscription.is_valid() {
-                        if subscription.lifetime {
-                            BadgeStyle::Success
-                        } else if subscription.is_active {
+                        if subscription.lifetime || subscription.is_active {
                             BadgeStyle::Success
                         } else {
                             BadgeStyle::Warning

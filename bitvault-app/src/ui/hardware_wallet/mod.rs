@@ -9,7 +9,7 @@ mod batch_qr_scanner;
 mod qr_display;
 mod qr_scanner;
 
-pub use batch_qr_scanner::BatchQrScannerState;
 pub use batch_qr_scanner::render_batch_qr_scanner;
+pub use batch_qr_scanner::BatchQrScannerState;
 pub use qr_display::{render_qr_display, QrDisplayState};
 pub use qr_scanner::QrScannerState;

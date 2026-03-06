@@ -37,13 +37,13 @@ impl ScreenshotProtection {
     pub fn enable() -> Result<(), ScreenshotProtectionError> {
         #[cfg(target_os = "windows")]
         return windows::enable();
-        
+
         #[cfg(target_os = "macos")]
         return macos::enable();
-        
+
         #[cfg(target_os = "linux")]
         return linux::enable();
-        
+
         #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
         Err(ScreenshotProtectionError::NotAvailable)
     }
@@ -54,13 +54,13 @@ impl ScreenshotProtection {
     pub fn disable() -> Result<(), ScreenshotProtectionError> {
         #[cfg(target_os = "windows")]
         return windows::disable();
-        
+
         #[cfg(target_os = "macos")]
         return macos::disable();
-        
+
         #[cfg(target_os = "linux")]
         return linux::disable();
-        
+
         #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
         Err(ScreenshotProtectionError::NotAvailable)
     }
@@ -72,13 +72,13 @@ impl ScreenshotProtection {
     pub fn is_available() -> bool {
         #[cfg(target_os = "windows")]
         return windows::is_available();
-        
+
         #[cfg(target_os = "macos")]
         return macos::is_available();
-        
+
         #[cfg(target_os = "linux")]
         return linux::is_available();
-        
+
         #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
         false
     }
@@ -87,8 +87,8 @@ impl ScreenshotProtection {
 #[cfg(target_os = "windows")]
 mod windows {
     use super::ScreenshotProtectionError;
-    use windows::Win32::{
-        Graphics::Gdi::{GetForegroundWindow, SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE},
+    use windows::Win32::Graphics::Gdi::{
+        GetForegroundWindow, SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
     };
 
     pub fn enable() -> Result<(), ScreenshotProtectionError> {
@@ -157,19 +157,21 @@ mod macos {
         // Note: This requires access to the NSWindow instance from eframe
         // eframe on macOS uses winit, which may not expose NSWindow directly
         // This is a placeholder implementation - may need to use winit's native window handle
-        
+
         // TODO: Implement using eframe/winit native window access
         // For now, return NotAvailable until we can access the NSWindow
-        
+
         Err(ScreenshotProtectionError::PlatformError(
-            "macOS screenshot protection requires native window access - implementation pending".to_string(),
+            "macOS screenshot protection requires native window access - implementation pending"
+                .to_string(),
         ))
     }
 
     pub fn disable() -> Result<(), ScreenshotProtectionError> {
         // TODO: Implement using eframe/winit native window access
         Err(ScreenshotProtectionError::PlatformError(
-            "macOS screenshot protection requires native window access - implementation pending".to_string(),
+            "macOS screenshot protection requires native window access - implementation pending"
+                .to_string(),
         ))
     }
 
@@ -196,7 +198,7 @@ mod linux {
         // Linux screenshot protection is platform-dependent and unreliable
         // X11 does not provide a way to prevent screenshots
         // Wayland compositors may have extensions, but they're not standardized
-        
+
         // For now, return NotAvailable to indicate limited support
         Err(ScreenshotProtectionError::NotAvailable)
     }

@@ -3,10 +3,12 @@
 //! Handles persistent storage of user preferences
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[allow(clippy::upper_case_acronyms)] // ISO 4217 currency codes
 pub enum Currency {
     USD,
     EUR,
@@ -95,6 +97,9 @@ pub struct AppSettings {
     pub network: Option<String>, // Stored as string for persistence
     #[serde(default)]
     pub biometrics_enabled: Option<bool>, // None = not set, Some(true/false) = user preference
+    /// Active vault address per network (e.g. "mainnet" -> "bc1q...", "testnet" -> "tb1q...")
+    #[serde(default)]
+    pub active_vault_per_network: HashMap<String, String>,
 }
 
 impl Default for AppSettings {
@@ -104,6 +109,7 @@ impl Default for AppSettings {
             theme: AppTheme::System,
             network: None,
             biometrics_enabled: None, // Default to None (not configured)
+            active_vault_per_network: HashMap::new(),
         }
     }
 }
@@ -197,6 +203,28 @@ impl SettingsManager {
     pub fn set_biometrics_enabled(&self, enabled: bool) -> Result<(), String> {
         let mut settings = self.load()?;
         settings.biometrics_enabled = Some(enabled);
+        self.save(&settings)
+    }
+
+    /// Get active vault address for a network (e.g. "mainnet", "testnet")
+    pub fn get_active_vault(&self, network: &str) -> Result<Option<String>, String> {
+        let settings = self.load()?;
+        Ok(settings.active_vault_per_network.get(network).cloned())
+    }
+
+    /// Set active vault address for a network
+    pub fn set_active_vault(&self, network: &str, vault_address: &str) -> Result<(), String> {
+        let mut settings = self.load()?;
+        settings
+            .active_vault_per_network
+            .insert(network.to_string(), vault_address.to_string());
+        self.save(&settings)
+    }
+
+    /// Clear active vault for a network (e.g. when vault is deleted)
+    pub fn clear_active_vault(&self, network: &str) -> Result<(), String> {
+        let mut settings = self.load()?;
+        settings.active_vault_per_network.remove(network);
         self.save(&settings)
     }
 }

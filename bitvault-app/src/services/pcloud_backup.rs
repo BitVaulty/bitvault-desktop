@@ -1,6 +1,7 @@
 //! PcloudBackup - pCloud backup integration
 //!
 //! Wrapper around ConvenienceService for pCloud backup functionality
+//! API surface used by tests and pCloud backup UI (backup_management, settings)
 
 use bitvault_common::convenience::{
     ConvenienceService, ConvenienceServiceError, PcloudBackupRequest,
@@ -8,10 +9,12 @@ use bitvault_common::convenience::{
 
 /// pCloud backup service
 /// Equivalent to Swift's PcloudBackupService
+#[allow(dead_code)]
 pub struct PcloudBackupService {
     convenience_service: ConvenienceService,
 }
 
+#[allow(dead_code)]
 impl PcloudBackupService {
     /// Create a new pCloud backup service
     pub fn new() -> Self {

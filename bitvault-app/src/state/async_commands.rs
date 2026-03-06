@@ -33,6 +33,12 @@ pub struct AsyncCommandHandler {
     result_tx: mpsc::UnboundedSender<AsyncResult>,
 }
 
+impl Default for AsyncCommandHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AsyncCommandHandler {
     /// Create a new command handler
     pub fn new() -> Self {
@@ -57,7 +63,8 @@ impl AsyncCommandHandler {
 
     /// Queue a command to request Telegram registration
     pub fn request_telegram_registration(&mut self) {
-        self.pending_commands.push(AsyncCommand::RequestTelegramRegistration);
+        self.pending_commands
+            .push(AsyncCommand::RequestTelegramRegistration);
     }
 
     /// Process pending commands (call from UI update loop)
@@ -127,40 +134,50 @@ impl AsyncCommandHandler {
                 }
                 AsyncCommand::RequestTelegramRegistration => {
                     // Request Telegram registration link from ConvenienceService
-                    if let (Some(convenience_service), Some(mnemonic)) = (convenience_service, mnemonic) {
-                        let cs = convenience_service.clone();
+                    if let (Some(convenience_service), Some(mnemonic)) =
+                        (convenience_service, mnemonic)
+                    {
+                        let cs = convenience_service;
                         let mn = mnemonic.clone();
                         let result: std::result::Result<String, String> = runtime.block_on(async {
                             // Get address and pubkey from vault service
-                            let address = vs.read().await.get_address()
+                            let address = vs
+                                .read()
+                                .await
+                                .get_address()
                                 .map_err(|e| format!("Failed to get address: {}", e))?;
-                            
-                            let pubkey = vs.read().await.get_owner_xpub().await
+
+                            let pubkey = vs
+                                .read()
+                                .await
+                                .get_owner_xpub()
+                                .await
                                 .map_err(|e| format!("Failed to get owner xpub: {}", e))?;
-                            
+
                             // Create message with timestamp
                             let timestamp = chrono::Utc::now().timestamp();
                             let message = format!("SUBSCRIBE:{}:{}:{}", address, pubkey, timestamp);
-                            
+
                             // Get network from vault service
                             let network = {
                                 let guard = vs.read().await;
                                 guard.network()
                             };
-                            
+
                             // Sign the message
                             let signature = bitvault_common::wallet::sign_message_for_telegram(
-                                &mn,
-                                &message,
-                                network,
-                            ).map_err(|e| format!("Failed to sign message: {}", e))?;
-                            
+                                &mn, &message, network,
+                            )
+                            .map_err(|e| format!("Failed to sign message: {}", e))?;
+
                             // Request Telegram registration
-                            cs.request_telegram_registration(&address, &pubkey, &message, &signature)
-                                .await
-                                .map_err(|e| format!("Failed to request Telegram registration: {}", e))
+                            cs.request_telegram_registration(
+                                &address, &pubkey, &message, &signature,
+                            )
+                            .await
+                            .map_err(|e| format!("Failed to request Telegram registration: {}", e))
                         });
-                        
+
                         match result {
                             Ok(link) => {
                                 let _ = tx.send(AsyncResult::TelegramRegistrationLink(link));
@@ -171,7 +188,8 @@ impl AsyncCommandHandler {
                         }
                     } else {
                         let _ = tx.send(AsyncResult::Error(
-                            "Telegram registration requires convenience service and mnemonic".to_string(),
+                            "Telegram registration requires convenience service and mnemonic"
+                                .to_string(),
                         ));
                     }
                 }

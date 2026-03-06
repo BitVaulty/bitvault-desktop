@@ -4,8 +4,8 @@
 //! Tracks scanning progress and provides clear feedback
 
 use crate::state::{AppState, Navigation};
-use crate::utils::qr::decode_qr_from_file;
 use crate::ui::components::{button, button_large, ButtonStyle, Spacing};
+use crate::utils::qr::decode_qr_from_file;
 use bitvault_common::ur::MultiPartUrDecoder;
 use eframe::egui;
 use std::collections::HashSet;
@@ -144,7 +144,7 @@ pub fn render_batch_qr_scanner(
                 ui.label(format!("PSBT decoded: {}...", &psbt[..psbt.len().min(50)]));
             }
             ui.add_space(Spacing::MD);
-            
+
             if button_large(ui, "Continue").clicked() {
                 navigation.go_back();
             }
