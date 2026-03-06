@@ -50,8 +50,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            bitvault-app/target
-          key: ${{ runner.os }}-cargo-release-${{ hashFiles('bitvault-app/Cargo.lock') }}
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('Cargo.lock') }}
       
       - name: Build
         working-directory: bitvault-app
