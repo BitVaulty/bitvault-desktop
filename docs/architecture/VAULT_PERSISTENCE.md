@@ -61,7 +61,7 @@ The BitVault desktop application now includes a complete vault persistence and m
    - Handles vault setup and loading
    - Integrates with SQLite database
 
-3. **Vault Selection UI** (`bitvault-desktop/bitvault-app/src/ui/vault_selection/`)
+3. **Vault Selection UI** (`bitvault-desktop/src/ui/vault_selection/`)
    - Displays list of available vaults
    - Provides vault management operations
    - Shows validation status
@@ -139,7 +139,7 @@ Visual indicators:
 - Transaction history display
 - Recent transactions in vault detail view
 
-## Future Improvements
+## Potential Enhancements
 
 - [ ] Automatic database backup/restore
 - [ ] Vault encryption at rest

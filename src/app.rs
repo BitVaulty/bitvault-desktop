@@ -24,14 +24,8 @@ use std::path::PathBuf;
 /// Load the BitVault logo for display in the top bar
 fn load_bitvault_logo(ctx: &egui::Context) -> Option<egui::TextureHandle> {
     let mut possible_paths = vec![
-        // Relative to workspace root
-        PathBuf::from("bitvault-desktop/bitvault-app/resources/bitvault_logo.png"),
-        PathBuf::from("bitvault-desktop/bitvault-app/resources/bitvault_logo.svg"),
-        // Relative to current working directory
         PathBuf::from("resources/bitvault_logo.png"),
         PathBuf::from("resources/bitvault_logo.svg"),
-        PathBuf::from("bitvault-app/resources/bitvault_logo.png"),
-        PathBuf::from("bitvault-app/resources/bitvault_logo.svg"),
     ];
 
     // Add executable-relative paths
@@ -41,15 +35,13 @@ fn load_bitvault_logo(ctx: &egui::Context) -> Option<egui::TextureHandle> {
             possible_paths.push(exe_dir.join("resources/bitvault_logo.png"));
             possible_paths.push(exe_dir.join("resources/bitvault_logo.svg"));
 
-            // If we're in target/release, go up to find bitvault-app/resources
+            // If we're in target/release, go up to find resources
             let mut current = exe_dir;
             while let Some(parent) = current.parent() {
-                // Check if we're in the bitvault-desktop directory structure
-                let bitvault_app_resources =
-                    parent.join("bitvault-app/resources/bitvault_logo.png");
-                if bitvault_app_resources.exists() {
-                    possible_paths.push(bitvault_app_resources.clone());
-                    possible_paths.push(parent.join("bitvault-app/resources/bitvault_logo.svg"));
+                let resources_logo = parent.join("resources/bitvault_logo.png");
+                if resources_logo.exists() {
+                    possible_paths.push(resources_logo.clone());
+                    possible_paths.push(parent.join("resources/bitvault_logo.svg"));
                     break;
                 }
                 // Stop if we've gone too far up (reached root or workspace)

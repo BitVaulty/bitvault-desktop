@@ -27,7 +27,7 @@ WORKDIR /app
 COPY . .
 
 RUN cargo test
-RUN cargo build --release -p bitvault-app
+RUN cargo build --release
 
 # Stage 2: Runtime stage (as before)
 FROM debian:bullseye-slim

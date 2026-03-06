@@ -4,7 +4,6 @@
 #![allow(dead_code)]
 
 mod app;
-mod models;
 mod services;
 mod settings;
 mod state;
@@ -21,20 +20,11 @@ use std::path::PathBuf;
 fn load_app_icon() -> Option<egui::IconData> {
     // Try to find the icon file - prioritize smaller icons first (better for window managers)
     let mut possible_paths = vec![
-        // Relative to workspace root - try smaller icons first
-        PathBuf::from("bitvault-desktop/bitvault-app/resources/app_64.png"),
-        PathBuf::from("bitvault-desktop/bitvault-app/resources/app_128.png"),
-        PathBuf::from("bitvault-desktop/bitvault-app/resources/app.ico"),
-        PathBuf::from("bitvault-desktop/bitvault-app/resources/app.png"),
-        // Relative to current working directory
+        // Relative to project root
         PathBuf::from("resources/app_64.png"),
         PathBuf::from("resources/app_128.png"),
         PathBuf::from("resources/app.ico"),
         PathBuf::from("resources/app.png"),
-        PathBuf::from("bitvault-app/resources/app_64.png"),
-        PathBuf::from("bitvault-app/resources/app_128.png"),
-        PathBuf::from("bitvault-app/resources/app.ico"),
-        PathBuf::from("bitvault-app/resources/app.png"),
     ];
 
     // Also try in the executable directory
@@ -45,15 +35,15 @@ fn load_app_icon() -> Option<egui::IconData> {
             possible_paths.push(exe_dir.join("resources/app.ico"));
             possible_paths.push(exe_dir.join("resources/app.png"));
 
-            // If we're in target/release, go up to find bitvault-app/resources
+            // If we're in target/release, go up to find resources
             let mut current = exe_dir;
             while let Some(parent) = current.parent() {
-                let bitvault_app_resources = parent.join("bitvault-app/resources/app.ico");
-                if bitvault_app_resources.exists() {
-                    possible_paths.push(parent.join("bitvault-app/resources/app_64.png"));
-                    possible_paths.push(parent.join("bitvault-app/resources/app_128.png"));
-                    possible_paths.push(bitvault_app_resources.clone());
-                    possible_paths.push(parent.join("bitvault-app/resources/app.png"));
+                let resources_ico = parent.join("resources/app.ico");
+                if resources_ico.exists() {
+                    possible_paths.push(parent.join("resources/app_64.png"));
+                    possible_paths.push(parent.join("resources/app_128.png"));
+                    possible_paths.push(resources_ico.clone());
+                    possible_paths.push(parent.join("resources/app.png"));
                     break;
                 }
                 if parent == current || !parent.exists() {

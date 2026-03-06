@@ -9,7 +9,6 @@
 #![allow(dead_code)]
 
 pub mod app;
-pub mod models;
 pub mod services;
 pub mod settings;
 pub mod state;

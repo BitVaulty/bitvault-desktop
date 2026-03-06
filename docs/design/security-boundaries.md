@@ -1,6 +1,6 @@
 # BitVault Security Boundaries Specification
 
-This document defines the security boundaries for BitVault's MVP implementation, detailing how security-critical operations are isolated from the general application. The architecture is designed to be extensible for future Lightning Network and Liquid integration.
+This document defines the security boundaries for BitVault, detailing how security-critical operations are isolated from the general application. The architecture is designed to be extensible for Lightning Network and Liquid integration.
 
 ## 1. Core Security Domain
 

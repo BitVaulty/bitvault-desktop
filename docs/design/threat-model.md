@@ -1,6 +1,6 @@
 # BitVault Threat Model
 
-This document presents a systematic analysis of security threats to BitVault, evaluating how our security architecture mitigates these threats and identifying residual risks. The threat model focuses on realistic attack scenarios specifically targeting a Bitcoin wallet with a 2-of-3 multisignature architecture.
+This document presents a systematic analysis of security threats to BitVault, evaluating how the security architecture mitigates these threats and identifying residual risks. The threat model focuses on realistic attack scenarios specifically targeting a Bitcoin wallet with a 2-of-3 multisignature architecture.
 
 ## 1. Threat Modeling Approach
 

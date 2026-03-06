@@ -1,6 +1,6 @@
 # BitVault Technical Decision Records
 
-This document records key technical decisions made during BitVault's design phase, capturing the context, rationale, alternatives considered, and security implications of each choice.
+This document records key technical decisions for BitVault, capturing the context, rationale, alternatives considered, and security implications of each choice.
 
 ## Decision Record Format
 

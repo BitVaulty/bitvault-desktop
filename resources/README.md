@@ -16,8 +16,8 @@ This directory should contain the following logo files:
 ## File Locations
 
 The application will look for these files in the following locations (in order):
-1. `resources/` (relative to the executable)
-2. `bitvault-app/resources/` (relative to workspace root)
+1. `resources/` (relative to project root when running from repo)
+2. `resources/` (relative to the executable)
 3. Executable directory + `resources/`
 
 ## Supported Formats

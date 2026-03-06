@@ -51,20 +51,17 @@ jobs:
             ${{ runner.os }}-cargo-nightly-
       
       - name: Build
-        working-directory: bitvault-app
         run: cargo build --release
       
       - name: Package binary
         shell: bash
-        working-directory: bitvault-app
         run: |
-          # Platform-specific packaging
           if [ "${{ runner.os }}" == "Linux" ]; then
-            tar czf ../../bitvault-desktop-nightly-linux-x86_64-$(date +%Y-%m-%d).tar.gz target/release/bitvault-app
+            tar czf bitvault-desktop-nightly-linux-x86_64-$(date +%Y-%m-%d).tar.gz target/release/bitvault-app
           elif [ "${{ runner.os }}" == "macOS" ]; then
-            tar czf ../../bitvault-desktop-nightly-macos-$(date +%Y-%m-%d).tar.gz target/release/bitvault-app
+            tar czf bitvault-desktop-nightly-macos-$(date +%Y-%m-%d).tar.gz target/release/bitvault-app
           elif [ "${{ runner.os }}" == "Windows" ]; then
-            powershell Compress-Archive -Path target/release/bitvault-app.exe -DestinationPath ../../bitvault-desktop-nightly-windows-x86_64-$(date +%Y-%m-%d).zip
+            powershell Compress-Archive -Path target/release/bitvault-app.exe -DestinationPath bitvault-desktop-nightly-windows-x86_64-$(date +%Y-%m-%d).zip
           fi
       
       - name: Generate checksum

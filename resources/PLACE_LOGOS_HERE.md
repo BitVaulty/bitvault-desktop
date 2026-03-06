@@ -18,7 +18,7 @@
 
 Place both files directly in this directory:
 ```
-/home/user/src/bitvault-org/bitvault-desktop/bitvault-app/resources/
+/home/user/src/bitvault-org/bitvault-desktop/resources/
 ```
 
 ## Supported Formats
@@ -28,7 +28,7 @@ Place both files directly in this directory:
 
 ## After Placing Files
 
-1. Rebuild the app: `cargo build --release -p bitvault-app`
+1. Rebuild the app: `cargo build --release`
 2. Run the app - the logos should appear automatically
 
 ## Debugging

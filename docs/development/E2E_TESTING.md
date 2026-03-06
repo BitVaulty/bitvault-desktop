@@ -8,7 +8,7 @@ This guide explains how to run and write end-to-end (E2E) tests for the BitVault
 
 ### Run All E2E Tests
 ```bash
-cd bitvault-desktop/bitvault-app
+cd bitvault-desktop
 cargo test --test e2e_test
 ```
 
@@ -29,7 +29,7 @@ cargo test
 
 ## Test Structure
 
-E2E tests are located in `bitvault-desktop/bitvault-app/tests/e2e_test.rs`.
+E2E tests are located in `bitvault-desktop/tests/e2e_test.rs`.
 
 ### Test Categories
 
@@ -213,9 +213,9 @@ cargo test --test e2e_test test_name -- --nocapture
 cargo test --test e2e_test -- --test-threads=1
 ```
 
-## Future Improvements
+## Potential Enhancements
 
-Potential enhancements to the E2E testing framework:
+Possible improvements to the E2E testing framework:
 
 1. **Screenshot Testing**: Compare rendered outputs
 2. **Visual Regression Testing**: Detect UI changes
@@ -226,5 +226,5 @@ Potential enhancements to the E2E testing framework:
 ## Related Documentation
 
 - [Testing Strategy](../design/testing-strategy.md)
-- [Development Guide](./development.md)
-- [UI Components](../design/ui-components.md)
+- [Contribution Guidelines](./contribution-guidelines.md)
+- [Architecture Overview](../design/architecture-overview.md)

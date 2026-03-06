@@ -1,38 +1,91 @@
-[workspace]
-resolver = "2"
-default-members = ["bitvault-app"]
-members = [
-    "bitvault-app",    # Main egui application
-]
-
-# Workspace-wide settings (shared by all members)
-[workspace.package]
+[package]
+name = "bitvault-app"
 version = "0.1.0"
 edition = "2021"
 authors = ["BitVault Team"]
 repository = "https://github.com/BitVaulty/bitvault-desktop"
 
-# Shared dependencies across workspace members
-[workspace.dependencies]
-# Common dependencies
+[lib]
+name = "bitvault_app"
+path = "src/lib.rs"
+
+[features]
+default = ["native"]
+# Native: desktop/mobile with SQLite, HTTP, file system (used by app_state cfg)
+native = []
+
+[dependencies]
+# GUI
+eframe = "0.27"
+egui = "0.27"
+egui_extras = { version = "0.27", features = ["svg"] }
+
+# SVG icon rendering
+resvg = "0.37"
+usvg = "0.37"
+tiny-skia = "0.11"
+lazy_static = "1.4"
+
+# Bitcoin - Use directly, no wrappers
+bdk = { version = "0.30", features = ["keys-bip39", "sqlite"] }
+bitcoin = "0.32"
+secp256k1 = "0.28"
+bip39 = "2.0"
+rand = "0.8"
+
+# Shared library dependency
+# CI uses git, local dev uses path override via .cargo/config.toml
+bitvault-common = { git = "https://github.com/BitVaulty/bitvault-common.git", branch = "dev", features = ["keyring-storage"] }
+
+# UR/QR
+ur = "0.4.1"
+qrcode = "0.14"
+quircs = "0.10"
+ciborium = "0.2"
+image = "0.25"
+rfd = "0.14"  # File dialogs for image selection
+nokhwa = { version = "0.10", features = ["input-native"] }  # Camera capture
+
+# Infrastructure
+reqwest = { version = "0.12", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+keyring = "2.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1.0.86"
+thiserror = "1.0"
+base64 = "0.22"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+notify-rust = "4.11"
+chrono = { version = "0.4", features = ["serde"] }
+bs58 = "0.5"
+
+# Logging
+simple_logger = "5.0"
 log = "0.4"
 
-# Security-related dependencies
-zeroize = "1.7.0"
-getrandom = "0.3.2"
-aes-gcm = "0.10.3"
-rand = "0.9.0"
-rand_core = "0.9.3"
-argon2 = "0.5.2"
-hex = "0.4.3"
+# File system
+dirs = "5.0.1"
+toml = "0.8"
 
-# Bitcoin dependencies (for reference, used in bitvault-app)
-bdk = "0.30"
-bitcoin = "0.32"
-secp256k1 = "0.28"
+# Platform-specific dependencies
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.52", features = [
+    "Security_Credentials_UI",
+    "Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
-# Error handling
-thiserror = "1.0"
+# macOS dependencies for biometric authentication
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.5"
+objc2-foundation = "0.2"
+
+[dev-dependencies]
+# Testing
+tempfile = "3.10"
+tokio-test = "0.4"
+mockito = "1.2"

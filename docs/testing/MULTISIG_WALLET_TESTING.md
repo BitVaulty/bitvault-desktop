@@ -72,7 +72,7 @@ BITVAULT_DATA_DIR=/tmp/bitvault-coowner cargo run
 
 ## Step-by-Step Testing Procedure
 
-### Phase 1: Main Device Setup (Owner)
+### Step 1: Main Device Setup (Owner)
 
 #### Step 1: Start Main Device
 
@@ -117,7 +117,7 @@ cargo run
 
 ---
 
-### Phase 2: Second Device Setup (Co-owner)
+### Step 2: Second Device Setup (Co-owner)
 
 #### Step 1: Start Second Device
 
@@ -156,7 +156,7 @@ cargo run
 
 ---
 
-### Phase 3: Verify Multisig Setup
+### Step 3: Verify Multisig Setup
 
 #### Check 1: Vault Addresses Match
 
@@ -192,7 +192,7 @@ cargo run
 
 ---
 
-### Phase 4: Test Transactions
+### Step 4: Test Transactions
 
 #### Test 1: Receive Transaction
 
@@ -515,5 +515,3 @@ After successful multisig setup testing:
 - **Verify synchronization** between devices
 
 ---
-
-**Last Updated**: 2025-01-20

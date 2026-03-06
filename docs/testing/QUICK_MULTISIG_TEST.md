@@ -13,7 +13,7 @@
 export BITVAULT_DATA_DIR=/tmp/bitvault-main
 
 # Run app
-cd bitvault-desktop/bitvault-app
+cd bitvault-desktop
 cargo run
 ```
 
@@ -30,7 +30,7 @@ cargo run
 export BITVAULT_DATA_DIR=/tmp/bitvault-coowner
 
 # Run app
-cd bitvault-desktop/bitvault-app
+cd bitvault-desktop
 cargo run
 ```
 

@@ -7,7 +7,6 @@
 - **Type**: Non-custodial Bitcoin wallet
 - **Scope**: Bitcoin-only (no altcoins) with optional Lightning Network support
 - **Primary Value Proposition**: Maximum security with practical usability
-- **Development Stage**: Early architecture and design phase
 
 ### Architectural Foundations
 - **Threshold Signature Model**: 2-of-3 Threshold Signature Scheme (TSS) by default
@@ -29,7 +28,6 @@
 > **Related Documents**:
 > - [security-boundaries.md](security-boundaries.md) - Detailed security isolation model
 > - [threat-model.md](threat-model.md) - Comprehensive threat analysis
-> - [platform-security.md](platform-security.md) - Platform-specific security implementations
 > - [technical-decisions.md](technical-decisions.md) - Security-related technical decisions and rationales
 
 ### Bitcoin Implementation
@@ -40,7 +38,6 @@
 
 > **Related Documents**:
 > - [bitcoin-implementation.md](bitcoin-implementation.md) - Detailed Bitcoin implementation strategy
-> - [core-api.md](core-api.md) - API specification for core Bitcoin operations
 
 ### Recovery & Backup Systems
 - **Key Share Management**: Device, backup, and recovery shares
@@ -54,14 +51,11 @@
 ### Technical Implementation
 - **Technology Stack**: Rust, Bitcoin Development Kit (BDK), egui, etc.
 - **Codebase Structure**: Modular organization with security boundaries
-  - **`bitvault-core`**: Security-critical operations (isolated context)
-  - **`bitvault-common`**: Shared components and interfaces
-  - **`bitvault-app`**: User interface and interaction (egui/eframe)
-  - **`bitvault-app`**: Platform integration
+  - **bitvault-common**: Wallet logic, VaultService, key derivation (external repo)
+  - **bitvault-desktop**: User interface (egui/eframe), services, state
 
 > **Related Documents**:
 > - [architecture-overview.md](architecture-overview.md) - Detailed module structure and relationships
-> - [implementation-plan.md](implementation-plan.md) - Prioritized implementation roadmap
 > - [testing-strategy.md](testing-strategy.md) - Comprehensive testing approach
 
 ### User Experience & Workflows
@@ -72,22 +66,6 @@
 > **Related Documents**:
 > - [user-workflows.md](user-workflows.md) - Detailed user journey definitions
 > - [ui-ux-design.md](ui-ux-design.md) - UI/UX principles and implementation
-
-## Development Status and Roadmap
-
-### Current Implementation Status
-- Basic Rust workspace structure established
-- Architectural design and security planning
-- Technology selection completed
-- Proof-of-concept security boundaries
-
-### Immediate Development Priorities
-- Core wallet functionality (BDK integration)
-- Security boundary implementation
-- Basic UI implementation with egui
-- Cross-platform compilation targets
-
-> **For detailed implementation plan**: See [implementation-plan.md](implementation-plan.md)
 
 ## Collaboration Guidelines
 

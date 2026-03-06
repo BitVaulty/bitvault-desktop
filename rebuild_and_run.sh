@@ -4,7 +4,7 @@
 cd "$(dirname "$0")"
 
 echo "Building BitVault Desktop..."
-cargo build --release -p bitvault-app
+cargo build --release
 
 if [ $? -eq 0 ]; then
     echo "Build successful! Killing existing instances..."

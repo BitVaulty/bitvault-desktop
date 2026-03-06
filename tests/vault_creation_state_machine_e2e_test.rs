@@ -201,7 +201,7 @@ fn test_vault_creation_restore_state_flow() {
     assert_eq!(state.device_role, DeviceRole::Restore);
 
     // Expected flow for restore:
-    // RoleSelection → NameVault → EnterSeedPhrase → ScanDescriptorRestore → Completed
+    // RoleSelection → NameVault → SelectSeedPhraseSize → EnterSeedPhrase → ScanDescriptorRestore → SetPin → Completed
 
     // Step 1: RoleSelection → NameVault
     state.advance_to_step(VaultCreationStep::NameVault);
@@ -209,37 +209,35 @@ fn test_vault_creation_restore_state_flow() {
 
     // Verify next_step_for_role() returns correct next step
     let next_step = state.next_step_for_role();
-    assert_eq!(next_step, Some(VaultCreationStep::EnterSeedPhrase));
+    assert_eq!(next_step, Some(VaultCreationStep::SelectSeedPhraseSize));
 
-    // Step 2: NameVault → EnterSeedPhrase (skips mnemonic generation)
+    // Step 2: NameVault → SelectSeedPhraseSize
+    state.advance_to_step(VaultCreationStep::SelectSeedPhraseSize);
+    assert_eq!(state.current_step, VaultCreationStep::SelectSeedPhraseSize);
+
+    // Step 3: SelectSeedPhraseSize → EnterSeedPhrase
     state.advance_to_step(VaultCreationStep::EnterSeedPhrase);
     assert_eq!(state.current_step, VaultCreationStep::EnterSeedPhrase);
 
-    // Step 3: EnterSeedPhrase → ScanDescriptorRestore
+    // Step 4: EnterSeedPhrase → ScanDescriptorRestore
     state.advance_to_step(VaultCreationStep::ScanDescriptorRestore);
     assert_eq!(state.current_step, VaultCreationStep::ScanDescriptorRestore);
 
-    // Step 4: ScanDescriptorRestore → Completed
+    // Step 5: ScanDescriptorRestore → SetPin
+    state.advance_to_step(VaultCreationStep::SetPin);
+    assert_eq!(state.current_step, VaultCreationStep::SetPin);
+
+    // Step 6: SetPin → Completed
     state.advance_to_step(VaultCreationStep::Completed);
     assert_eq!(state.current_step, VaultCreationStep::Completed);
 
-    // Verify complete history (4 steps)
-    assert_eq!(state.step_history.len(), 4);
+    // Verify complete history (6 steps)
+    assert_eq!(state.step_history.len(), 6);
 
-    // Verify restore flow requires both seed phrase and descriptor
-    // (This is validated in the UI, but we can verify the flow includes both steps)
-    assert_eq!(
-        state
-            .step_history
-            .contains(&VaultCreationStep::EnterSeedPhrase),
-        true
-    );
-    assert_eq!(
-        state
-            .step_history
-            .contains(&VaultCreationStep::ScanDescriptorRestore),
-        true
-    );
+    // Verify restore flow includes seed phrase size selection, seed phrase entry, and descriptor scan
+    assert!(state.step_history.contains(&VaultCreationStep::SelectSeedPhraseSize));
+    assert!(state.step_history.contains(&VaultCreationStep::EnterSeedPhrase));
+    assert!(state.step_history.contains(&VaultCreationStep::ScanDescriptorRestore));
 }
 
 #[test]
@@ -428,12 +426,12 @@ fn test_vault_creation_next_step_for_role() {
         Some(VaultCreationStep::ScanDescriptorViewOnly)
     );
 
-    // Test restore flow
+    // Test restore flow (NameVault → SelectSeedPhraseSize → EnterSeedPhrase → ...)
     state.device_role = DeviceRole::Restore;
     state.current_step = VaultCreationStep::NameVault;
     assert_eq!(
         state.next_step_for_role(),
-        Some(VaultCreationStep::EnterSeedPhrase)
+        Some(VaultCreationStep::SelectSeedPhraseSize)
     );
 }
 

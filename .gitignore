@@ -8,7 +8,7 @@
 .cargo/
 
 # Cargo
-# Note: Cargo.lock should be committed for applications (bitvault-app)
+# Note: Cargo.lock should be committed for applications
 # but not for libraries. We keep it for the app.
 # **/Cargo.lock
 

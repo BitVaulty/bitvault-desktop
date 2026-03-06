@@ -37,11 +37,10 @@ BitVault is a security-critical application that handles Bitcoin private keys an
 
 Contributions to these areas require additional scrutiny and expertise:
 
-- `bitvault-core`: Contains all cryptographic operations and key management
-- Security boundary implementations (process isolation, IPC)
+- `bitvault-common`: Wallet logic, key derivation, VaultService (external repo)
 - Cryptographic operations and key handling
 - Transaction signing and validation
-- Security policy enforcement
+- PIN and secure storage handling
 
 ## Getting Started
 
@@ -57,12 +56,12 @@ Contributions to these areas require additional scrutiny and expertise:
 1. Fork the repository on GitHub
 2. Clone your fork locally:
    ```bash
-   git clone git@github.com:YOUR_USERNAME/BitVaultWallet.git
-   cd BitVaultWallet
+   git clone git@github.com:YOUR_USERNAME/bitvault-desktop.git
+   cd bitvault-desktop
    ```
 3. Add the upstream repository:
    ```bash
-   git remote add upstream git@github.com:BitVaulty/BitVaultWallet.git
+   git remote add upstream git@github.com:BitVaulty/bitvault-desktop.git
    ```
 
 ## Development Environment

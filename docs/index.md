@@ -14,20 +14,15 @@ Welcome to the BitVault Wallet documentation. This documentation provides inform
 
 ### Development Resources
 
-- [Development Setup](../README.md#development-setup) - Prerequisites and installation
-- [Development Workflow](../README.md#development) - Development processes
-- [Building](../README.md#building) - Production builds
-- [Testing](../README.md#testing) - Test execution
-- [Linting](../README.md#linting) - Code quality enforcement
+- [Quick Start](../README.md#quick-start) - Build, run, and test
+- [Development](../README.md#development) - Platform setup and Makefile targets
+- [Arch Linux setup](setup/arch-linux-setup.md) - Platform-specific dependencies
 
 ### Project Architecture
 
-BitVault is a Rust workspace project with the following crates:
-- [bitvault-app](../bitvault-app/) - Main application crate that ties everything together
-- [bitvault-core](../bitvault-core/) - Core wallet functionality and cryptographic operations
-- [bitvault-common](../bitvault-common/) - Shared utilities and types
-- [bitvault-ipc](../bitvault-ipc/) - Inter-process communication between components
-- [bitvault-app](../bitvault-app/) - User interface components
+BitVault Desktop is a Rust application with the following structure:
+- Application source at repo root (`src/`, `tests/`)
+- [bitvault-common](https://github.com/BitVaulty/bitvault-common) - Shared utilities and types (external dependency)
 
 ## Security Overview
 
@@ -41,14 +36,18 @@ Key security features include:
 
 For security vulnerability reporting, please refer to [SECURITY.md](../SECURITY.md).
 
-## Documentation Roadmap
+## Documentation
 
-As BitVault development progresses, we plan to expand documentation in the following areas:
+### Architecture & Design
+- [architecture-overview.md](design/architecture-overview.md) - Architecture and module layout
+- [security-boundaries.md](design/security-boundaries.md) - Security boundaries
+- [threat-model.md](design/threat-model.md) - Threat analysis
+- [ai-context.md](design/ai-context.md) - AI assistance context and doc map
 
-1. **Architecture Documentation** - Detailed explanation of the wallet architecture and component interactions
-2. **API Reference** - Documentation for the wallet's core APIs and BDK integration
-3. **Security Model** - Comprehensive security model including the threat model and key management approach
-4. **User Guides** - End-user documentation for wallet setup and usage
+### Setup & Development
+- [arch-linux-setup.md](setup/arch-linux-setup.md) - Development setup (Arch Linux)
+- [contribution-guidelines.md](development/contribution-guidelines.md) - Contribution process
+- [E2E_TESTING.md](development/E2E_TESTING.md) - End-to-end testing
 
 ## Contributing to Documentation
 

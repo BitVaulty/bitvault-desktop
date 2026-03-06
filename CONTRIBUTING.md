@@ -27,12 +27,9 @@ For security issues, please follow the responsible disclosure process outlined i
 
 ### Project Structure
 
-BitVault is a Rust workspace project with the following crates:
-- `bitvault-app` - Main application crate that ties everything together
-- `bitvault-core` - Core wallet functionality and cryptographic operations
-- `bitvault-common` - Shared utilities and types
-- `bitvault-ipc` - Inter-process communication between components
-- `bitvault-app` - User interface components (egui/eframe)
+BitVault Desktop is a Rust application (single crate at repo root):
+- `src/` - Application source, UI (egui/eframe), services, state
+- `bitvault-common` - Shared utilities and types (external dependency)
 
 ### Prerequisites
 
@@ -44,8 +41,8 @@ BitVault is a Rust workspace project with the following crates:
 
 1. Fork the repository
 2. Clone your fork locally
-3. Install dependencies with `make setup`
-4. Start the development server with `make dev`
+3. Install dependencies (Rust, egui deps — see [arch-linux-setup.md](docs/setup/arch-linux-setup.md) for platform-specific steps)
+4. Build and run with `cargo run` or `make dev`
 
 ## Development Workflow
 

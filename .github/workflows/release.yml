@@ -54,24 +54,21 @@ jobs:
           key: ${{ runner.os }}-cargo-release-${{ hashFiles('Cargo.lock') }}
       
       - name: Build
-        working-directory: bitvault-app
         run: cargo build --release
       
       - name: Run tests
-        working-directory: bitvault-app
         run: cargo test --release
       
       - name: Package release
         shell: bash
-        working-directory: bitvault-app
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           if [ "${{ runner.os }}" == "Linux" ]; then
-            tar czf ../../bitvault-desktop-${VERSION}-linux-x86_64.tar.gz target/release/bitvault-app
+            tar czf bitvault-desktop-${VERSION}-linux-x86_64.tar.gz target/release/bitvault-app
           elif [ "${{ runner.os }}" == "macOS" ]; then
-            tar czf ../../bitvault-desktop-${VERSION}-macos.tar.gz target/release/bitvault-app
+            tar czf bitvault-desktop-${VERSION}-macos.tar.gz target/release/bitvault-app
           elif [ "${{ runner.os }}" == "Windows" ]; then
-            powershell Compress-Archive -Path target/release/bitvault-app.exe -DestinationPath ../../bitvault-desktop-${VERSION}-windows-x86_64.zip
+            powershell Compress-Archive -Path target/release/bitvault-app.exe -DestinationPath bitvault-desktop-${VERSION}-windows-x86_64.zip
           fi
       
       - name: Generate checksum

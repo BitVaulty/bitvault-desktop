@@ -54,17 +54,13 @@ jobs:
             ${{ runner.os }}-cargo-
       
       - name: Build
-        working-directory: bitvault-app
         run: cargo build --release
       
       - name: Run tests
-        working-directory: bitvault-app
         run: cargo test --release
       
       - name: Clippy
-        working-directory: bitvault-app
         run: cargo clippy --all-targets -- -D warnings
       
       - name: Format check
-        working-directory: bitvault-app
         run: cargo fmt --all -- --check
