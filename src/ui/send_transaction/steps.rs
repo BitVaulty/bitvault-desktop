@@ -269,7 +269,8 @@ pub fn send_hardware_wallet_signed_psbt(
         let network = app_state.network;
 
         let result = runtime.block_on(async {
-            let convenience_service = bitvault_common::ConvenienceService::new(None);
+            let convenience_service = bitvault_common::ConvenienceService::default_production()
+                .map_err(|e| e.to_string())?;
             let network_id = match network {
                 bdk::bitcoin::Network::Bitcoin => 0,
                 bdk::bitcoin::Network::Testnet => 1,
@@ -277,9 +278,11 @@ pub fn send_hardware_wallet_signed_psbt(
                 bdk::bitcoin::Network::Regtest => 1,
                 _ => 1,
             };
-            convenience_service
+            let response = convenience_service
                 .send_signed_psbt(&vault_address, &psbt_base64, network_id)
                 .await
+                .map_err(|e| e.to_string())?;
+            Ok::<_, String>(response)
         });
 
         match result {

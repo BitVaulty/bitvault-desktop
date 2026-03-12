@@ -37,7 +37,17 @@ bitvault-desktop/
 └── docs/
 ```
 
-**bitvault-common** is an external dependency (https://github.com/BitVaulty/bitvault-common). For local development, use a path override in `.cargo/config.toml` (gitignored).
+**bitvault-common** is an external dependency (https://github.com/BitVaulty/bitvault-common). By default Cargo uses the git dependency (branch `dev`). For local development when working on both repos:
+
+1. Create `.cargo/config.toml` (this directory is gitignored so the override is not committed).
+2. Add a path patch so the desktop uses your local common:
+
+```toml
+[patch."https://github.com/BitVaulty/bitvault-common.git"]
+bitvault-common = { path = "../bitvault-common" }
+```
+
+Adjust the `path` if your bitvault-common clone lives elsewhere. Without this file, CI and fresh clones use the published git dependency.
 
 ## Development
 

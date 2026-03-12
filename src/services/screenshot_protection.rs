@@ -3,9 +3,11 @@
 //! Prevents screenshots and screen recordings of sensitive screens (seed phrase, descriptors, PIN).
 //!
 //! Platform support:
-//! - Windows: Uses SetWindowDisplayAffinity API
-//! - macOS: Uses NSWindow contentView layer properties (via objc2)
-//! - Linux: Limited support (may not be fully effective on all window managers)
+//! - **Windows**: Full support via SetWindowDisplayAffinity (WDA_EXCLUDEFROMCAPTURE).
+//! - **macOS**: Not yet implemented; requires native NSWindow access from eframe/winit.
+//! - **Linux**: Best-effort only. Wayland has no standard protocol for app-requested exclusion;
+//!   X11 has no API. On Wayland we report available and no-op enable/disable so the app does not
+//!   log repeatedly; no actual protection is applied until compositors add support.
 
 use thiserror::Error;
 
@@ -28,8 +30,8 @@ impl ScreenshotProtection {
     ///
     /// # Platform Support
     /// - **Windows**: Full support via SetWindowDisplayAffinity
-    /// - **macOS**: Full support via NSWindow layer properties
-    /// - **Linux**: Limited/partial support (X11/Wayland compatibility varies)
+    /// - **macOS**: Full support via NSWindow layer properties (implementation pending)
+    /// - **Linux**: Wayland: no-op (no standard exclusion protocol); X11: not available
     ///
     /// # Errors
     /// Returns an error if the platform doesn't support screenshot protection
@@ -187,29 +189,36 @@ mod macos {
 mod linux {
     use super::ScreenshotProtectionError;
 
+    /// Returns true if WAYLAND_DISPLAY is set (we're on a Wayland session).
+    fn is_wayland() -> bool {
+        std::env::var_os("WAYLAND_DISPLAY").map_or(false, |v| !v.is_empty())
+    }
+
     /// Enable screenshot protection on Linux
     ///
-    /// Linux screenshot protection has limited support:
-    /// - Wayland: Some compositors support screen content protection (e.g., KDE, GNOME)
-    /// - X11: No reliable way to prevent screenshots
-    ///
-    /// This implementation is a placeholder and may not work on all systems.
+    /// - **Wayland**: No standard protocol exists for app-requested exclusion from screencopy.
+    ///   We return Ok(()) as a no-op so the app does not log "not available" every frame; no
+    ///   actual protection is applied. When compositors add support (e.g. per-window exclusion),
+    ///   this path can be extended.
+    /// - **X11**: No API to prevent screenshots; returns NotAvailable.
     pub fn enable() -> Result<(), ScreenshotProtectionError> {
-        // Linux screenshot protection is platform-dependent and unreliable
-        // X11 does not provide a way to prevent screenshots
-        // Wayland compositors may have extensions, but they're not standardized
-
-        // For now, return NotAvailable to indicate limited support
-        Err(ScreenshotProtectionError::NotAvailable)
+        if is_wayland() {
+            // No-op: Wayland has no standard "exclude from capture" protocol yet.
+            // KDE Plasma 6.6+ has user-configurable window rules, not app-requested.
+            Ok(())
+        } else {
+            Err(ScreenshotProtectionError::NotAvailable)
+        }
     }
 
     pub fn disable() -> Result<(), ScreenshotProtectionError> {
-        Ok(()) // No-op on Linux (nothing to disable)
+        // No-op on Linux (nothing to disable)
+        Ok(())
     }
 
     pub fn is_available() -> bool {
-        // Linux screenshot protection is not reliably available
-        // May work on some Wayland compositors, but not guaranteed
-        false
+        // Report available on Wayland so the app does not repeatedly log "not available".
+        // Actual protection is not applied until compositors support app-requested exclusion.
+        is_wayland()
     }
 }

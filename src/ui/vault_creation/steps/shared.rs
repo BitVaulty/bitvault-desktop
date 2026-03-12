@@ -1247,7 +1247,6 @@ pub fn render_set_pin(
 }
 
 /// Main device: Scan/enter co-owner's keys
-
 pub fn render_completed(
     ui: &mut egui::Ui,
     navigation: &mut Navigation,

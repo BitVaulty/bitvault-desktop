@@ -70,7 +70,9 @@ impl AppState {
             theme,
             notification_service: Arc::new(NotificationService::new()),
             #[cfg(feature = "native")]
-            convenience_service: Some(ConvenienceService::new(None)),
+            convenience_service: Some(
+                ConvenienceService::default_production().map_err(|e| e.to_string())?,
+            ),
             key_service: KeyService::new(),
             cached_mnemonic: None,
             telegram_registration_link: None,
@@ -104,7 +106,9 @@ impl AppState {
             theme: AppTheme::System,
             notification_service: Arc::new(NotificationService::new()),
             #[cfg(feature = "native")]
-            convenience_service: Some(ConvenienceService::new(None)),
+            convenience_service: Some(
+                ConvenienceService::default_production().map_err(|e| e.to_string())?,
+            ),
             key_service: KeyService::new(),
             cached_mnemonic: None,
             telegram_registration_link: None,

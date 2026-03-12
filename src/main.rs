@@ -122,7 +122,8 @@ fn main() {
             log::info!("Offline - skipping version check");
             return false;
         }
-        let cs = bitvault_common::ConvenienceService::new(None);
+        let cs = bitvault_common::ConvenienceService::default_production()
+            .unwrap_or_else(|_| bitvault_common::ConvenienceService::new(None));
         match cs.get_remote_config().await {
             Ok(config) => {
                 let current = env!("CARGO_PKG_VERSION");

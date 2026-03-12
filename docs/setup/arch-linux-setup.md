@@ -47,6 +47,17 @@ cd bitvault-desktop
 cargo build
 ```
 
+### Using a local bitvault-common (optional)
+
+If you are developing bitvault-common and desktop together, create `.cargo/config.toml` (gitignored) so the desktop uses your local common instead of the git dependency:
+
+```toml
+[patch."https://github.com/BitVaulty/bitvault-common.git"]
+bitvault-common = { path = "../bitvault-common" }
+```
+
+Adjust the path if your common repo is in a different location. See the main [README](../../README.md) for more detail.
+
 ## Step 4: Run
 
 ```bash
