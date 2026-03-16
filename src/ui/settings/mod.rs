@@ -63,7 +63,7 @@ fn export_manual_backup(ui: &mut egui::Ui, app_state: &mut AppState) {
                     state.is_exporting = false;
                 }
                 Err(e) => {
-                    state.error = Some(format!("Failed to export backup: {}", e));
+                    state.error = Some(format!("Failed to export backup: {}", crate::utils::sanitize_error_for_ui(&e)));
                     state.is_exporting = false;
                 }
             }
@@ -157,7 +157,7 @@ fn show_pcloud_backup_dialog(ui: &mut egui::Ui, app_state: &mut AppState) {
                             }
                             Err(e) => {
                                 state.error =
-                                    Some(format!("Failed to create pCloud backup: {}", e));
+                                    Some(format!("Failed to create pCloud backup: {}", crate::utils::sanitize_error_for_ui(&e)));
                                 state.is_uploading = false;
                             }
                         }
@@ -318,7 +318,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                         Err(e) => {
                             ui.colored_label(
                                 egui::Color32::RED,
-                                format!("Failed to change network: {}", e),
+                                format!("Failed to change network: {}", crate::utils::sanitize_error_for_ui(&e)),
                             );
                         }
                     }
@@ -392,7 +392,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                             Err(e) => {
                                 ui.colored_label(
                                     egui::Color32::RED,
-                                    format!("Failed to export backup: {}", e),
+                                    format!("Failed to export backup: {}", crate::utils::sanitize_error_for_ui(&e)),
                                 );
                             }
                         }

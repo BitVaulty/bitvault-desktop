@@ -400,7 +400,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     Err(e) => {
                         card(ui, |ui| {
                             ui.label(
-                                Typography::body(format!("Failed to load transactions: {}", e))
+                                Typography::body(format!("Failed to load transactions: {}", crate::utils::sanitize_error_for_ui(&e)))
                                     .color(Colors::ERROR),
                             );
                         });

@@ -49,7 +49,7 @@ impl UtxoSelectionViewState {
                     self.is_loading = false;
                 }
                 Err(e) => {
-                    self.error = Some(format!("Failed to load UTXOs: {}", e));
+                    self.error = Some(format!("Failed to load UTXOs: {}", crate::utils::sanitize_error_for_ui(&e)));
                     self.is_loading = false;
                 }
             }

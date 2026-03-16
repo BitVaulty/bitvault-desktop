@@ -194,7 +194,7 @@ pub fn render_pin_verification(ctx: &egui::Context, state: &mut PinVerificationS
                                     let minutes = seconds / 60;
                                     format!("Too many failed attempts. Please try again in {} minute(s).", minutes)
                                 }
-                                _ => format!("Error validating PIN: {}", e),
+                                _ => format!("Error validating PIN: {}", crate::utils::sanitize_error_for_ui(&e)),
                             };
                             state.error = Some(error_msg);
                             state.pin_entry.pin.clear();

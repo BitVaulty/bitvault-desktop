@@ -49,7 +49,7 @@ impl FeeRateSettingState {
                     self.is_loading = false;
                 }
                 Err(e) => {
-                    self.error = Some(format!("Failed to load fees: {}", e));
+                    self.error = Some(format!("Failed to load fees: {}", crate::utils::sanitize_error_for_ui(&e)));
                     self.is_loading = false;
                 }
             }

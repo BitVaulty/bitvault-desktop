@@ -12,7 +12,6 @@ mod utils;
 
 use eframe::egui;
 use log::LevelFilter;
-use simple_logger::SimpleLogger;
 use std::path::PathBuf;
 
 /// Try to load the app icon (BV logo)
@@ -97,8 +96,8 @@ fn is_version_at_least(current: &str, minimum: &str) -> bool {
 }
 
 fn main() {
-    // Initialize logger
-    if let Err(e) = SimpleLogger::new().with_level(LevelFilter::Info).init() {
+    // Initialize security-aware logger (sanitizes mnemonics, keys, paths from logs)
+    if let Err(e) = bitvault_common::logging::init(LevelFilter::Info) {
         eprintln!("Failed to initialize logger: {}", e);
         // Continue without logger - not critical for app startup
     }

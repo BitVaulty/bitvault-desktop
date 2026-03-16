@@ -112,7 +112,7 @@ pub fn render_enter_seed_phrase(ui: &mut egui::Ui, state: &mut VaultCreationStat
                 }
             }
             Err(e) => {
-                state.error = Some(format!("Invalid seed phrase: {}", e));
+                state.error = Some(format!("Invalid seed phrase: {}", crate::utils::sanitize_error_for_ui(&e)));
             }
         }
     }
@@ -240,7 +240,7 @@ pub fn render_scan_descriptor_restore(
                         }
                     }
                     Err(e) => {
-                        state.error = Some(format!("Failed to decode QR code: {}", e));
+                        state.error = Some(format!("Failed to decode QR code: {}", crate::utils::sanitize_error_for_ui(&e)));
                     }
                 }
             }
@@ -328,7 +328,7 @@ pub fn render_scan_descriptor_restore(
             match Mnemonic::parse_in(Language::English, state.import_mnemonic_text.trim()) {
                 Ok(m) => m,
                 Err(e) => {
-                    state.error = Some(format!("Invalid seed phrase: {}", e));
+                    state.error = Some(format!("Invalid seed phrase: {}", crate::utils::sanitize_error_for_ui(&e)));
                     return;
                 }
             };
@@ -363,11 +363,11 @@ pub fn render_scan_descriptor_restore(
                             hw_type_opt.as_deref(),
                         )
                         .await
-                        .map_err(|e| format!("Restore failed: {}", e))?;
+                        .map_err(|e| format!("Restore failed: {}", crate::utils::sanitize_error_for_ui(&e)))?;
 
                     let vault_address = vault_service
                         .get_address()
-                        .map_err(|e| format!("Failed to get address: {}", e))?;
+                        .map_err(|e| format!("Failed to get address: {}", crate::utils::sanitize_error_for_ui(&e)))?;
                     Ok((vault_service, vault_address))
                 });
 
@@ -376,7 +376,7 @@ pub fn render_scan_descriptor_restore(
                     if let Err(e) = runtime_handle.block_on(async {
                         app_state.initialize_vault_from_service(vault_service).await
                     }) {
-                        state.error = Some(format!("Failed to initialize: {}", e));
+                        state.error = Some(format!("Failed to initialize: {}", crate::utils::sanitize_error_for_ui(&e)));
                         state.is_importing = false;
                         return;
                     }

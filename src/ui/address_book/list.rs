@@ -48,7 +48,7 @@ impl AddressBookState {
                 self.is_loading = false;
             }
             Err(e) => {
-                self.error = Some(format!("Failed to load addresses: {}", e));
+                self.error = Some(format!("Failed to load addresses: {}", crate::utils::sanitize_error_for_ui(&e)));
                 self.is_loading = false;
             }
         }
@@ -193,7 +193,7 @@ pub fn render_address_book(
                                         if let Err(e) =
                                             service.delete_address(&vault_address, &entry.address)
                                         {
-                                            state.error = Some(format!("Failed to delete: {}", e));
+                                            state.error = Some(format!("Failed to delete: {}", crate::utils::sanitize_error_for_ui(&e)));
                                         } else {
                                             state.refresh(&vault_address);
                                         }
@@ -282,7 +282,7 @@ pub fn render_address_book(
                             if let Err(e) =
                                 service.update_label(&vault_address, &entry_address, label)
                             {
-                                state.error = Some(format!("Failed to update: {}", e));
+                                state.error = Some(format!("Failed to update: {}", crate::utils::sanitize_error_for_ui(&e)));
                             } else {
                                 state.refresh(&vault_address);
                                 state.edit_dialog = None;

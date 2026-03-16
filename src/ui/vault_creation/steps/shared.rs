@@ -604,7 +604,7 @@ pub fn render_mnemonic_generation(ui: &mut egui::Ui, state: &mut VaultCreationSt
                     state.advance_to_step(VaultCreationStep::DisplaySeedPhrase);
                 }
                 Err(e) => {
-                    state.error = Some(format!("Failed to generate mnemonic: {}", e));
+                    state.error = Some(format!("Failed to generate mnemonic: {}", crate::utils::sanitize_error_for_ui(&e)));
                 }
             }
         }

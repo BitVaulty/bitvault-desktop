@@ -75,7 +75,7 @@ pub fn build_preview(
                 state.is_building = false;
             }
             Err(e) => {
-                state.error = Some(format!("Failed to build transaction: {}", e));
+                state.error = Some(format!("Failed to build transaction: {}", crate::utils::sanitize_error_for_ui(&e)));
                 state.is_building = false;
             }
         }
@@ -183,7 +183,7 @@ pub fn sign_and_broadcast(
                         state.pin_verification.reset();
                     }
                     Err(e) => {
-                        state.error = Some(format!("Failed to send transaction: {}", e));
+                        state.error = Some(format!("Failed to send transaction: {}", crate::utils::sanitize_error_for_ui(&e)));
                         state.is_signing = false;
                         // Reset PIN verification on error
                         state.pin_verification.reset();
@@ -230,7 +230,7 @@ pub fn start_hardware_wallet_signing(
                     state.error = None;
                 }
                 Err(e) => {
-                    state.error = Some(format!("Failed to encode PSBT for hardware wallet: {}", e));
+                    state.error = Some(format!("Failed to encode PSBT for hardware wallet: {}", crate::utils::sanitize_error_for_ui(&e)));
                 }
             }
         } else {
@@ -316,7 +316,7 @@ pub fn send_hardware_wallet_signed_psbt(
                 state.pin_verification.reset();
             }
             Err(e) => {
-                state.error = Some(format!("Failed to send transaction: {}", e));
+                state.error = Some(format!("Failed to send transaction: {}", crate::utils::sanitize_error_for_ui(&e)));
                 state.is_signing = false;
                 state.hw_signing_mode = HardwareWalletSigningMode::None;
                 state.pin_verification.reset();

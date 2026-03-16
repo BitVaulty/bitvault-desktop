@@ -38,7 +38,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                         Err(e) => {
                             ui.colored_label(
                                 egui::Color32::RED,
-                                format!("Failed to change network: {}", e),
+                                format!("Failed to change network: {}", crate::utils::sanitize_error_for_ui(&e)),
                             );
                         }
                     }
@@ -192,7 +192,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                                                 Err(e) => {
                                                     ui.colored_label(
                                                         egui::Color32::RED,
-                                                        format!("Failed to load vault: {}", e),
+                                                        format!("Failed to load vault: {}", crate::utils::sanitize_error_for_ui(&e)),
                                                     );
                                                 }
                                             }
@@ -208,7 +208,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     }
                 }
                 Err(e) => {
-                    ui.colored_label(egui::Color32::RED, format!("Failed to list vaults: {}", e));
+                    ui.colored_label(egui::Color32::RED, format!("Failed to list vaults: {}", crate::utils::sanitize_error_for_ui(&e)));
                 }
             }
 
@@ -237,7 +237,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                                             ui.label("✓ Vault metadata copied to clipboard!");
                                         }
                                         Err(e) => {
-                                            ui.label(format!("Failed to export: {}", e));
+                                            ui.label(format!("Failed to export: {}", crate::utils::sanitize_error_for_ui(&e)));
                                         }
                                     }
                                 } else {
@@ -245,7 +245,7 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                                 }
                             }
                             Err(e) => {
-                                ui.label(format!("Failed to list vaults: {}", e));
+                                ui.label(format!("Failed to list vaults: {}", crate::utils::sanitize_error_for_ui(&e)));
                             }
                         }
                     }

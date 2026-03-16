@@ -35,7 +35,7 @@ rand = "0.8"
 
 # Shared library dependency
 # CI uses git, local dev uses path override via .cargo/config.toml
-bitvault-common = { git = "https://github.com/BitVaulty/bitvault-common.git", branch = "dev", features = ["keyring-storage"] }
+bitvault-common = { git = "https://github.com/BitVaulty/bitvault-common.git", branch = "dev", features = ["keyring-storage", "cert-pinning"] }
 
 # UR/QR
 ur = "0.4.1"
@@ -62,8 +62,7 @@ notify-rust = "4.11"
 chrono = { version = "0.4", features = ["serde"] }
 bs58 = "0.5"
 
-# Logging
-simple_logger = "5.0"
+# Logging (bitvault_common::logging::init provides SecurityLogger)
 log = "0.4"
 
 # File system

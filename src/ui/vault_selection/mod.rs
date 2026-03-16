@@ -75,7 +75,7 @@ pub fn render(
                         state.error = None;
                     }
                     Err(e) => {
-                        state.error = Some(format!("Failed to delete vault: {}", e));
+                        state.error = Some(format!("Failed to delete vault: {}", crate::utils::sanitize_error_for_ui(&e)));
                     }
                 }
             }
@@ -133,7 +133,7 @@ pub fn render(
                     state.loading = false;
                 }
                 Err(e) => {
-                    state.error = Some(format!("Failed to load vaults: {}", e));
+                    state.error = Some(format!("Failed to load vaults: {}", crate::utils::sanitize_error_for_ui(&e)));
                     state.loading = false;
                 }
             }
@@ -165,7 +165,7 @@ pub fn render(
                             state.loading = false;
                         }
                         Err(e) => {
-                            state.error = Some(format!("Failed to load vaults: {}", e));
+                            state.error = Some(format!("Failed to load vaults: {}", crate::utils::sanitize_error_for_ui(&e)));
                             state.loading = false;
                         }
                     }
@@ -348,7 +348,7 @@ pub fn render(
                                     Ok(_) => {}
                                     Err(e) => {
                                         ui.label(
-                                            Typography::caption(format!("⚠ {}", e))
+                                            Typography::caption(format!("⚠ {}", crate::utils::sanitize_error_for_ui(&e)))
                                                 .color(Colors::ERROR)
                                         );
                                     }
@@ -455,7 +455,7 @@ pub fn render(
                                         state.error = None;
                                     }
                                     Err(e) => {
-                                        state.error = Some(format!("Failed to export vault: {}", e));
+                                        state.error = Some(format!("Failed to export vault: {}", crate::utils::sanitize_error_for_ui(&e)));
                                     }
                                 }
                             }
@@ -484,7 +484,7 @@ pub fn render(
                                             state.error = None;
                                         }
                                         Err(e) => {
-                                            state.error = Some(format!("Failed to delete vault: {}", e));
+                                            state.error = Some(format!("Failed to delete vault: {}", crate::utils::sanitize_error_for_ui(&e)));
                                         }
                                     }
                                 }
@@ -530,7 +530,7 @@ pub fn render(
                                             state.error = None;
                                         }
                                         Err(e) => {
-                                            state.error = Some(format!("Failed to rename vault: {}", e));
+                                            state.error = Some(format!("Failed to rename vault: {}", crate::utils::sanitize_error_for_ui(&e)));
                                         }
                                     }
                                 }
@@ -593,14 +593,14 @@ pub fn render(
                                                         state.error = None;
                                                     }
                                                     Err(e) => {
-                                                        state.error = Some(format!("Failed to save vault metadata: {}", e));
+                                                        state.error = Some(format!("Failed to save vault metadata: {}", crate::utils::sanitize_error_for_ui(&e)));
                                                     }
                                                 }
                                             }
                                         }
                                     }
                                     Err(e) => {
-                                        state.error = Some(format!("Invalid JSON: {}", e));
+                                        state.error = Some(format!("Invalid JSON: {}", crate::utils::sanitize_error_for_ui(&e)));
                                     }
                                 }
                             }

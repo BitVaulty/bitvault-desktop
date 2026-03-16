@@ -89,7 +89,7 @@ impl NotificationCenterState {
                 self.last_fetch = Some(now);
             }
             Err(e) => {
-                self.error = Some(format!("Failed to fetch notifications: {}", e));
+                self.error = Some(format!("Failed to fetch notifications: {}", crate::utils::sanitize_error_for_ui(&e)));
             }
         }
 

@@ -181,7 +181,7 @@ fn load_transaction(
                 state.is_loading = false;
             }
             Err(e) => {
-                state.error = Some(format!("Failed to load transaction: {}", e));
+                state.error = Some(format!("Failed to load transaction: {}", crate::utils::sanitize_error_for_ui(&e)));
                 state.is_loading = false;
             }
         }
@@ -478,7 +478,7 @@ fn cancel_transaction(
                 state.pin_verification.reset();
             }
             Err(e) => {
-                state.cancel_error = Some(format!("Failed to cancel transaction: {}", e));
+                state.cancel_error = Some(format!("Failed to cancel transaction: {}", crate::utils::sanitize_error_for_ui(&e)));
                 state.is_cancelling = false;
                 // Reset PIN verification on error
                 state.pin_verification.reset();

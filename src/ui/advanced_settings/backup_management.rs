@@ -89,7 +89,7 @@ pub fn render_backup_management(
                         manual.is_exporting = false;
                     }
                     Err(e) => {
-                        manual.error = Some(format!("Failed to export backup: {}", e));
+                        manual.error = Some(format!("Failed to export backup: {}", crate::utils::sanitize_error_for_ui(&e)));
                         manual.is_exporting = false;
                     }
                 }
@@ -169,7 +169,7 @@ pub fn render_backup_management(
                                 }
                                 Err(e) => {
                                     pcloud.error =
-                                        Some(format!("Failed to create pCloud backup: {}", e));
+                                        Some(format!("Failed to create pCloud backup: {}", crate::utils::sanitize_error_for_ui(&e)));
                                     pcloud.is_uploading = false;
                                 }
                             }

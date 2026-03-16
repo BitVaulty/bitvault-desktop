@@ -143,7 +143,7 @@ fn load_subscription_data(
                 state.is_loading = false;
             }
             Err(e) => {
-                state.error = Some(format!("Failed to load subscription: {}", e));
+                state.error = Some(format!("Failed to load subscription: {}", crate::utils::sanitize_error_for_ui(&e)));
                 state.is_loading = false;
             }
         }

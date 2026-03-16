@@ -225,7 +225,7 @@ fn load_old_utxos(
                 state.advance_to_step(RecoveryStep::SelectingUtxos);
             }
             Err(e) => {
-                state.error = Some(format!("Failed to load UTXOs: {}", e));
+                state.error = Some(format!("Failed to load UTXOs: {}", crate::utils::sanitize_error_for_ui(&e)));
                 state.advance_to_step(RecoveryStep::Error);
             }
         }
@@ -284,7 +284,7 @@ fn build_recovery_preview(_ui: &mut egui::Ui, app_state: &mut AppState, state: &
                 state.advance_to_step(RecoveryStep::PreviewReady);
             }
             Err(e) => {
-                state.error = Some(format!("Failed to build preview: {}", e));
+                state.error = Some(format!("Failed to build preview: {}", crate::utils::sanitize_error_for_ui(&e)));
                 state.advance_to_step(RecoveryStep::Error);
             }
         }
@@ -325,7 +325,7 @@ fn sign_and_share(_ui: &mut egui::Ui, app_state: &mut AppState, state: &mut Reco
                 state.advance_to_step(RecoveryStep::Sharing);
             }
             Err(e) => {
-                state.error = Some(format!("Failed to sign and share: {}", e));
+                state.error = Some(format!("Failed to sign and share: {}", crate::utils::sanitize_error_for_ui(&e)));
                 state.advance_to_step(RecoveryStep::Error);
             }
         }

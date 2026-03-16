@@ -217,7 +217,7 @@ fn load_address(_ui: &mut egui::Ui, app_state: &mut AppState, state: &mut Receiv
                 }
             }
             Err(e) => {
-                state.error = Some(format!("Failed to load address: {}", e));
+                state.error = Some(format!("Failed to load address: {}", crate::utils::sanitize_error_for_ui(&e)));
                 state.is_loading = false;
             }
         }

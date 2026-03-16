@@ -178,7 +178,7 @@ fn load_old_utxos(
                 state.advance_to_step(UtxoRefreshStep::SelectingUtxos);
             }
             Err(e) => {
-                state.error = Some(format!("Failed to load UTXOs: {}", e));
+                state.error = Some(format!("Failed to load UTXOs: {}", crate::utils::sanitize_error_for_ui(&e)));
                 state.advance_to_step(UtxoRefreshStep::Error);
             }
         }
@@ -233,10 +233,10 @@ fn build_refresh_transaction(
                 if parts.len() != 2 {
                     return Err(format!("Invalid outpoint format: {}", outpoint_str));
                 }
-                let txid = Txid::from_str(parts[0]).map_err(|e| format!("Invalid txid: {}", e))?;
+                let txid = Txid::from_str(parts[0]).map_err(|e| format!("Invalid txid: {}", crate::utils::sanitize_error_for_ui(&e)))?;
                 let vout: u32 = parts[1]
                     .parse()
-                    .map_err(|e| format!("Invalid vout: {}", e))?;
+                    .map_err(|e| format!("Invalid vout: {}", crate::utils::sanitize_error_for_ui(&e)))?;
                 Ok(OutPoint { txid, vout })
             })
             .collect();
@@ -275,7 +275,7 @@ fn build_refresh_transaction(
                 state.advance_to_step(UtxoRefreshStep::Signing);
             }
             Err(e) => {
-                state.error = Some(format!("Failed to build refresh transaction: {}", e));
+                state.error = Some(format!("Failed to build refresh transaction: {}", crate::utils::sanitize_error_for_ui(&e)));
                 state.advance_to_step(UtxoRefreshStep::Error);
             }
         }
@@ -324,7 +324,7 @@ fn sign_refresh_transaction(
                 state.advance_to_step(UtxoRefreshStep::Sharing);
             }
             Err(e) => {
-                state.error = Some(format!("Failed to sign refresh transaction: {}", e));
+                state.error = Some(format!("Failed to sign refresh transaction: {}", crate::utils::sanitize_error_for_ui(&e)));
                 state.advance_to_step(UtxoRefreshStep::Error);
             }
         }

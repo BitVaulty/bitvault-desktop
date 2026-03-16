@@ -245,7 +245,7 @@ pub fn render_pin_setup(
                                         pin_set = true;
                                     }
                                     Err(e) => {
-                                        state.error = Some(format!("Failed to save PIN: {}", e));
+                                        state.error = Some(format!("Failed to save PIN: {}", crate::utils::sanitize_error_for_ui(&e)));
                                         state.confirm_pin.clear();
                                     }
                                 }

@@ -181,7 +181,7 @@ fn decode_ur_parts(_ui: &mut egui::Ui, app_state: &mut AppState, state: &mut QrS
                 state.is_scanning = false;
             }
             Err(e) => {
-                state.error = Some(format!("Failed to decode UR: {}", e));
+                state.error = Some(format!("Failed to decode UR: {}", crate::utils::sanitize_error_for_ui(&e)));
             }
         }
     } else {

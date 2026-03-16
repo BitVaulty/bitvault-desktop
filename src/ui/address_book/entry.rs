@@ -93,7 +93,7 @@ pub fn render_address_entry(
                                 address_trimmed.clone(),
                                 label_opt.clone(),
                             ) {
-                                state.error = Some(format!("Failed to save: {}", e));
+                                state.error = Some(format!("Failed to save: {}", crate::utils::sanitize_error_for_ui(&e)));
                             } else {
                                 state.address = address_trimmed.clone();
                                 state.label = label.clone();
@@ -102,7 +102,7 @@ pub fn render_address_entry(
                             }
                         }
                         Err(e) => {
-                            state.error = Some(format!("Invalid Bitcoin address: {}", e));
+                            state.error = Some(format!("Invalid Bitcoin address: {}", crate::utils::sanitize_error_for_ui(&e)));
                         }
                     }
                 }

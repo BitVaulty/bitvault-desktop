@@ -256,7 +256,7 @@ fn refresh_transactions(_ui: &mut egui::Ui, app_state: &mut AppState) {
                     state.is_loading = false;
                 }
                 Err(e) => {
-                    state.error = Some(format!("Failed to load transactions: {}", e));
+                    state.error = Some(format!("Failed to load transactions: {}", crate::utils::sanitize_error_for_ui(&e)));
                     state.is_loading = false;
                 }
             }

@@ -152,7 +152,7 @@ fn render_security_settings(ui: &mut egui::Ui) {
                     Err(e) => {
                         ui.colored_label(
                             egui::Color32::RED,
-                            format!("Failed to reset PIN: {}", e)
+                            format!("Failed to reset PIN: {}", crate::utils::sanitize_error_for_ui(&e))
                         );
                         eprintln!("[PIN_RESET] Failed to delete PIN: {:?}", e);
                     }

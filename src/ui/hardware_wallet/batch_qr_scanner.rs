@@ -86,7 +86,7 @@ impl BatchQrScannerState {
                             Ok(true)
                         }
                         Err(e) => {
-                            self.error = Some(format!("Failed to decode message: {}", e));
+                            self.error = Some(format!("Failed to decode message: {}", crate::utils::sanitize_error_for_ui(&e)));
                             Err(self.error.clone().unwrap())
                         }
                     }
@@ -97,7 +97,7 @@ impl BatchQrScannerState {
                 }
             }
             Err(e) => {
-                let err_msg = format!("Invalid UR part: {}", e);
+                let err_msg = format!("Invalid UR part: {}", crate::utils::sanitize_error_for_ui(&e));
                 self.error = Some(err_msg.clone());
                 Err(err_msg)
             }
@@ -200,7 +200,7 @@ pub fn render_batch_qr_scanner(
                                 }
                             }
                             Err(e) => {
-                                state.error = Some(format!("Failed to decode QR code: {}", e));
+                                state.error = Some(format!("Failed to decode QR code: {}", crate::utils::sanitize_error_for_ui(&e)));
                             }
                         }
                     }

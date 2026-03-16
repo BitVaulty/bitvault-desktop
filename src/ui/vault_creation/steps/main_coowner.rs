@@ -242,7 +242,7 @@ pub fn render_scan_coowner_keys(
                         }
                     }
                     Err(e) => {
-                        state.error = Some(format!("Failed to decode QR code: {}", e));
+                        state.error = Some(format!("Failed to decode QR code: {}", crate::utils::sanitize_error_for_ui(&e)));
                     }
                 }
             }
@@ -354,7 +354,7 @@ pub fn render_scan_coowner_keys(
                     state.error = None;
                 }
                 Err(e) => {
-                    state.error = Some(format!("Failed to start camera: {}", e));
+                    state.error = Some(format!("Failed to start camera: {}", crate::utils::sanitize_error_for_ui(&e)));
                 }
             }
         }
@@ -459,7 +459,7 @@ pub fn render_scan_coowner_keys(
                                         }
                                         Err(e) => {
                                             state.error =
-                                                Some(format!("Failed to decode public key: {}", e));
+                                                Some(format!("Failed to decode public key: {}", crate::utils::sanitize_error_for_ui(&e)));
                                             return;
                                         }
                                     }
@@ -481,7 +481,7 @@ pub fn render_scan_coowner_keys(
                                     }
                                 }
                                 Err(e) => {
-                                    state.error = Some(format!("Failed to decrypt file: {}", e));
+                                    state.error = Some(format!("Failed to decrypt file: {}", crate::utils::sanitize_error_for_ui(&e)));
                                 }
                             }
                         }
@@ -494,7 +494,7 @@ pub fn render_scan_coowner_keys(
                     }
                 }
                 Err(e) => {
-                    state.error = Some(format!("Failed to read file: {}", e));
+                    state.error = Some(format!("Failed to read file: {}", crate::utils::sanitize_error_for_ui(&e)));
                 }
             }
         }
@@ -588,11 +588,11 @@ pub fn render_display_own_keys(
                         state.my_keys_text = Some(keys_text);
                     }
                     Err(e) => {
-                        state.error = Some(format!("Failed to encode keys: {}", e));
+                        state.error = Some(format!("Failed to encode keys: {}", crate::utils::sanitize_error_for_ui(&e)));
                     }
                 },
                 Err(e) => {
-                    state.error = Some(format!("Failed to derive keys: {}", e));
+                    state.error = Some(format!("Failed to derive keys: {}", crate::utils::sanitize_error_for_ui(&e)));
                 }
             }
         }
@@ -650,7 +650,7 @@ pub fn render_display_own_keys(
                                         }
                                         Err(e) => {
                                             state.error =
-                                                Some(format!("Failed to save file: {}", e));
+                                                Some(format!("Failed to save file: {}", crate::utils::sanitize_error_for_ui(&e)));
                                         }
                                     },
                                     Err(e) => {
@@ -662,12 +662,12 @@ pub fn render_display_own_keys(
                                 }
                             }
                             Err(e) => {
-                                state.error = Some(format!("Failed to encrypt keys: {}", e));
+                                state.error = Some(format!("Failed to encrypt keys: {}", crate::utils::sanitize_error_for_ui(&e)));
                             }
                         }
                     }
                     Err(e) => {
-                        state.error = Some(format!("Failed to parse keys: {}", e));
+                        state.error = Some(format!("Failed to parse keys: {}", crate::utils::sanitize_error_for_ui(&e)));
                     }
                 }
             }
@@ -688,7 +688,7 @@ pub fn render_display_own_keys(
                                 state.saved_key_file = None;
                             }
                             Err(e) => {
-                                state.error = Some(format!("Failed to delete: {}", e));
+                                state.error = Some(format!("Failed to delete: {}", crate::utils::sanitize_error_for_ui(&e)));
                             }
                         }
                     }
@@ -749,7 +749,7 @@ pub fn render_enter_exchange_data(
                     state.error = None;
                 }
                 Err(e) => {
-                    state.error = Some(format!("Failed to start camera: {}", e));
+                    state.error = Some(format!("Failed to start camera: {}", crate::utils::sanitize_error_for_ui(&e)));
                 }
             }
         }
@@ -853,7 +853,7 @@ pub fn render_enter_exchange_data(
                                     }
                                     Err(e) => {
                                         state.error =
-                                            Some(format!("Failed to decrypt file: {}", e));
+                                            Some(format!("Failed to decrypt file: {}", crate::utils::sanitize_error_for_ui(&e)));
                                     }
                                 }
                             } else {
@@ -869,7 +869,7 @@ pub fn render_enter_exchange_data(
                     }
                 }
                 Err(e) => {
-                    state.error = Some(format!("Failed to read file: {}", e));
+                    state.error = Some(format!("Failed to read file: {}", crate::utils::sanitize_error_for_ui(&e)));
                 }
             }
         }
@@ -912,7 +912,7 @@ pub fn render_enter_exchange_data(
                     }
                 }
                 Err(e) => {
-                    state.error = Some(format!("Invalid configuration data: {}", e));
+                    state.error = Some(format!("Invalid configuration data: {}", crate::utils::sanitize_error_for_ui(&e)));
                 }
             }
         }
@@ -989,7 +989,7 @@ pub fn render_email_auth(
                             state.is_sending_code = false;
                         }
                         Err(e) => {
-                            state.error = Some(format!("Failed to send code: {}", e));
+                            state.error = Some(format!("Failed to send code: {}", crate::utils::sanitize_error_for_ui(&e)));
                             state.is_sending_code = false;
                         }
                     }
@@ -1206,7 +1206,7 @@ pub fn render_create_vault(
                                 Ok(s) => Some(s),
                                 Err(e) => {
                                     state.error =
-                                        Some(format!("Failed to serialize HW keys: {}", e));
+                                        Some(format!("Failed to serialize HW keys: {}", crate::utils::sanitize_error_for_ui(&e)));
                                     state.is_creating = false;
                                     return;
                                 }
@@ -1231,7 +1231,7 @@ pub fn render_create_vault(
                                 Ok(s) => Some(s),
                                 Err(e) => {
                                     state.error =
-                                        Some(format!("Failed to serialize first HW keys: {}", e));
+                                        Some(format!("Failed to serialize first HW keys: {}", crate::utils::sanitize_error_for_ui(&e)));
                                     state.is_creating = false;
                                     return;
                                 }
@@ -1250,7 +1250,7 @@ pub fn render_create_vault(
                                 Ok(s) => Some(s),
                                 Err(e) => {
                                     state.error =
-                                        Some(format!("Failed to serialize second HW keys: {}", e));
+                                        Some(format!("Failed to serialize second HW keys: {}", crate::utils::sanitize_error_for_ui(&e)));
                                     state.is_creating = false;
                                     return;
                                 }
@@ -1346,7 +1346,7 @@ pub fn render_create_vault(
                         if let Err(e) = runtime_handle.block_on(async {
                             app_state.initialize_vault_from_service(vault_service).await
                         }) {
-                            state.error = Some(format!("Failed to initialize vault: {}", e));
+                            state.error = Some(format!("Failed to initialize vault: {}", crate::utils::sanitize_error_for_ui(&e)));
                             state.is_creating = false;
                             return;
                         }
@@ -1378,7 +1378,7 @@ pub fn render_create_vault(
                         }
                     }
                     Err(e) => {
-                        state.error = Some(format!("Failed to create vault: {}", e));
+                        state.error = Some(format!("Failed to create vault: {}", crate::utils::sanitize_error_for_ui(&e)));
                         state.is_creating = false;
                     }
                 }
@@ -1462,7 +1462,7 @@ pub fn render_display_exchange_data(
                                             }
                                             Err(e) => {
                                                 state.error =
-                                                    Some(format!("Failed to save file: {}", e));
+                                                    Some(format!("Failed to save file: {}", crate::utils::sanitize_error_for_ui(&e)));
                                             }
                                         },
                                         Err(e) => {
@@ -1475,7 +1475,7 @@ pub fn render_display_exchange_data(
                                 }
                                 Err(e) => {
                                     state.error =
-                                        Some(format!("Failed to encrypt exchange data: {}", e));
+                                        Some(format!("Failed to encrypt exchange data: {}", crate::utils::sanitize_error_for_ui(&e)));
                                 }
                             }
                         } else {
@@ -1489,13 +1489,13 @@ pub fn render_display_exchange_data(
                                     });
                                 }
                                 Err(e) => {
-                                    state.error = Some(format!("Failed to save file: {}", e));
+                                    state.error = Some(format!("Failed to save file: {}", crate::utils::sanitize_error_for_ui(&e)));
                                 }
                             }
                         }
                     }
                     Err(e) => {
-                        state.error = Some(format!("Failed to parse exchange data: {}", e));
+                        state.error = Some(format!("Failed to parse exchange data: {}", crate::utils::sanitize_error_for_ui(&e)));
                     }
                 }
             }
@@ -1521,7 +1521,7 @@ pub fn render_display_exchange_data(
                             });
                         }
                         Err(e) => {
-                            state.error = Some(format!("Failed to delete file: {}", e));
+                            state.error = Some(format!("Failed to delete file: {}", crate::utils::sanitize_error_for_ui(&e)));
                         }
                     }
                 }

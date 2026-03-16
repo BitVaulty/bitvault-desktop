@@ -127,7 +127,7 @@ pub fn render_scan_descriptor_view_only(ui: &mut egui::Ui, state: &mut VaultCrea
                                                 state.error = None;
                                             }
                                             Err(e) => {
-                                                state.error = Some(format!("Failed to parse hardware wallet descriptor: {}", e));
+                                                state.error = Some(format!("Failed to parse hardware wallet descriptor: {}", crate::utils::sanitize_error_for_ui(&e)));
                                             }
                                         }
                                     } else {
@@ -151,7 +151,7 @@ pub fn render_scan_descriptor_view_only(ui: &mut egui::Ui, state: &mut VaultCrea
                         }
                     }
                     Err(e) => {
-                        state.error = Some(format!("Failed to decode QR code: {}", e));
+                        state.error = Some(format!("Failed to decode QR code: {}", crate::utils::sanitize_error_for_ui(&e)));
                     }
                 }
             }
@@ -282,11 +282,11 @@ pub fn render_view_only_complete(
                                 None,
                             )
                             .await
-                            .map_err(|e| format!("Setup failed: {}", e))?;
+                            .map_err(|e| format!("Setup failed: {}", crate::utils::sanitize_error_for_ui(&e)))?;
 
                         let vault_address = vault_service
                             .get_address()
-                            .map_err(|e| format!("Failed to get address: {}", e))?;
+                            .map_err(|e| format!("Failed to get address: {}", crate::utils::sanitize_error_for_ui(&e)))?;
                         Ok((vault_service, vault_address))
                     });
 
@@ -295,7 +295,7 @@ pub fn render_view_only_complete(
                         if let Err(e) = runtime_handle.block_on(async {
                             app_state.initialize_vault_from_service(vault_service).await
                         }) {
-                            state.error = Some(format!("Failed to initialize: {}", e));
+                            state.error = Some(format!("Failed to initialize: {}", crate::utils::sanitize_error_for_ui(&e)));
                             state.is_importing = false;
                             return;
                         }

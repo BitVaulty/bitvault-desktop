@@ -335,7 +335,7 @@ impl SQLiteTransactionStorage {
         // Insert new entry with current timestamp
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs() as i64;
 
         self.db.execute(
@@ -419,8 +419,4 @@ pub enum SQLiteTransactionStorageError {
     SerializationError(String),
 }
 
-impl Default for SQLiteTransactionStorage {
-    fn default() -> Self {
-        Self::new().expect("Failed to create SQLiteTransactionStorage")
-    }
-}
+// No Default impl: use SQLiteTransactionStorage::new() and handle Result to avoid panic on init failure.

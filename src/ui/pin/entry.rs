@@ -80,7 +80,7 @@ impl PinEntryState {
                 false
             }
             BiometricResult::Failed(e) => {
-                self.error = Some(format!("Biometric authentication failed: {}", e));
+                self.error = Some(format!("Biometric authentication failed: {}", crate::utils::sanitize_error_for_ui(&e)));
                 false
             }
             BiometricResult::NotAvailable | BiometricResult::NotEnrolled => {
@@ -255,7 +255,7 @@ pub fn render_pin_entry(
                             }
                             _ => {
                                 eprintln!("[PIN_ERROR] Validation error: {:?}", e);
-                                format!("Error validating PIN: {}", e)
+                                format!("Error validating PIN: {}", crate::utils::sanitize_error_for_ui(&e))
                             }
                         };
                         state.error = Some(error_msg);
@@ -290,7 +290,7 @@ pub fn render_pin_entry(
                             pin_validated = true; // Allow user to proceed
                         }
                         Err(e) => {
-                            state.error = Some(format!("Failed to reset PIN: {}", e));
+                            state.error = Some(format!("Failed to reset PIN: {}", crate::utils::sanitize_error_for_ui(&e)));
                             eprintln!("[PIN_RESET] Failed to delete PIN: {:?}", e);
                         }
                     }
