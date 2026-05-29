@@ -52,9 +52,10 @@ fn export_manual_backup(ui: &mut egui::Ui, app_state: &mut AppState) {
         if let (Some(vault_service), Some(runtime)) =
             (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
         {
+            let backup_email = app_state.key_service.get_email().ok().flatten();
             let result = runtime.block_on(async {
                 let vs = vault_service.read().await;
-                vs.export_manual_backup().await
+                vs.export_manual_backup(backup_email.as_deref()).await
             });
 
             match result {
@@ -371,10 +372,13 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                         let rt: &tokio::runtime::Runtime = runtime;
 
                         // Use block_on to export synchronously (acceptable for one-time operation)
+                        let backup_email = app_state.key_service.get_email().ok().flatten();
                         let result: std::result::Result<String, bitvault_common::BitVaultError> =
                             rt.block_on(async {
                                 let vault_guard = vault_service_clone.read().await;
-                                vault_guard.export_manual_backup().await
+                                vault_guard
+                                    .export_manual_backup(backup_email.as_deref())
+                                    .await
                             });
 
                         match result {

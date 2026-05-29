@@ -1,0 +1,33 @@
+#!/bin/sh
+# Secret scan: Gitleaks (rules aligned with GitHub secret scanning partners). Requires gitleaks v8+.
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT" || exit 1
+
+if [ "${SKIP_GITLEAKS:-}" = "1" ]; then
+  echo "Gitleaks skipped (SKIP_GITLEAKS=1)." >&2
+else
+# Git hooks often run with a minimal PATH; ensure brew and gitleaks resolve after install.
+if command -v brew >/dev/null 2>&1; then
+  eval "$(brew shellenv 2>/dev/null)" || true
+fi
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  if [ "${SKIP_GITLEAKS_INSTALL:-}" = "1" ]; then
+    echo "gitleaks not in PATH; auto-install disabled (SKIP_GITLEAKS_INSTALL=1)." >&2
+    exit 1
+  fi
+  if command -v brew >/dev/null 2>&1; then
+    echo "gitleaks not found; installing via Homebrew (requires network)..." >&2
+    brew install gitleaks || exit 1
+    eval "$(brew shellenv 2>/dev/null)" || true
+  fi
+  if ! command -v gitleaks >/dev/null 2>&1; then
+    echo "gitleaks is required for this pre-commit hook. Install manually: https://github.com/gitleaks/gitleaks#installing" >&2
+    exit 1
+  fi
+fi
+
+gitleaks git --pre-commit --redact --staged --verbose || exit $?
+fi
+exit 0

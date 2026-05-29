@@ -333,6 +333,14 @@ pub fn render_scan_descriptor_restore(
                 }
             };
 
+        // HW single-device restore: name the hardware wallet before importing
+        if state.hw_batch_qr_scanner_state.success && state.selected_hw_type.is_some() {
+            state.hw_naming_index = 0;
+            state.error = None;
+            state.advance_to_step(crate::ui::vault_creation::VaultCreationStep::NameHardwareWallet);
+            return;
+        }
+
         state.is_importing = true;
         state.error = None;
 
@@ -361,6 +369,7 @@ pub fn render_scan_descriptor_restore(
                             &vault_name,
                             false,
                             hw_type_opt.as_deref(),
+                            None,
                         )
                         .await
                         .map_err(|e| format!("Restore failed: {}", crate::utils::sanitize_error_for_ui(&e)))?;

@@ -51,6 +51,15 @@ impl PcloudBackupService {
             .request_pcloud_backup(request)
             .await
             .map_err(|e| match e {
+                ConvenienceServiceError::NoInternetConnection => {
+                    PcloudBackupServiceError::NetworkError("No internet connection".to_string())
+                }
+                ConvenienceServiceError::IapLifetimeConflict => {
+                    PcloudBackupServiceError::ServerError {
+                        message: "Account already has a lifetime subscription".to_string(),
+                        status_code: 409,
+                    }
+                }
                 ConvenienceServiceError::NetworkError(msg) => {
                     PcloudBackupServiceError::NetworkError(msg)
                 }

@@ -128,6 +128,8 @@ pub fn render(
                     // Show cancel button for pending outgoing transactions
                     if is_pending && is_outgoing {
                         ui.add_space(Spacing::LG);
+                        render_hw_signers_section(ui, app_state, &ctx);
+                        ui.add_space(Spacing::MD);
                         render_cancel_section(ui, app_state, &mut state, &tx_id, &ctx);
                     }
                 } else {
@@ -397,10 +399,12 @@ fn render_cancel_section(
             // Action buttons
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                    let button_text = if state.is_cancelling {
-                        "Cancelling..."
+                    let button_text: String = if state.is_cancelling {
+                        "Cancelling...".to_string()
                     } else {
-                        "Cancel Transaction (RBF)"
+                        cancel_button_label(app_state)
+                            .map(|label| format!("Cancel with {}", label))
+                            .unwrap_or_else(|| "Cancel Transaction (RBF)".to_string())
                     };
 
                     let button_enabled = !state.is_cancelling && !state.cancel_success;
@@ -488,4 +492,85 @@ fn cancel_transaction(
         state.cancel_error = Some("Vault not loaded or runtime not available".to_string());
         state.is_cancelling = false;
     }
+}
+
+fn vault_network_str(network: bdk::bitcoin::Network) -> &'static str {
+    match network {
+        bdk::bitcoin::Network::Bitcoin => "bitcoin",
+        bdk::bitcoin::Network::Testnet => "testnet",
+        bdk::bitcoin::Network::Signet => "signet",
+        bdk::bitcoin::Network::Regtest => "regtest",
+        _ => "bitcoin",
+    }
+}
+
+fn backup_info_for_loaded_vault(app_state: &AppState) -> Option<crate::services::key_service::BackupInfo> {
+    let address = app_state
+        .vault_data
+        .lock()
+        .ok()?
+        .receive_address
+        .clone()?;
+    app_state
+        .key_service
+        .get_backup_info(&address, vault_network_str(app_state.network))
+        .ok()
+}
+
+fn render_hw_signers_section(ui: &mut egui::Ui, app_state: &AppState, ctx: &egui::Context) {
+    let Some(info) = backup_info_for_loaded_vault(app_state) else {
+        return;
+    };
+
+    if info.hardware_wallet_types.is_empty() && !info.is_single_device {
+        return;
+    }
+
+    card(ui, |ui| {
+        ui.vertical(|ui| {
+            ui.add_space(Spacing::MD);
+            ui.label(
+                Typography::heading_small("Transaction signers")
+                    .color(Colors::text_primary(ctx)),
+            );
+            ui.add_space(Spacing::SM);
+
+            if info.hardware_wallet_types.is_empty() {
+                ui.label(
+                    Typography::body("Cancel with Seed Phrase")
+                        .color(Colors::text_primary(ctx)),
+                );
+            } else {
+                for (index, hw_type) in info.hardware_wallet_types.iter().enumerate() {
+                    let display = info.hardware_wallet_display_names.as_ref().and_then(|names| {
+                        names.get(index).map(|s| s.trim()).filter(|s| !s.is_empty())
+                    });
+                    let suffix = display
+                        .map(|name| format!(" | {}", name))
+                        .unwrap_or_default();
+                    ui.label(
+                        Typography::body(format!("Cancel with {}{}", hw_type, suffix))
+                            .color(Colors::text_primary(ctx)),
+                    );
+                }
+                if info.is_single_device && info.hardware_wallet_types.len() == 1 {
+                    ui.label(
+                        Typography::body("Cancel with Seed Phrase")
+                            .color(Colors::text_secondary(ctx)),
+                    );
+                }
+            }
+
+            ui.add_space(Spacing::MD);
+        });
+    });
+}
+
+fn cancel_button_label(app_state: &AppState) -> Option<String> {
+    let info = backup_info_for_loaded_vault(app_state)?;
+    if info.hardware_wallet_types.is_empty() {
+        return Some("Seed Phrase".to_string());
+    }
+    let label = info.hardware_wallet_device_type_segment(0);
+    Some(label)
 }

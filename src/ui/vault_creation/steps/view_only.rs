@@ -280,6 +280,7 @@ pub fn render_view_only_complete(
                                 &vault_name,
                                 false,
                                 None,
+                                None,
                             )
                             .await
                             .map_err(|e| format!("Setup failed: {}", crate::utils::sanitize_error_for_ui(&e)))?;

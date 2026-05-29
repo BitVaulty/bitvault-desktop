@@ -37,6 +37,10 @@ async fn test_fetch_pubkey_error_handling() {
         ConvenienceServiceError::NetworkError(_) => {
             // Expected - no server running
         }
+        ConvenienceServiceError::NoInternetConnection => {
+            // Expected - connection failed (map_reqwest_error)
+        }
+        ConvenienceServiceError::IapLifetimeConflict => {}
         ConvenienceServiceError::ServerError { .. } => {
             // Also acceptable - server responded with error
         }
@@ -211,6 +215,7 @@ async fn test_convenience_service_error_types() {
         status_code: 500,
     };
     let parse_error = ConvenienceServiceError::ParseError("Invalid JSON".to_string());
+    let offline_error = ConvenienceServiceError::NoInternetConnection;
 
     // Verify error types can be created
     match network_error {
@@ -225,6 +230,16 @@ async fn test_convenience_service_error_types() {
 
     match parse_error {
         ConvenienceServiceError::ParseError(_) => {}
+        _ => panic!("Wrong error type"),
+    }
+
+    match offline_error {
+        ConvenienceServiceError::NoInternetConnection => {}
+        _ => panic!("Wrong error type"),
+    }
+
+    match ConvenienceServiceError::IapLifetimeConflict {
+        ConvenienceServiceError::IapLifetimeConflict => {}
         _ => panic!("Wrong error type"),
     }
 }

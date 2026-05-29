@@ -14,6 +14,13 @@ fn create_default_state() -> VaultCreationState {
     VaultCreationState::default()
 }
 
+/// Advance through legal acknowledgment gates (iOS parity) before name vault.
+fn advance_past_legal_gates(state: &mut VaultCreationState) {
+    state.advance_to_step(VaultCreationStep::LegalTermsAcknowledgment);
+    state.advance_to_step(VaultCreationStep::LegalPrivacyAcknowledgment);
+    state.advance_to_step(VaultCreationStep::NameVault);
+}
+
 #[test]
 fn test_vault_creation_main_device_state_flow() {
     // Test: Complete state machine flow for main device creation
@@ -25,14 +32,19 @@ fn test_vault_creation_main_device_state_flow() {
     assert_eq!(state.device_role, DeviceRole::Main);
 
     // Expected flow for main device:
-    // RoleSelection → NameVault → SetTimeDelay → MnemonicGeneration →
+    // RoleSelection → LegalTerms → LegalPrivacy → NameVault → SetTimeDelay → MnemonicGeneration →
     // DisplaySeedPhrase → VerifySeedPhrase → SetPin → ScanCoownerKeys →
     // EmailAuth → CreateVault → DisplayExchangeData → Completed
 
-    // Step 1: RoleSelection → NameVault
-    state.advance_to_step(VaultCreationStep::NameVault);
+    assert_eq!(
+        state.next_step_for_role(),
+        Some(VaultCreationStep::LegalTermsAcknowledgment)
+    );
+
+    // Step 1: RoleSelection → legal gates → NameVault
+    advance_past_legal_gates(&mut state);
     assert_eq!(state.current_step, VaultCreationStep::NameVault);
-    assert_eq!(state.step_history.len(), 1);
+    assert_eq!(state.step_history.len(), 3);
     assert_eq!(state.step_history[0], VaultCreationStep::RoleSelection);
 
     // Verify next_step_for_role() returns correct next step
@@ -42,7 +54,7 @@ fn test_vault_creation_main_device_state_flow() {
     // Step 2: NameVault → SetTimeDelay
     state.advance_to_step(VaultCreationStep::SetTimeDelay);
     assert_eq!(state.current_step, VaultCreationStep::SetTimeDelay);
-    assert_eq!(state.step_history.len(), 2);
+    assert_eq!(state.step_history.len(), 4);
 
     // Step 3: SetTimeDelay → MnemonicGeneration
     state.advance_to_step(VaultCreationStep::MnemonicGeneration);
@@ -80,8 +92,8 @@ fn test_vault_creation_main_device_state_flow() {
     state.advance_to_step(VaultCreationStep::Completed);
     assert_eq!(state.current_step, VaultCreationStep::Completed);
 
-    // Verify complete history
-    assert_eq!(state.step_history.len(), 11);
+    // Verify complete history (13 steps including legal gates)
+    assert_eq!(state.step_history.len(), 13);
 }
 
 #[test]
@@ -95,12 +107,12 @@ fn test_vault_creation_coowner_state_flow() {
     assert_eq!(state.device_role, DeviceRole::Coowner);
 
     // Expected flow for co-owner:
-    // RoleSelection → NameVault → MnemonicGeneration → DisplaySeedPhrase →
+    // RoleSelection → LegalTerms → LegalPrivacy → NameVault → MnemonicGeneration → DisplaySeedPhrase →
     // VerifySeedPhrase → SetPin → DisplayOwnKeys → EnterExchangeData →
     // EmailAuth → CreateVault → Completed
 
-    // Step 1: RoleSelection → NameVault
-    state.advance_to_step(VaultCreationStep::NameVault);
+    // Step 1: RoleSelection → legal gates → NameVault
+    advance_past_legal_gates(&mut state);
     assert_eq!(state.current_step, VaultCreationStep::NameVault);
 
     // Verify next_step_for_role() returns correct next step (skips SetTimeDelay)
@@ -143,8 +155,8 @@ fn test_vault_creation_coowner_state_flow() {
     state.advance_to_step(VaultCreationStep::Completed);
     assert_eq!(state.current_step, VaultCreationStep::Completed);
 
-    // Verify complete history (10 steps, one less than main device)
-    assert_eq!(state.step_history.len(), 10);
+    // Verify complete history (12 steps including legal gates)
+    assert_eq!(state.step_history.len(), 12);
 }
 
 #[test]
@@ -158,10 +170,10 @@ fn test_vault_creation_view_only_state_flow() {
     assert_eq!(state.device_role, DeviceRole::ViewOnly);
 
     // Expected flow for view-only:
-    // RoleSelection → NameVault → ScanDescriptorViewOnly → ViewOnlyComplete → Completed
+    // RoleSelection → LegalTerms → LegalPrivacy → NameVault → ScanDescriptorViewOnly → ViewOnlyComplete → Completed
 
-    // Step 1: RoleSelection → NameVault
-    state.advance_to_step(VaultCreationStep::NameVault);
+    // Step 1: RoleSelection → legal gates → NameVault
+    advance_past_legal_gates(&mut state);
     assert_eq!(state.current_step, VaultCreationStep::NameVault);
 
     // Verify next_step_for_role() returns correct next step
@@ -183,8 +195,8 @@ fn test_vault_creation_view_only_state_flow() {
     state.advance_to_step(VaultCreationStep::Completed);
     assert_eq!(state.current_step, VaultCreationStep::Completed);
 
-    // Verify complete history (4 steps, much simpler than main/co-owner)
-    assert_eq!(state.step_history.len(), 4);
+    // Verify complete history (6 steps including legal gates)
+    assert_eq!(state.step_history.len(), 6);
 
     // Verify view-only flow doesn't require mnemonic
     assert!(state.mnemonic.is_none());
@@ -201,10 +213,10 @@ fn test_vault_creation_restore_state_flow() {
     assert_eq!(state.device_role, DeviceRole::Restore);
 
     // Expected flow for restore:
-    // RoleSelection → NameVault → SelectSeedPhraseSize → EnterSeedPhrase → ScanDescriptorRestore → SetPin → Completed
+    // RoleSelection → LegalTerms → LegalPrivacy → NameVault → SelectSeedPhraseSize → EnterSeedPhrase → ScanDescriptorRestore → SetPin → Completed
 
-    // Step 1: RoleSelection → NameVault
-    state.advance_to_step(VaultCreationStep::NameVault);
+    // Step 1: RoleSelection → legal gates → NameVault
+    advance_past_legal_gates(&mut state);
     assert_eq!(state.current_step, VaultCreationStep::NameVault);
 
     // Verify next_step_for_role() returns correct next step
@@ -231,8 +243,8 @@ fn test_vault_creation_restore_state_flow() {
     state.advance_to_step(VaultCreationStep::Completed);
     assert_eq!(state.current_step, VaultCreationStep::Completed);
 
-    // Verify complete history (6 steps)
-    assert_eq!(state.step_history.len(), 6);
+    // Verify complete history (8 steps including legal gates)
+    assert_eq!(state.step_history.len(), 8);
 
     // Verify restore flow includes seed phrase size selection, seed phrase entry, and descriptor scan
     assert!(state.step_history.contains(&VaultCreationStep::SelectSeedPhraseSize));
@@ -247,25 +259,36 @@ fn test_vault_creation_back_navigation() {
     state.device_role = DeviceRole::Main;
 
     // Advance through several steps
-    state.advance_to_step(VaultCreationStep::NameVault);
+    advance_past_legal_gates(&mut state);
     state.advance_to_step(VaultCreationStep::SetTimeDelay);
     state.advance_to_step(VaultCreationStep::MnemonicGeneration);
 
     // Verify current state
     assert_eq!(state.current_step, VaultCreationStep::MnemonicGeneration);
-    assert_eq!(state.step_history.len(), 3);
+    assert_eq!(state.step_history.len(), 5);
     assert!(state.can_go_back_in_workflow());
 
     // Go back one step
     let went_back = state.go_to_previous_step();
     assert!(went_back);
     assert_eq!(state.current_step, VaultCreationStep::SetTimeDelay);
-    assert_eq!(state.step_history.len(), 2); // History is popped
+    assert_eq!(state.step_history.len(), 4); // History is popped
 
     // Go back again
     let went_back = state.go_to_previous_step();
     assert!(went_back);
     assert_eq!(state.current_step, VaultCreationStep::NameVault);
+    assert_eq!(state.step_history.len(), 3);
+
+    // Go back through legal gates
+    let went_back = state.go_to_previous_step();
+    assert!(went_back);
+    assert_eq!(state.current_step, VaultCreationStep::LegalPrivacyAcknowledgment);
+    assert_eq!(state.step_history.len(), 2);
+
+    let went_back = state.go_to_previous_step();
+    assert!(went_back);
+    assert_eq!(state.current_step, VaultCreationStep::LegalTermsAcknowledgment);
     assert_eq!(state.step_history.len(), 1);
 
     // Go back to first step
@@ -340,7 +363,7 @@ fn test_vault_creation_state_reset() {
     state.device_role = DeviceRole::Main;
 
     // Advance through several steps and set some data
-    state.advance_to_step(VaultCreationStep::NameVault);
+    advance_past_legal_gates(&mut state);
     state.vault_name = "Test Vault".to_string();
     state.advance_to_step(VaultCreationStep::SetTimeDelay);
     state.time_delay_days = 1;
@@ -393,6 +416,18 @@ fn test_vault_creation_next_step_for_role() {
     // Test main device flow
     state.device_role = DeviceRole::Main;
     state.current_step = VaultCreationStep::RoleSelection;
+    assert_eq!(
+        state.next_step_for_role(),
+        Some(VaultCreationStep::LegalTermsAcknowledgment)
+    );
+
+    state.current_step = VaultCreationStep::LegalTermsAcknowledgment;
+    assert_eq!(
+        state.next_step_for_role(),
+        Some(VaultCreationStep::LegalPrivacyAcknowledgment)
+    );
+
+    state.current_step = VaultCreationStep::LegalPrivacyAcknowledgment;
     assert_eq!(
         state.next_step_for_role(),
         Some(VaultCreationStep::NameVault)
@@ -448,11 +483,10 @@ fn test_vault_creation_step_just_changed() {
     // However, the method is meant to be called with the current step, so let's test it properly
 
     // After advance_to_step, previous_step is set to the old current_step
-    state.advance_to_step(VaultCreationStep::NameVault);
-    // Now: current_step = NameVault, previous_step = Some(RoleSelection)
+    advance_past_legal_gates(&mut state);
+    // Now: current_step = NameVault, previous_step updated through legal flow
 
-    // step_just_changed(NameVault) compares previous_step (RoleSelection) with NameVault
-    // Some(RoleSelection) != Some(NameVault) -> true
+    // step_just_changed(NameVault) compares previous_step with NameVault
     let changed = state.step_just_changed(VaultCreationStep::NameVault);
     assert!(
         changed,

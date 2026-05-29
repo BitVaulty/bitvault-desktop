@@ -1,0 +1,23 @@
+title = "bitvault-desktop"
+
+# Built-in rules from gitleaks (Sendinblue/xkeysib, AWS, GitHub, etc.).
+[extend]
+useDefault = true
+
+# Disable noisy rules here if needed, e.g.:
+# disabledRules = ["generic-api-key"]
+
+[allowlist]
+description = "Swift type names mistaken for generic-api-key (e.g. P256K signing types)"
+regexes = [
+  '''P256K\.Signing\.PrivateKey''',
+]
+
+# Telegram: upstream rule `telegram-bot-api-token` only matches when a keyword like
+# "telegram" appears near `=` / `:`. Bare `12345:AAbb...` strings are skipped — add a
+# standalone pattern if you need GitHub-like coverage for raw tokens (may false-positive).
+[[rules]]
+id = "telegram-bot-token-standalone"
+description = "Telegram Bot API token (numeric:id format without nearby 'telegram' keyword)"
+regex = '''(?i)\b(\d{8,10}:[A-Za-z0-9_-]{35})\b'''
+entropy = 3.5

@@ -99,7 +99,7 @@ pub fn render_role_selection(
         if card1_response.clicked() || card1_keyboard {
             state.reset_for_new_flow();
             state.device_role = DeviceRole::ViewOnly;
-            state.advance_to_step(VaultCreationStep::NameVault);
+            state.advance_to_step(VaultCreationStep::LegalTermsAcknowledgment);
         }
         if card1_response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -158,7 +158,7 @@ pub fn render_role_selection(
         if card2_response.clicked() || card2_keyboard {
             state.reset_for_new_flow();
             state.device_role = DeviceRole::Main;
-            state.advance_to_step(VaultCreationStep::NameVault);
+            state.advance_to_step(VaultCreationStep::LegalTermsAcknowledgment);
         }
         if card2_response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -222,7 +222,7 @@ pub fn render_role_selection(
         if card3_response.clicked() || card3_keyboard {
             state.reset_for_new_flow();
             state.device_role = DeviceRole::Coowner;
-            state.advance_to_step(VaultCreationStep::NameVault);
+            state.advance_to_step(VaultCreationStep::LegalTermsAcknowledgment);
         }
         if card3_response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -281,7 +281,7 @@ pub fn render_role_selection(
         if card4_response.clicked() || card4_keyboard {
             state.reset_for_new_flow();
             state.device_role = DeviceRole::Restore;
-            state.advance_to_step(VaultCreationStep::NameVault);
+            state.advance_to_step(VaultCreationStep::LegalTermsAcknowledgment);
         }
         if card4_response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -346,7 +346,7 @@ pub fn render_role_selection(
         if card5_response.clicked() || card5_keyboard {
             state.reset_for_new_flow();
             state.device_role = DeviceRole::SingleDeviceSeedHW;
-            state.advance_to_step(VaultCreationStep::NameVault);
+            state.advance_to_step(VaultCreationStep::LegalTermsAcknowledgment);
         }
         if card5_response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -406,7 +406,7 @@ pub fn render_role_selection(
         if card6_response.clicked() || card6_keyboard {
             state.reset_for_new_flow();
             state.device_role = DeviceRole::SingleDeviceHWHW;
-            state.advance_to_step(VaultCreationStep::NameVault);
+            state.advance_to_step(VaultCreationStep::LegalTermsAcknowledgment);
         }
         if card6_response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -1269,6 +1269,155 @@ pub fn render_completed(
     if button_large(ui, "Go to Dashboard").clicked() {
         navigation.navigate_to(View::Dashboard { tab: 0 });
     }
+}
+
+// ============================================================================
+// LEGAL ACKNOWLEDGMENT (onboarding gate — matches iOS LegalDocumentAcknowledgment)
+// ============================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LegalDocumentKind {
+    TermsAndConditions,
+    PrivacyPolicy,
+}
+
+impl LegalDocumentKind {
+    fn title(&self) -> &'static str {
+        match self {
+            Self::TermsAndConditions => "Terms and Conditions",
+            Self::PrivacyPolicy => "Privacy Policy",
+        }
+    }
+
+    fn document_url(&self) -> &'static str {
+        match self {
+            Self::TermsAndConditions => "https://bitvault.sv/terms",
+            Self::PrivacyPolicy => "https://bitvault.sv/privacy",
+        }
+    }
+
+    fn summary_paragraphs(&self) -> &'static [&'static str] {
+        match self {
+            Self::TermsAndConditions => &[
+                "Bitvault provides a collaborative Bitcoin vault wallet. By using the service you agree to use it lawfully and to safeguard your recovery materials.",
+                "Subscriptions and convenience features may require an active plan. We may update these terms; continued use after changes constitutes acceptance.",
+                "The full Terms and Conditions document contains complete legal terms governing your use of Bitvault.",
+            ],
+            Self::PrivacyPolicy => &[
+                "Bitvault processes wallet and account data needed to operate the vault, convenience services, and optional notifications.",
+                "We do not sell your personal data. Limited technical data may be shared with infrastructure providers required to deliver the service.",
+                "The full Privacy Policy document describes data collection, retention, and your rights in detail.",
+            ],
+        }
+    }
+}
+
+pub fn render_legal_acknowledgment(
+    ui: &mut egui::Ui,
+    state: &mut VaultCreationState,
+    navigation: &mut Navigation,
+    document: LegalDocumentKind,
+) {
+    if state.step_just_changed(match document {
+        LegalDocumentKind::TermsAndConditions => VaultCreationStep::LegalTermsAcknowledgment,
+        LegalDocumentKind::PrivacyPolicy => VaultCreationStep::LegalPrivacyAcknowledgment,
+    }) {
+        state.legal_document_scrolled_to_end = false;
+        state.legal_document_acknowledged = false;
+    }
+
+    ui.vertical_centered(|ui| {
+        ui.heading(document.title());
+        ui.add_space(Spacing::MD);
+
+        ui.label("Please read the document below before continuing.");
+        ui.add_space(Spacing::SM);
+
+        let scroll_output = egui::ScrollArea::vertical()
+            .max_height(320.0)
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                for paragraph in document.summary_paragraphs() {
+                    ui.label(
+                        egui::RichText::new(*paragraph)
+                            .color(ui.style().visuals.text_color()),
+                    );
+                    ui.add_space(Spacing::SM);
+                }
+                ui.add_space(Spacing::LG);
+                ui.label(
+                    egui::RichText::new("— End of summary —")
+                        .color(Colors::text_secondary(ui.ctx())),
+                );
+            });
+
+        let max_scroll = (scroll_output.content_size.y - scroll_output.inner_rect.height()).max(0.0);
+        if scroll_output.state.offset.y >= max_scroll - 4.0 {
+            state.legal_document_scrolled_to_end = true;
+        }
+
+        if !state.legal_document_scrolled_to_end {
+            ui.colored_label(
+                egui::Color32::GRAY,
+                "Scroll to the end to continue",
+            );
+        }
+
+        ui.add_space(Spacing::SM);
+
+        if ui.button("Open full document in browser").clicked() {
+            ui.output_mut(|o| {
+                o.open_url = Some(egui::OpenUrl {
+                    url: document.document_url().to_string(),
+                    new_tab: true,
+                });
+            });
+            state.legal_document_scrolled_to_end = true;
+        }
+
+        ui.add_space(Spacing::MD);
+
+        ui.horizontal(|ui| {
+            ui.label("I have read this document");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let mut acknowledged = state.legal_document_acknowledged;
+                let enabled = state.legal_document_scrolled_to_end;
+                ui.add_enabled_ui(enabled, |ui| {
+                    ui.checkbox(&mut acknowledged, "");
+                });
+                if enabled {
+                    state.legal_document_acknowledged = acknowledged;
+                } else {
+                    state.legal_document_acknowledged = false;
+                }
+            });
+        });
+
+        ui.add_space(Spacing::MD);
+
+        ui.horizontal(|ui| {
+            if button(ui, "Back", ButtonStyle::Secondary).clicked() {
+                if state.go_to_previous_step() {
+                    state.legal_document_scrolled_to_end = false;
+                    state.legal_document_acknowledged = false;
+                } else {
+                    navigation.go_back();
+                }
+            }
+
+            let ok_enabled =
+                state.legal_document_scrolled_to_end && state.legal_document_acknowledged;
+            ui.add_enabled_ui(ok_enabled, |ui| {
+                if button(ui, "OK", ButtonStyle::Primary).clicked() {
+                    state.legal_document_scrolled_to_end = false;
+                    state.legal_document_acknowledged = false;
+                    if let Some(next) = state.next_step_for_role() {
+                        state.advance_to_step(next);
+                    }
+                }
+            });
+        });
+    });
 }
 
 // ============================================================================

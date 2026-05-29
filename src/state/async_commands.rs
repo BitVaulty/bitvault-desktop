@@ -11,6 +11,7 @@ pub enum AsyncCommand {
     FetchBalance,
     FetchAddress,
     RequestTelegramRegistration,
+    CheckTelegramRegistration,
 }
 
 /// Results from async tasks
@@ -19,6 +20,7 @@ pub enum AsyncResult {
     Balance { confirmed: u64, available: u64 },
     Address(String),
     TelegramRegistrationLink(String),
+    TelegramRegistrationStatus(bool),
     Error(String),
 }
 
@@ -65,6 +67,12 @@ impl AsyncCommandHandler {
     pub fn request_telegram_registration(&mut self) {
         self.pending_commands
             .push(AsyncCommand::RequestTelegramRegistration);
+    }
+
+    /// Queue a command to poll Telegram registration status
+    pub fn check_telegram_registration(&mut self) {
+        self.pending_commands
+            .push(AsyncCommand::CheckTelegramRegistration);
     }
 
     /// Process pending commands (call from UI update loop)
@@ -190,6 +198,40 @@ impl AsyncCommandHandler {
                         let _ = tx.send(AsyncResult::Error(
                             "Telegram registration requires convenience service and mnemonic"
                                 .to_string(),
+                        ));
+                    }
+                }
+                AsyncCommand::CheckTelegramRegistration => {
+                    if let Some(convenience_service) = convenience_service {
+                        let cs = convenience_service;
+                        let result: std::result::Result<bool, String> = runtime.block_on(async {
+                            let address = vs
+                                .read()
+                                .await
+                                .get_address()
+                                .map_err(|e| format!("Failed to get address: {}", e))?;
+                            let pubkey = vs
+                                .read()
+                                .await
+                                .get_owner_xpub()
+                                .await
+                                .map_err(|e| format!("Failed to get owner xpub: {}", e))?;
+                            cs.check_telegram_registration(&pubkey, &address)
+                                .await
+                                .map_err(|e| format!("Failed to check Telegram registration: {}", e))
+                        });
+
+                        match result {
+                            Ok(registered) => {
+                                let _ = tx.send(AsyncResult::TelegramRegistrationStatus(registered));
+                            }
+                            Err(e) => {
+                                let _ = tx.send(AsyncResult::Error(e));
+                            }
+                        }
+                    } else {
+                        let _ = tx.send(AsyncResult::Error(
+                            "Telegram status check requires convenience service".to_string(),
                         ));
                     }
                 }

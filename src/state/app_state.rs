@@ -45,10 +45,17 @@ pub struct AppState {
     pub convenience_service: Option<ConvenienceService>,
     /// Key service for secure storage (mnemonics, PINs, etc.)
     pub key_service: KeyService,
+    /// Cached remote config from convenience service (startup fetch)
+    #[cfg(feature = "native")]
+    pub remote_config: Option<bitvault_common::RemoteConfig>,
     /// Cached mnemonic for current vault (for signing operations)
     pub cached_mnemonic: Option<Mnemonic>,
     /// Telegram registration link (when received from async handler)
     pub telegram_registration_link: Option<String>,
+    /// Latest Telegram registration poll result (consumed by secret notification UI)
+    pub telegram_registration_status: Option<bool>,
+    /// Latest Telegram async error for secret notification UI
+    pub telegram_async_error: Option<String>,
 }
 
 impl AppState {
@@ -74,8 +81,12 @@ impl AppState {
                 ConvenienceService::default_production().map_err(|e| e.to_string())?,
             ),
             key_service: KeyService::new(),
+            #[cfg(feature = "native")]
+            remote_config: None,
             cached_mnemonic: None,
             telegram_registration_link: None,
+            telegram_registration_status: None,
+            telegram_async_error: None,
         })
     }
 
@@ -110,8 +121,12 @@ impl AppState {
                 ConvenienceService::default_production().map_err(|e| e.to_string())?,
             ),
             key_service: KeyService::new(),
+            #[cfg(feature = "native")]
+            remote_config: None,
             cached_mnemonic: None,
             telegram_registration_link: None,
+            telegram_registration_status: None,
+            telegram_async_error: None,
         })
     }
 
@@ -127,6 +142,19 @@ impl AppState {
     /// Get a reference to the runtime (for block_on operations)
     pub fn get_runtime(&self) -> Option<&tokio::runtime::Runtime> {
         self.runtime.as_ref()
+    }
+
+    /// Mempool client using remote config URLs when available.
+    #[cfg(feature = "native")]
+    pub fn mempool_service(&self) -> bitvault_common::MempoolService {
+        if let Some(ref config) = self.remote_config {
+            bitvault_common::MempoolService::with_urls(
+                config.mempool_service.current_price_url.clone(),
+                config.mempool_service.historical_price_url.clone(),
+            )
+        } else {
+            bitvault_common::MempoolService::new()
+        }
     }
 
     /// Restart async processor when vault is loaded
@@ -195,6 +223,10 @@ impl AppState {
                         // Log the error for debugging
                         log::error!("Async operation failed: {}", e);
 
+                        if e.contains("Telegram") {
+                            self.telegram_async_error = Some(e.clone());
+                        }
+
                         // Update vault data to show error state
                         if let Ok(mut data) = vault_data.lock() {
                             data.set_error(Some(e));
@@ -202,9 +234,15 @@ impl AppState {
 
                         needs_repaint = true;
                     }
-                    crate::state::async_commands::AsyncResult::TelegramRegistrationLink(_link) => {
-                        // Handle Telegram registration link - this should be processed by the UI
+                    crate::state::async_commands::AsyncResult::TelegramRegistrationLink(link) => {
                         log::info!("Received Telegram registration link");
+                        self.telegram_registration_link = Some(link);
+                        needs_repaint = true;
+                    }
+                    crate::state::async_commands::AsyncResult::TelegramRegistrationStatus(
+                        registered,
+                    ) => {
+                        self.telegram_registration_status = Some(registered);
                         needs_repaint = true;
                     }
                 }
@@ -552,6 +590,9 @@ async fn process_async_commands(
             crate::state::async_commands::AsyncCommand::RequestTelegramRegistration => {
                 // Telegram registration is handled elsewhere - this is a placeholder
                 log::info!("Telegram registration requested");
+            }
+            crate::state::async_commands::AsyncCommand::CheckTelegramRegistration => {
+                log::info!("Telegram registration status check requested");
             }
         }
     }

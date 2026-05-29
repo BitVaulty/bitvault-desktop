@@ -111,6 +111,42 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
 
             ui.add_space(Spacing::MD);
 
+            // Hardware wallet info (read-only; edit in Settings tab)
+            if let Some(metadata) = app_state.get_current_vault_metadata() {
+                if !metadata.hardware_wallet_types.is_empty() {
+                    card(ui, |ui| {
+                        ui.vertical(|ui| {
+                            ui.add_space(Spacing::MD);
+                            ui.label(
+                                Typography::heading_small("Hardware Wallets")
+                                    .color(Colors::text_primary(&ctx)),
+                            );
+                            ui.add_space(Spacing::SM);
+                            for (idx, hw_type) in metadata.hardware_wallet_types.iter().enumerate() {
+                                let label = metadata
+                                    .hardware_wallet_display_names
+                                    .as_ref()
+                                    .and_then(|names| names.get(idx))
+                                    .map(|name| name.trim())
+                                    .filter(|name| !name.is_empty())
+                                    .map(|name| format!("{} ({})", hw_type, name))
+                                    .unwrap_or_else(|| hw_type.clone());
+                                ui.label(
+                                    Typography::body(label).color(Colors::text_secondary(&ctx)),
+                                );
+                            }
+                            ui.add_space(Spacing::SM);
+                            ui.label(
+                                Typography::caption("Rename in Dashboard → Settings")
+                                    .color(Colors::text_muted(&ctx)),
+                            );
+                            ui.add_space(Spacing::MD);
+                        });
+                    });
+                    ui.add_space(Spacing::MD);
+                }
+            }
+
             // Quick Actions - Large primary buttons (centered)
             ui.vertical_centered(|ui| {
                 ui.horizontal(|ui| {

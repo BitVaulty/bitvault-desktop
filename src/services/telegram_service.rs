@@ -52,6 +52,15 @@ impl TelegramService {
             .request_telegram_registration(address, pubkey, message, signature)
             .await
             .map_err(|e| match e {
+                ConvenienceServiceError::NoInternetConnection => {
+                    TelegramServiceError::NetworkError("No internet connection".to_string())
+                }
+                ConvenienceServiceError::IapLifetimeConflict => {
+                    TelegramServiceError::ServerError {
+                        message: "Account already has a lifetime subscription".to_string(),
+                        status_code: 409,
+                    }
+                }
                 ConvenienceServiceError::NetworkError(msg) => {
                     TelegramServiceError::NetworkError(msg)
                 }
@@ -78,6 +87,15 @@ impl TelegramService {
             .check_telegram_registration(pubkey, address)
             .await
             .map_err(|e| match e {
+                ConvenienceServiceError::NoInternetConnection => {
+                    TelegramServiceError::NetworkError("No internet connection".to_string())
+                }
+                ConvenienceServiceError::IapLifetimeConflict => {
+                    TelegramServiceError::ServerError {
+                        message: "Account already has a lifetime subscription".to_string(),
+                        status_code: 409,
+                    }
+                }
                 ConvenienceServiceError::NetworkError(msg) => {
                     TelegramServiceError::NetworkError(msg)
                 }
@@ -106,6 +124,15 @@ impl TelegramService {
             .unsubscribe_telegram(address, pubkey, message, signature)
             .await
             .map_err(|e| match e {
+                ConvenienceServiceError::NoInternetConnection => {
+                    TelegramServiceError::NetworkError("No internet connection".to_string())
+                }
+                ConvenienceServiceError::IapLifetimeConflict => {
+                    TelegramServiceError::ServerError {
+                        message: "Account already has a lifetime subscription".to_string(),
+                        status_code: 409,
+                    }
+                }
                 ConvenienceServiceError::NetworkError(msg) => {
                     TelegramServiceError::NetworkError(msg)
                 }

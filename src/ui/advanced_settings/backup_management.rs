@@ -78,9 +78,10 @@ pub fn render_backup_management(
             if let (Some(vault_service), Some(runtime)) =
                 (app_state.vault_service.as_ref(), app_state.runtime.as_ref())
             {
+                let backup_email = app_state.key_service.get_email().ok().flatten();
                 let result = runtime.block_on(async {
                     let vs = vault_service.read().await;
-                    vs.export_manual_backup().await
+                    vs.export_manual_backup(backup_email.as_deref()).await
                 });
 
                 match result {

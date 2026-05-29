@@ -22,8 +22,31 @@ pub struct BackupInfo {
     pub vault_id: String,
     pub is_coowner: bool,
     pub hardware_wallet_types: Vec<String>,
+    #[serde(default)]
+    pub hardware_wallet_display_names: Option<Vec<String>>,
     pub is_single_device: bool,
     pub email: Option<String>,
+}
+
+impl BackupInfo {
+    /// One segment for server/manual backup `device_type`.
+    pub fn hardware_wallet_device_type_segment(&self, index: usize) -> String {
+        bitvault_common::hardware_wallet_device_type_segment(
+            &self.hardware_wallet_types,
+            &self.hardware_wallet_display_names,
+            index,
+        )
+    }
+
+    /// Full `device_type` string for convenience-service backups.
+    pub fn backup_device_type_label(&self) -> String {
+        bitvault_common::backup_device_type_label(
+            &self.hardware_wallet_types,
+            &self.hardware_wallet_display_names,
+            self.is_single_device,
+            "Desktop",
+        )
+    }
 }
 
 /// Key service for secure storage
@@ -95,6 +118,12 @@ impl KeyService {
 
         let info: BackupInfo = serde_json::from_str(&json)
             .map_err(|e| KeyServiceError::DeserializationError(e.to_string()))?;
+
+        bitvault_common::validate_hardware_wallet_display_names(
+            &info.hardware_wallet_types,
+            &info.hardware_wallet_display_names,
+        )
+        .map_err(KeyServiceError::ValidationError)?;
 
         Ok(info)
     }
@@ -228,6 +257,7 @@ impl KeyService {
     /// Save email
     /// Equivalent to Swift's saveEmail
     pub fn save_email(&self, email: &str) -> Result<(), KeyServiceError> {
+        let normalized = bitvault_common::normalize_email(email);
         let entry = Entry::new(&self.service_name, "email")
             .map_err(|e| KeyServiceError::StorageError(e.to_string()))?;
 
@@ -236,7 +266,7 @@ impl KeyService {
         let _ = entry.delete_password();
 
         entry
-            .set_password(email)
+            .set_password(&normalized)
             .map_err(|e| KeyServiceError::StorageError(e.to_string()))?;
 
         Ok(())
@@ -265,6 +295,51 @@ impl KeyService {
             .map_err(|e| KeyServiceError::StorageError(e.to_string()))?;
 
         Ok(())
+    }
+
+    /// Update custom display names for each hardware wallet slot in a vault backup.
+    /// Pass `None` to clear custom names.
+    pub fn update_hardware_wallet_display_names(
+        &self,
+        vault: &str,
+        network: &str,
+        display_names: Option<Vec<String>>,
+    ) -> Result<BackupInfo, KeyServiceError> {
+        let mut info = self.get_backup_info(vault, network)?;
+
+        if info.hardware_wallet_types.is_empty() {
+            return Err(KeyServiceError::ValidationError(
+                "This vault has no hardware wallets.".to_string(),
+            ));
+        }
+
+        let normalized = match display_names {
+            Some(names) => {
+                if names.len() != info.hardware_wallet_types.len() {
+                    return Err(KeyServiceError::ValidationError(
+                        "Display names count must match the number of hardware wallets."
+                            .to_string(),
+                    ));
+                }
+                Some(
+                    names
+                        .into_iter()
+                        .map(|name| name.trim().to_string())
+                        .collect(),
+                )
+            }
+            None => None,
+        };
+
+        bitvault_common::validate_hardware_wallet_display_names(
+            &info.hardware_wallet_types,
+            &normalized,
+        )
+        .map_err(KeyServiceError::ValidationError)?;
+
+        info.hardware_wallet_display_names = normalized;
+        self.save_backup_info(&info, vault, network)?;
+        Ok(info)
     }
 
     /// Clear all keychain data
@@ -297,6 +372,8 @@ pub enum KeyServiceError {
     DeserializationError(String),
     #[error("Generation error: {0}")]
     GenerationError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
     #[error("Parse error")]
     ParseError,
 }

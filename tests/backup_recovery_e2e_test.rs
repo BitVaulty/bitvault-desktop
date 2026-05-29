@@ -121,6 +121,7 @@ async fn test_backup_info_storage() {
         vault_id: vault_address.to_string(),
         is_coowner: false,
         hardware_wallet_types: Vec::new(),
+        hardware_wallet_display_names: None,
         is_single_device: false,
         email: Some("test@example.com".to_string()),
     };

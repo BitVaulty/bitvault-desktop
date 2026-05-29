@@ -5,5 +5,5 @@
 mod state;
 mod view;
 
-pub use state::SecretNotificationState;
+pub use state::{SecretNotificationPhase, SecretNotificationState};
 pub use view::render;

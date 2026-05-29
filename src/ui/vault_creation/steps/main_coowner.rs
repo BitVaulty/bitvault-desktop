@@ -180,14 +180,27 @@ pub fn render_scan_coowner_keys(
                                                             Ok(coowner_keys) => {
                                                                 // For HW+HW single device, handle first vs second HW
                                                                 if state.device_role == DeviceRole::SingleDeviceHWHW && !state.scanning_second_hw {
-                                                                    // First HW scanned - store it and prepare for second HW
                                                                     state.first_hw_keys = Some(coowner_keys);
-                                                                    state.first_hw_type = state.selected_hw_type; // Store first HW type
-                                                                    state.scanning_second_hw = true;
-                                                                    state.hw_batch_qr_scanner_state.reset(); // Reset scanner for second HW
-                                                                    state.selected_hw_type = None; // Allow selecting different HW type for second
+                                                                    state.first_hw_type = state.selected_hw_type;
+                                                                    state.hw_naming_index = 0;
                                                                     state.error = None;
-                                                                    // Stay on same step to scan second HW
+                                                                    state.advance_to_step(VaultCreationStep::NameHardwareWallet);
+                                                                } else if state.device_role == DeviceRole::SingleDeviceHWHW
+                                                                    && state.scanning_second_hw
+                                                                {
+                                                                    state.coowner_keys = Some(coowner_keys);
+                                                                    state.coowner_pubkeys = state.hw_batch_qr_scanner_state.scanned_parts.join("\n");
+                                                                    state.hw_batch_qr_scanner_state.selected_file = None;
+                                                                    state.hw_naming_index = 1;
+                                                                    state.error = None;
+                                                                    state.advance_to_step(VaultCreationStep::NameHardwareWallet);
+                                                                } else if state.device_role == DeviceRole::SingleDeviceSeedHW {
+                                                                    state.coowner_keys = Some(coowner_keys);
+                                                                    state.coowner_pubkeys = state.hw_batch_qr_scanner_state.scanned_parts.join("\n");
+                                                                    state.hw_batch_qr_scanner_state.selected_file = None;
+                                                                    state.hw_naming_index = 0;
+                                                                    state.error = None;
+                                                                    state.advance_to_step(VaultCreationStep::NameHardwareWallet);
                                                                 } else {
                                                                     // Regular case or second HW in HW+HW mode
                                                                     state.coowner_keys = Some(coowner_keys);
@@ -202,7 +215,7 @@ pub fn render_scan_coowner_keys(
                                                             }
                                                             Err(e) => {
                                                                 let error_msg = format!(
-                                                                    "Failed to convert hardware wallet keys: {}\n\nThis may happen if:\n- The hardware wallet keys don't have the required derivation paths (m/48'/0'/0'/2'/0/0, etc.)\n- The QR code data is incomplete or corrupted\n\nPlease try scanning again or verify your hardware wallet is configured correctly.",
+                                                                    "Failed to convert hardware wallet keys: {}\n\nThis may happen if:\n- The hardware wallet keys don't include the expected account-level derivation paths\n- The QR code data is incomplete or corrupted\n\nPlease try scanning again or verify your hardware wallet is configured correctly.",
                                                                     e
                                                                 );
                                                                 state.error = Some(error_msg);
@@ -1265,6 +1278,8 @@ pub fn render_create_vault(
                 let result = runtime.block_on(async {
                     let mut vault_service = bitvault_common::wallet::VaultService::new(network);
 
+                    let display_names = state.compute_hardware_wallet_display_names();
+
                     match state.device_role {
                         DeviceRole::SingleDeviceSeedHW => {
                             let mnemonic = state.mnemonic.as_ref().unwrap(); // Already validated
@@ -1283,6 +1298,7 @@ pub fn render_create_vault(
                                     &email,
                                     &auth_code,
                                     &hw_type_str,
+                                    display_names,
                                 )
                                 .await
                                 .map(|_| (None, vault_service)) // Single device doesn't return QR data
@@ -1309,6 +1325,7 @@ pub fn render_create_vault(
                                     &auth_code,
                                     &first_hw_type_str,
                                     &second_hw_type_str,
+                                    display_names,
                                 )
                                 .await
                                 .map(|_| (None, vault_service)) // Single device doesn't return QR data

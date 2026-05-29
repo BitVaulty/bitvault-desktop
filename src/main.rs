@@ -115,11 +115,11 @@ fn main() {
     };
 
     // Check app version against remote config (don't block on network errors)
-    let is_update_required = rt.block_on(async {
+    let (is_update_required, remote_config) = rt.block_on(async {
         // Skip version check if offline (avoid long timeout)
         if !crate::services::network_check::check_connectivity().await {
             log::info!("Offline - skipping version check");
-            return false;
+            return (false, None);
         }
         let cs = bitvault_common::ConvenienceService::default_production()
             .unwrap_or_else(|_| bitvault_common::ConvenienceService::new(None));
@@ -127,20 +127,19 @@ fn main() {
             Ok(config) => {
                 let current = env!("CARGO_PKG_VERSION");
                 let min_required = &config.app.minimum_version;
-                if !is_version_at_least(current, min_required) {
+                let update_required = !is_version_at_least(current, min_required);
+                if update_required {
                     log::warn!(
                         "App version {} is below minimum required {}",
                         current,
                         min_required
                     );
-                    true
-                } else {
-                    false
                 }
+                (update_required, Some(config))
             }
             Err(e) => {
                 log::warn!("Failed to fetch remote config, allowing app to run: {}", e);
-                false
+                (false, None)
             }
         }
     });
@@ -171,7 +170,7 @@ fn main() {
         "BitVault",
         native_options,
         Box::new(move |cc| {
-            let mut app = app::BitVaultApp::new(cc, is_update_required);
+            let mut app = app::BitVaultApp::new(cc, is_update_required, remote_config);
             app.set_runtime(rt);
             Box::new(app)
         }),

@@ -251,6 +251,124 @@ pub fn render(ui: &mut egui::Ui, app_state: &mut AppState, navigation: &mut Navi
                     }
                 }
             });
+
+            // Hardware wallet display names (HW vaults only)
+            if let (Some(ref address), Some(current_metadata)) = (
+                current_address.as_ref(),
+                app_state.get_current_vault_metadata(),
+            ) {
+                if !current_metadata.hardware_wallet_types.is_empty() {
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.add_space(10.0);
+                    ui.label("Hardware Wallet Names:");
+                    ui.add_space(5.0);
+
+                    let network_str = match app_state.network {
+                        bdk::bitcoin::Network::Bitcoin => "mainnet",
+                        bdk::bitcoin::Network::Testnet => "testnet",
+                        bdk::bitcoin::Network::Signet => "signet",
+                        bdk::bitcoin::Network::Regtest => "regtest",
+                        _ => "mainnet",
+                    };
+
+                    let hw_types = current_metadata.hardware_wallet_types.clone();
+                    let edit_id = ui.id().with("hw_names").with(address);
+
+                    let mut draft_names: Vec<String> = ui.ctx().data_mut(|d| {
+                        d.get_temp_mut_or_insert_with(edit_id, || {
+                            match app_state
+                                .key_service
+                                .get_backup_info(address, network_str)
+                            {
+                                Ok(info) => info.hardware_wallet_display_names.unwrap_or_else(
+                                    || vec![String::new(); hw_types.len()],
+                                ),
+                                Err(_) => vec![String::new(); hw_types.len()],
+                            }
+                        })
+                        .clone()
+                    });
+
+                    if draft_names.len() != hw_types.len() {
+                        draft_names.resize(hw_types.len(), String::new());
+                    }
+
+                    for (idx, hw_type) in hw_types.iter().enumerate() {
+                        ui.horizontal(|ui| {
+                            ui.label(format!("{}:", hw_type));
+                            ui.text_edit_singleline(&mut draft_names[idx]);
+                        });
+                    }
+
+                    ui.ctx().data_mut(|d| {
+                        d.insert_temp(edit_id, draft_names.clone());
+                    });
+
+                    let mut hw_error: Option<String> = None;
+                    ui.horizontal(|ui| {
+                        if ui.button("Save HW Names").clicked() {
+                            let trimmed: Vec<String> = draft_names
+                                .iter()
+                                .map(|name| name.trim().to_string())
+                                .collect();
+                            let display_names = if trimmed.iter().all(|name| name.is_empty()) {
+                                None
+                            } else {
+                                Some(trimmed)
+                            };
+
+                            match app_state.key_service.update_hardware_wallet_display_names(
+                                address,
+                                network_str,
+                                display_names.clone(),
+                            ) {
+                                Ok(_) => {
+                                    if let Ok(mut metadata) =
+                                        bitvault_common::wallet::VaultMetadata::load(address)
+                                    {
+                                        let _ = metadata
+                                            .update_hardware_wallet_display_names(display_names);
+                                    }
+                                }
+                                Err(e) => {
+                                    hw_error = Some(crate::utils::sanitize_error_for_ui(&e));
+                                }
+                            }
+                        }
+
+                        if ui.button("Reset HW Names").clicked() {
+                            match app_state.key_service.update_hardware_wallet_display_names(
+                                address,
+                                network_str,
+                                None,
+                            ) {
+                                Ok(_) => {
+                                    ui.ctx().data_mut(|d| {
+                                        d.insert_temp(
+                                            edit_id,
+                                            vec![String::new(); hw_types.len()],
+                                        );
+                                    });
+                                    if let Ok(mut metadata) =
+                                        bitvault_common::wallet::VaultMetadata::load(address)
+                                    {
+                                        let _ =
+                                            metadata.update_hardware_wallet_display_names(None);
+                                    }
+                                }
+                                Err(e) => {
+                                    hw_error = Some(crate::utils::sanitize_error_for_ui(&e));
+                                }
+                            }
+                        }
+                    });
+
+                    if let Some(err) = hw_error {
+                        ui.colored_label(egui::Color32::RED, err);
+                    }
+                }
+            }
         } else {
             ui.label("Status: Not Loaded");
             ui.add_space(10.0);

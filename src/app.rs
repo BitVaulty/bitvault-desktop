@@ -91,7 +91,11 @@ pub struct BitVaultApp {
 }
 
 impl BitVaultApp {
-    pub fn new(cc: &eframe::CreationContext<'_>, app_update_required: bool) -> Self {
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
+        app_update_required: bool,
+        remote_config: Option<bitvault_common::RemoteConfig>,
+    ) -> Self {
         // Configure fonts - try to add system fonts with better Unicode support
         let mut fonts = egui::FontDefinitions::default();
 
@@ -155,7 +159,7 @@ impl BitVaultApp {
         };
 
         // Initialize app state with graceful error handling
-        let app_state = AppState::new(initial_network).unwrap_or_else(|e| {
+        let mut app_state = AppState::new(initial_network).unwrap_or_else(|e| {
             eprintln!("Warning: Failed to initialize app state with saved network: {}", e);
             eprintln!("Attempting fallback with default network (Testnet)...");
 
@@ -175,6 +179,10 @@ impl BitVaultApp {
                 })
             })
         });
+        #[cfg(feature = "native")]
+        {
+            app_state.remote_config = remote_config;
+        }
 
         // Always require PIN setup/entry - show PIN screen on startup
         // If PIN exists, show entry screen; if not, show setup screen

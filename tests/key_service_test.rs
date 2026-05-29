@@ -36,6 +36,7 @@ fn create_test_backup_info(name: &str, vault_id: &str, mnemonic: &str) -> Backup
         vault_id: vault_id.to_string(),
         is_coowner: false,
         hardware_wallet_types: vec![],
+        hardware_wallet_display_names: None,
         is_single_device: false,
         email: Some("email@example.com".to_string()),
     }
@@ -550,4 +551,22 @@ fn test_email_persistence() {
 
     // Cleanup
     let _ = key_service.delete_email();
+}
+
+#[test]
+fn test_backup_info_device_type_label() {
+    let info = BackupInfo {
+        descriptor_mainnet: "desc".into(),
+        descriptor_testnet: "desc".into(),
+        mnemonic: String::new(),
+        name: "Test".into(),
+        vault_id: "vault".into(),
+        is_coowner: false,
+        hardware_wallet_types: vec!["Jade".into(), "Keystone".into()],
+        hardware_wallet_display_names: Some(vec!["One".into(), "Two".into()]),
+        is_single_device: true,
+        email: None,
+    };
+
+    assert_eq!(info.backup_device_type_label(), "Jade One + Keystone Two");
 }

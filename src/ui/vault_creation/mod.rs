@@ -142,6 +142,10 @@ pub enum DeviceRole {
 pub enum VaultCreationStep {
     /// First step: Select how to set up
     RoleSelection,
+    /// Terms and Conditions acknowledgment (onboarding gate)
+    LegalTermsAcknowledgment,
+    /// Privacy Policy acknowledgment (onboarding gate)
+    LegalPrivacyAcknowledgment,
     /// Name the vault
     NameVault,
     /// Set time delay (main device only)
@@ -162,6 +166,8 @@ pub enum VaultCreationStep {
     EnterExchangeData,
     /// Email 2FA authentication
     EmailAuth,
+    /// Optional hardware wallet naming (after HW scan)
+    NameHardwareWallet,
     /// Create/Join vault
     CreateVault,
     /// Main device: Display exchange data for co-owner
@@ -247,6 +253,16 @@ pub struct VaultCreationState {
     pub selected_hw_type: Option<HardwareWalletType>,
     /// First hardware wallet type (for HW+HW single device scenario)
     pub first_hw_type: Option<HardwareWalletType>,
+    /// Optional custom label for first HW slot
+    pub first_hw_display_name: String,
+    /// Optional custom label for second HW slot (HW+HW)
+    pub second_hw_display_name: String,
+    /// Which HW slot is being named (0 = first, 1 = second)
+    pub hw_naming_index: u8,
+    /// Legal doc scroll reached bottom (reset per legal step)
+    pub legal_document_scrolled_to_end: bool,
+    /// User toggled "I have read this document"
+    pub legal_document_acknowledged: bool,
     // Hardware wallet batch QR scanner for multi-part UR codes
     pub hw_batch_qr_scanner_state: crate::ui::hardware_wallet::BatchQrScannerState,
     // Track saved file paths for secure deletion
@@ -295,6 +311,11 @@ impl Default for VaultCreationState {
             is_scanning_qr: false,
             selected_hw_type: None,
             first_hw_type: None,
+            first_hw_display_name: String::new(),
+            second_hw_display_name: String::new(),
+            hw_naming_index: 0,
+            legal_document_scrolled_to_end: false,
+            legal_document_acknowledged: false,
             hw_batch_qr_scanner_state: crate::ui::hardware_wallet::BatchQrScannerState::default(),
             saved_key_file: None,
             saved_exchange_file: None,
@@ -305,6 +326,38 @@ impl Default for VaultCreationState {
 }
 
 impl VaultCreationState {
+    /// Build display names for vault setup/import (nil when all empty).
+    pub fn compute_hardware_wallet_display_names(&self) -> Option<Vec<String>> {
+        match self.device_role {
+            DeviceRole::SingleDeviceSeedHW => {
+                let name = self.first_hw_display_name.trim();
+                if name.is_empty() {
+                    None
+                } else {
+                    Some(vec![name.to_string()])
+                }
+            }
+            DeviceRole::SingleDeviceHWHW => {
+                let first = self.first_hw_display_name.trim();
+                let second = self.second_hw_display_name.trim();
+                if first.is_empty() && second.is_empty() {
+                    None
+                } else {
+                    Some(vec![first.to_string(), second.to_string()])
+                }
+            }
+            DeviceRole::Restore => {
+                let name = self.first_hw_display_name.trim();
+                if self.selected_hw_type.is_some() && !name.is_empty() {
+                    Some(vec![name.to_string()])
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
     /// Advance to the next step in the workflow
     /// This tracks the step history for back button navigation
     pub fn advance_to_step(&mut self, step: VaultCreationStep) {
@@ -372,6 +425,11 @@ impl VaultCreationState {
         self.coowner_keys = None;
         self.first_hw_keys = None;
         self.first_hw_type = None;
+        self.first_hw_display_name.clear();
+        self.second_hw_display_name.clear();
+        self.hw_naming_index = 0;
+        self.legal_document_scrolled_to_end = false;
+        self.legal_document_acknowledged = false;
         self.scanning_second_hw = false;
         self.my_keys_text = None;
         self.exchange_data_input.clear();
@@ -440,7 +498,11 @@ impl VaultCreationState {
 
     fn next_step_main(&self) -> Option<VaultCreationStep> {
         match self.current_step {
-            VaultCreationStep::RoleSelection => Some(VaultCreationStep::NameVault),
+            VaultCreationStep::RoleSelection => Some(VaultCreationStep::LegalTermsAcknowledgment),
+            VaultCreationStep::LegalTermsAcknowledgment => {
+                Some(VaultCreationStep::LegalPrivacyAcknowledgment)
+            }
+            VaultCreationStep::LegalPrivacyAcknowledgment => Some(VaultCreationStep::NameVault),
             VaultCreationStep::NameVault => Some(VaultCreationStep::SetTimeDelay),
             VaultCreationStep::SetTimeDelay => Some(VaultCreationStep::MnemonicGeneration),
             VaultCreationStep::MnemonicGeneration => Some(VaultCreationStep::DisplaySeedPhrase),
@@ -457,7 +519,11 @@ impl VaultCreationState {
 
     fn next_step_coowner(&self) -> Option<VaultCreationStep> {
         match self.current_step {
-            VaultCreationStep::RoleSelection => Some(VaultCreationStep::NameVault),
+            VaultCreationStep::RoleSelection => Some(VaultCreationStep::LegalTermsAcknowledgment),
+            VaultCreationStep::LegalTermsAcknowledgment => {
+                Some(VaultCreationStep::LegalPrivacyAcknowledgment)
+            }
+            VaultCreationStep::LegalPrivacyAcknowledgment => Some(VaultCreationStep::NameVault),
             VaultCreationStep::NameVault => Some(VaultCreationStep::MnemonicGeneration),
             VaultCreationStep::MnemonicGeneration => Some(VaultCreationStep::DisplaySeedPhrase),
             VaultCreationStep::DisplaySeedPhrase => Some(VaultCreationStep::VerifySeedPhrase),
@@ -473,7 +539,11 @@ impl VaultCreationState {
 
     fn next_step_view_only(&self) -> Option<VaultCreationStep> {
         match self.current_step {
-            VaultCreationStep::RoleSelection => Some(VaultCreationStep::NameVault),
+            VaultCreationStep::RoleSelection => Some(VaultCreationStep::LegalTermsAcknowledgment),
+            VaultCreationStep::LegalTermsAcknowledgment => {
+                Some(VaultCreationStep::LegalPrivacyAcknowledgment)
+            }
+            VaultCreationStep::LegalPrivacyAcknowledgment => Some(VaultCreationStep::NameVault),
             VaultCreationStep::NameVault => Some(VaultCreationStep::ScanDescriptorViewOnly),
             VaultCreationStep::ScanDescriptorViewOnly => Some(VaultCreationStep::ViewOnlyComplete),
             VaultCreationStep::ViewOnlyComplete => Some(VaultCreationStep::Completed),
@@ -483,7 +553,11 @@ impl VaultCreationState {
 
     fn next_step_restore(&self) -> Option<VaultCreationStep> {
         match self.current_step {
-            VaultCreationStep::RoleSelection => Some(VaultCreationStep::NameVault),
+            VaultCreationStep::RoleSelection => Some(VaultCreationStep::LegalTermsAcknowledgment),
+            VaultCreationStep::LegalTermsAcknowledgment => {
+                Some(VaultCreationStep::LegalPrivacyAcknowledgment)
+            }
+            VaultCreationStep::LegalPrivacyAcknowledgment => Some(VaultCreationStep::NameVault),
             VaultCreationStep::NameVault => Some(VaultCreationStep::SelectSeedPhraseSize),
             VaultCreationStep::SelectSeedPhraseSize => Some(VaultCreationStep::EnterSeedPhrase),
             VaultCreationStep::EnterSeedPhrase => Some(VaultCreationStep::ScanDescriptorRestore),
@@ -495,14 +569,19 @@ impl VaultCreationState {
 
     fn next_step_single_device_seed_hw(&self) -> Option<VaultCreationStep> {
         match self.current_step {
-            VaultCreationStep::RoleSelection => Some(VaultCreationStep::NameVault),
+            VaultCreationStep::RoleSelection => Some(VaultCreationStep::LegalTermsAcknowledgment),
+            VaultCreationStep::LegalTermsAcknowledgment => {
+                Some(VaultCreationStep::LegalPrivacyAcknowledgment)
+            }
+            VaultCreationStep::LegalPrivacyAcknowledgment => Some(VaultCreationStep::NameVault),
             VaultCreationStep::NameVault => Some(VaultCreationStep::SetTimeDelay),
             VaultCreationStep::SetTimeDelay => Some(VaultCreationStep::MnemonicGeneration),
             VaultCreationStep::MnemonicGeneration => Some(VaultCreationStep::DisplaySeedPhrase),
             VaultCreationStep::DisplaySeedPhrase => Some(VaultCreationStep::VerifySeedPhrase),
             VaultCreationStep::VerifySeedPhrase => Some(VaultCreationStep::SetPin),
             VaultCreationStep::SetPin => Some(VaultCreationStep::ScanCoownerKeys), // Scan HW keys instead of co-owner keys
-            VaultCreationStep::ScanCoownerKeys => Some(VaultCreationStep::EmailAuth),
+            VaultCreationStep::ScanCoownerKeys => Some(VaultCreationStep::NameHardwareWallet),
+            VaultCreationStep::NameHardwareWallet => Some(VaultCreationStep::EmailAuth),
             VaultCreationStep::EmailAuth => Some(VaultCreationStep::CreateVault),
             VaultCreationStep::CreateVault => Some(VaultCreationStep::Completed),
             _ => None,
@@ -511,20 +590,19 @@ impl VaultCreationState {
 
     fn next_step_single_device_hw_hw(&self) -> Option<VaultCreationStep> {
         match self.current_step {
-            VaultCreationStep::RoleSelection => Some(VaultCreationStep::NameVault),
+            VaultCreationStep::RoleSelection => Some(VaultCreationStep::LegalTermsAcknowledgment),
+            VaultCreationStep::LegalTermsAcknowledgment => {
+                Some(VaultCreationStep::LegalPrivacyAcknowledgment)
+            }
+            VaultCreationStep::LegalPrivacyAcknowledgment => Some(VaultCreationStep::NameVault),
             VaultCreationStep::NameVault => Some(VaultCreationStep::SetTimeDelay),
             VaultCreationStep::SetTimeDelay => Some(VaultCreationStep::ScanCoownerKeys), // Scan first HW
-            VaultCreationStep::ScanCoownerKeys => {
-                // After scanning first HW, check if we need to scan second HW
-                if self.first_hw_keys.is_some() && !self.scanning_second_hw {
-                    // First HW scanned, now need second HW - stay on ScanCoownerKeys
-                    None // Will be handled by UI logic - it sets scanning_second_hw and stays on step
-                } else if self.first_hw_keys.is_some() && self.coowner_keys.is_some() {
-                    // Both HWs scanned, proceed to SetPin
-                    Some(VaultCreationStep::SetPin)
+            VaultCreationStep::ScanCoownerKeys => Some(VaultCreationStep::NameHardwareWallet),
+            VaultCreationStep::NameHardwareWallet => {
+                if self.hw_naming_index == 0 {
+                    Some(VaultCreationStep::ScanCoownerKeys)
                 } else {
-                    // Still scanning first HW or error
-                    None
+                    Some(VaultCreationStep::SetPin)
                 }
             }
             VaultCreationStep::SetPin => Some(VaultCreationStep::EmailAuth),
@@ -549,6 +627,22 @@ pub fn render(
         match state.current_step {
             VaultCreationStep::RoleSelection => {
                 steps::render_role_selection(ui, state, navigation);
+            }
+            VaultCreationStep::LegalTermsAcknowledgment => {
+                steps::render_legal_acknowledgment(
+                    ui,
+                    state,
+                    navigation,
+                    steps::LegalDocumentKind::TermsAndConditions,
+                );
+            }
+            VaultCreationStep::LegalPrivacyAcknowledgment => {
+                steps::render_legal_acknowledgment(
+                    ui,
+                    state,
+                    navigation,
+                    steps::LegalDocumentKind::PrivacyPolicy,
+                );
             }
             VaultCreationStep::NameVault => {
                 steps::render_name_vault(ui, state);
@@ -579,6 +673,9 @@ pub fn render(
             }
             VaultCreationStep::EmailAuth => {
                 steps::render_email_auth(ui, app_state, state);
+            }
+            VaultCreationStep::NameHardwareWallet => {
+                steps::render_name_hardware_wallet(ui, app_state, state);
             }
             VaultCreationStep::CreateVault => {
                 steps::render_create_vault(ui, app_state, navigation, state);

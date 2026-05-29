@@ -13,22 +13,33 @@ pub struct PinVerificationState {
     is_visible: bool,
     verified: bool,
     error: Option<String>,
+    /// When false, wrong PIN attempts do not increment lockout (backup flows, iOS parity).
+    bruteforce_protection: bool,
 }
 
 impl Default for PinVerificationState {
     fn default() -> Self {
-        Self {
-            pin_entry: PinEntryState::new(),
-            is_visible: false,
-            verified: false,
-            error: None,
-        }
+        Self::new_with_bruteforce_protection(true)
     }
 }
 
 impl PinVerificationState {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn new_for_backup_flow() -> Self {
+        Self::new_with_bruteforce_protection(false)
+    }
+
+    fn new_with_bruteforce_protection(bruteforce_protection: bool) -> Self {
+        Self {
+            pin_entry: PinEntryState::new(),
+            is_visible: false,
+            verified: false,
+            error: None,
+            bruteforce_protection,
+        }
     }
 
     /// Show the PIN verification modal
@@ -175,7 +186,10 @@ pub fn render_pin_verification(ctx: &egui::Context, state: &mut PinVerificationS
 
                     // Validate PIN
                     let pin_service = PinService::new();
-                    match pin_service.validate_pin(&pin_clone) {
+                    match pin_service.validate_pin_with_options(
+                        &pin_clone,
+                        state.bruteforce_protection,
+                    ) {
                         Ok(true) => {
                             // PIN is valid
                             state.verified = true;
